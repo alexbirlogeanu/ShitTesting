@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<outputdir dir="bin/"/>
+<shaderlist>
+	<shader shaderfile="spv.test.vert" out="vert.spv"/>
+	<shader shaderfile="spv.test.frag" out="frag.spv" />
+	<shader shaderfile="spv.rtt.vert" out="rtt.vert" />
+	<shader shaderfile="spv.rtt.frag" out="rtt.frag" />
+	<shader shaderfile="spv.light.vert" out="light.vert" />
+	<shader shaderfile="spv.light.frag" out="light.frag" />
+	<shader shaderfile="spv.shadow.vert" out="shadow.vert" />
+	<shader shaderfile="spv.screenquad.vert" out="screenquad.vert" />
+	<shader shaderfile="spv.fxaa.frag" out="fxaa.frag" />
+	<shader shaderfile="spv.ui2d.vert" out="ui2d.vert" />
+	<shader shaderfile="spv.ui2d.frag" out="ui2d.frag" />
+	<shader shaderfile="spv.normal.vert" out="normal.vert" />
+	<shader shaderfile="spv.normal.frag" out="normal.frag" />
+	<shader shaderfile="spv.pointlight.vert" out="pointlight.vert" />
+	<shader shaderfile="spv.pointlight.frag" out="pointlight.frag" />
+	<shader shaderfile="spv.skybox.vert" out="skybox.vert" />
+	<shader shaderfile="spv.skybox.frag" out="skybox.frag" />
+	<shader shaderfile="spv.smokeupdate.comp" out="smokeupdate.comp" />
+	<shader shaderfile="spv.bilboard.vert" out="bilboard.vert" />
+	<shader shaderfile="spv.bilboard.frag" out="bilboard.frag" />
+	<shader shaderfile="spv.uivector3d.vert" out="uivector3d.vert" />
+	<shader shaderfile="spv.uivector3d.frag" out="uivector3d.frag" />
+	<shader shaderfile="spv.hdrgamma.frag" out="hdrgamma.frag" />
+	<shader shaderfile="spv.pickid.vert" out="pickid.vert" />
+	<shader shaderfile="spv.pickid.frag" out="pickid.frag" />
+	<shader shaderfile="spv.pickbb.vert" out="pickbb.vert" />
+	<shader shaderfile="spv.pickbb.frag" out="pickbb.frag" />
+	<shader shaderfile="spv.ssao.frag" out="ssao.frag" />
+	<shader shaderfile="spv.hblur.frag" out="hblur.frag" />
+	<shader shaderfile="spv.vblur.frag" out="vblur.frag" />
+	<shader shaderfile="spv.lineardepth.frag" out="lineardepth.frag" />
+	<shader shaderfile="spv.fog.frag" out="fog.frag" />
+	<shader shaderfile="spv.sun.vert" out="sun.vert" />
+	<shader shaderfile="spv.sun.frag" out="sun.frag" />
+	<shader shaderfile="spv.extractlight.frag" out="extractlight.frag" />
+	<shader shaderfile="spv.radialblur.frag" out="radialblur.frag" />
+	<shader shaderfile="spv.passtrough.frag" out="passtrough.frag" />
+	<shader shaderfile="spv.render3Dtexture.frag" out="render3Dtexture.frag" />
+	<shader shaderfile="spv.volume.geom" out="volume.geom" />
+	<shader shaderfile="spv.sample3Dtexture.frag" out="sample3Dtexture.frag" />
+	<shader shaderfile="spv.shadowresult.frag" out="shadowresult.frag" />
+	<shader shaderfile="spv.shadowlineardepth.frag" out="shadowlineardepth.frag" />
+	<shader shaderfile="spv.transform.vert" out="transform.vert" />
+	<shader shaderfile="spv.volume.frag" out="volume.frag" />
+	<shader shaderfile="spv.volumetric.frag" out="volumetric.frag" />
+</shaderlist>

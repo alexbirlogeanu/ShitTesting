@@ -1,0 +1,48 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shading_language_420pack : enable
+
+ layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+ 
+#define SIZE 100
+
+struct particle_t
+{
+	vec4   Velocity;
+    vec4   Position;
+    vec4   Color;
+	vec4   Properties; //x - life spawn, y - current life span, z - fade time, w - size
+};
+
+layout(set=0, binding=0) uniform GlobalBuffer
+{
+	mat4 ProjViewMatrix;
+	vec4 Params;
+}; 
+
+layout(set=1, binding=0) buffer UpdateBuffer
+{
+	particle_t particles[100];
+};
+
+ void main()
+ {
+	uint index = gl_WorkGroupID.x; 
+	
+	vec3 pos = particles[index].Position.xyz;
+	vec3 velocity = particles[index].Velocity.xyz;
+	
+	float speed = length(velocity);
+	
+	float dt = Params.x;
+	float newSpeed = speed;// - 10 * dt; //gravity
+	velocity = velocity / speed; //normalize velocity
+	velocity *= newSpeed;
+	pos += velocity * dt;
+	
+	vec4 pPos = ProjViewMatrix * vec4(pos, 1.0f);
+	
+	particles[index].Velocity = vec4(velocity, 0.0f);
+	particles[index].Position = vec4(pos, pPos.z / pPos.w); //we save the depth in pos
+	particles[index].Properties.y -= dt;
+ }
