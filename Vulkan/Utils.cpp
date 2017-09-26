@@ -290,12 +290,12 @@ VkSubpassDependency CreateSubpassDependency(unsigned int src, unsigned int dst,
     return subDep;
 }
 
-VkSubpassDescription CreateSubpassDesc(VkAttachmentReference* pColorAtts, unsigned int clrCnt, VkAttachmentReference* depthAtt, VkPipelineBindPoint bindPoint)
+VkSubpassDescription CreateSubpassDesc(VkAttachmentReference* pColorAtts, unsigned int clrCnt, VkAttachmentReference* depthAtt)
 {
     VkSubpassDescription subDesc;
     cleanStructure(subDesc);
     subDesc.flags = 0;
-    subDesc.pipelineBindPoint = bindPoint;
+    subDesc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subDesc.pColorAttachments = pColorAtts;
     subDesc.colorAttachmentCount = clrCnt;
     subDesc.pDepthStencilAttachment = depthAtt;

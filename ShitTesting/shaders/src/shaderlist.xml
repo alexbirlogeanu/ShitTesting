@@ -46,4 +46,5 @@
 	<shader shaderfile="spv.transform.vert" out="transform.vert" />
 	<shader shaderfile="spv.volume.frag" out="volume.frag" />
 	<shader shaderfile="spv.volumetric.frag" out="volumetric.frag" />
+	<shader shaderfile="spv.generateVolumeTexture.comp" out="generateVolumeTexture.comp" />
 </shaderlist>

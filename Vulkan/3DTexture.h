@@ -30,28 +30,26 @@ protected:
 
     void AllocateOuputTexture();
 
+    void PrepareTexture();
+    void WaitComputeFinish();
+
     void CopyTexture();
     void AllocateAuxiliarMemory();
 
 private:
-    CGraphicPipeline            m_pipeline;
-    VkDescriptorSetLayout       m_descSetLayout;
-    VkDescriptorSet             m_descSet;
-
-    VkBuffer                    m_copyBuffer;
-    VkDeviceMemory              m_copyMemory;
-
+    //new Shit
     //prototype 3D Texture
+    unsigned int                m_width;
+    unsigned int                m_height;
+    unsigned int                m_depth;
+
     VkImage                     m_outTexture;
     VkImageView                 m_outTextureView;
     VkDeviceMemory              m_outTextureMemory;
-#ifdef TEST3DTEXT
-    CGraphicPipeline            m_readPipeline;
-#endif
-    VkSampler                   m_sampler;
 
-    Mesh*                       m_quad;
-
+    CComputePipeline            m_generatePipeline;
+    VkDescriptorSetLayout       m_generateDescLayout;
+    VkDescriptorSet             m_generateDescSet;
 };
 
 class CVolumetricRenderer : public CRenderer

@@ -3,27 +3,24 @@
 
 C3DTextureRenderer::C3DTextureRenderer (VkRenderPass renderPass)
     : CRenderer(renderPass)
-    , m_descSetLayout(VK_NULL_HANDLE)
-    , m_descSet(VK_NULL_HANDLE)
-    , m_quad(nullptr)
-    , m_sampler(VK_NULL_HANDLE)
-    , m_copyBuffer(VK_NULL_HANDLE)
-    , m_copyMemory(VK_NULL_HANDLE)
+    , m_generateDescLayout(VK_NULL_HANDLE)
+    , m_generateDescSet(VK_NULL_HANDLE)
     , m_outTextureMemory(VK_NULL_HANDLE)
     , m_outTexture(VK_NULL_HANDLE)
     , m_outTextureView(VK_NULL_HANDLE)
+    , m_width(512)
+    , m_height(512)
+    , m_depth(TEXTURE3DLAYERS)
 {
 }
 
 C3DTextureRenderer::~C3DTextureRenderer()
 {
     VkDevice dev = vk::g_vulkanContext.m_device;
-    vk::DestroySampler(dev, m_sampler, nullptr);
-    vk::DestroyDescriptorSetLayout(dev, m_descSetLayout, nullptr);
 
-    //vk::FreeMemory(dev, m_copyMemory, nullptr);
+    vk::DestroyDescriptorSetLayout(dev, m_generateDescLayout, nullptr);
 
-    //vk::DestroyBuffer(dev, m_copyBuffer, nullptr);
+    vk::FreeMemory(dev, m_outTextureMemory, nullptr);
     vk::DestroyImage(dev, m_outTexture, nullptr);
     vk::DestroyImageView(dev, m_outTextureView, nullptr);
 }
@@ -31,73 +28,34 @@ C3DTextureRenderer::~C3DTextureRenderer()
 void C3DTextureRenderer::Init()
 {
     CRenderer::Init();
-    unsigned int width = m_framebuffer->GetWidth();
-    unsigned int height = m_framebuffer->GetHeight();
-
     AllocateOuputTexture();
+    AllocDescriptorSets(m_descriptorPool, m_generateDescLayout, &m_generateDescSet);
 
-    m_pipeline.SetDepthTest(VK_FALSE);
-    m_pipeline.SetDepthWrite(VK_FALSE);
-    m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
-    m_pipeline.SetViewport(width, height);
-    m_pipeline.SetScissor(width, height);
-    m_pipeline.SetVertexShaderFile("screenquad.vert");
-    m_pipeline.SetFragmentShaderFile("render3Dtexture.frag");
-    m_pipeline.SetGeometryShaderFile("volume.geom");
-    m_pipeline.SetCullMode(VK_CULL_MODE_NONE);
-    m_pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState());
-    m_pipeline.CreatePipelineLayout(m_descSetLayout);
-    m_pipeline.Init(this, m_renderPass, 0);
+    m_generatePipeline.SetComputeShaderFile("generateVolumeTexture.comp");
+    m_generatePipeline.CreatePipelineLayout(m_generateDescLayout);
+    m_generatePipeline.Init(this, VK_NULL_HANDLE, -1); //compute pipelines dont need render pass .. need to change CPipeline
 
-#ifdef TEST3DTEXT
-    m_readPipeline.SetDepthTest(VK_FALSE);
-    m_readPipeline.SetDepthWrite(VK_FALSE);
-    m_readPipeline.SetVertexInputState(Mesh::GetVertexDesc());
-    m_readPipeline.SetViewport(width, height);
-    m_readPipeline.SetScissor(width, height);
-    m_readPipeline.SetVertexShaderFile("screenquad.vert");
-    m_readPipeline.SetFragmentShaderFile("sample3Dtexture.frag");
-    m_readPipeline.SetCullMode(VK_CULL_MODE_NONE);
-    m_readPipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState());
-    m_readPipeline.CreatePipelineLayout(m_descSetLayout);
-    m_readPipeline.Init(this, m_renderPass, 1);
-#endif
-    m_quad = CreateFullscreenQuad();
-
-    AllocDescriptorSets(m_descriptorPool, m_descSetLayout, &m_descSet);
-
-    CreateLinearSampler(m_sampler);
-    VkDescriptorImageInfo imgInfo = CreateDescriptorImageInfo(m_sampler, m_framebuffer->GetColorImageView(0), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        
-    VkWriteDescriptorSet wDesc = InitUpdateDescriptor(m_descSet, 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &imgInfo);
-
+     VkDescriptorImageInfo imgInfo = CreateDescriptorImageInfo(VK_NULL_HANDLE, m_outTextureView, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    VkWriteDescriptorSet wDesc = InitUpdateDescriptor(m_generateDescSet, 0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &imgInfo);
     vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, 1, &wDesc, 0, nullptr);
 }
 
 void C3DTextureRenderer::Render()
 {
-    StartRenderPass();
+    PrepareTexture();
     VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
-    vk::CmdBindPipeline(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.Get());
+    vk::CmdBindPipeline(cmdBuffer, m_generatePipeline.GetBindPoint(), m_generatePipeline.Get());
+    vk::CmdBindDescriptorSets(cmdBuffer, m_generatePipeline.GetBindPoint(), m_generatePipeline.GetLayout(),0, 1, &m_generateDescSet, 0, nullptr);
+    TRAP(m_width % 32 == 0 && m_height % 32 == 0);
+    vk::CmdDispatch(cmdBuffer, m_width / 32, m_height / 32, m_depth); //??
 
-    m_quad->Render(-1, TEXTURE3DLAYERS);
-
-#ifdef TEST3DTEXT
-    vk::CmdNextSubpass(cmdBuffer, VK_SUBPASS_CONTENTS_INLINE);
-    vk::CmdBindPipeline(cmdBuffer, m_readPipeline.GetBindPoint(), m_readPipeline.Get());
-    vk::CmdBindDescriptorSets(cmdBuffer, m_readPipeline.GetBindPoint(), m_readPipeline.GetLayout(), 0, 1, &m_descSet, 0, nullptr);
-
-    m_quad->Render();
-#endif
-    EndRenderPass();
-
-    CopyTexture();
+    WaitComputeFinish();
 }
 
 void C3DTextureRenderer::CreateDescriptorSetLayout()
 {
     std::vector<VkDescriptorSetLayoutBinding> bindings;
-    bindings.push_back(CreateDescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT));
+    bindings.push_back(CreateDescriptorBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT));
 
     VkDescriptorSetLayoutCreateInfo crtInfo;
     cleanStructure(crtInfo);
@@ -105,20 +63,20 @@ void C3DTextureRenderer::CreateDescriptorSetLayout()
     crtInfo.bindingCount = (uint32_t)bindings.size();
     crtInfo.pBindings = bindings.data();
 
-    VULKAN_ASSERT(vk::CreateDescriptorSetLayout(vk::g_vulkanContext.m_device, &crtInfo, nullptr, &m_descSetLayout));
+    VULKAN_ASSERT(vk::CreateDescriptorSetLayout(vk::g_vulkanContext.m_device, &crtInfo, nullptr, &m_generateDescLayout));
 }
 
 void C3DTextureRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)
 {
     maxSets = 1;
-    AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1);
+    AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1);
 }
 
 void C3DTextureRenderer::AllocateOuputTexture()
 {
-    unsigned int width = m_framebuffer->GetWidth();
-    unsigned int height = m_framebuffer->GetHeight();
-    unsigned int depth = m_framebuffer->GetLayers(); //??
+    unsigned int width = m_width;
+    unsigned int height = m_height;
+    unsigned int depth = m_depth;
 
     VkImageCreateInfo imgCrtInfo;
     cleanStructure(imgCrtInfo);
@@ -134,7 +92,7 @@ void C3DTextureRenderer::AllocateOuputTexture()
     imgCrtInfo.arrayLayers = 1;
     imgCrtInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imgCrtInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imgCrtInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    imgCrtInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
     imgCrtInfo.queueFamilyIndexCount = 0;
     imgCrtInfo.pQueueFamilyIndices = NULL;
     imgCrtInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -159,14 +117,51 @@ void C3DTextureRenderer::AllocateOuputTexture()
     viewCrtInfo.subresourceRange.layerCount = 1;
     
     VULKAN_ASSERT(vk::CreateImageView(vk::g_vulkanContext.m_device, &viewCrtInfo, nullptr, &m_outTextureView));
+}
 
-    unsigned int size = width * depth * height * GetBytesFromFormat(VK_FORMAT_R16G16B16A16_SFLOAT);
-    AllocBufferMemory(m_copyBuffer, m_copyMemory, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+void C3DTextureRenderer::PrepareTexture()
+{
+    static VkImageLayout currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    static VkAccessFlags currentAccess = 0;
+    VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
+
+    VkImageMemoryBarrier layoutChangeBarrier;
+    AddImageBarrier(layoutChangeBarrier, m_outTexture, currentLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, currentAccess, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+
+    vk::CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &layoutChangeBarrier);
+
+    VkClearColorValue clrValue;
+    cleanStructure(clrValue);
+
+    VkImageSubresourceRange range;
+    cleanStructure(range);
+    range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    range.baseMipLevel = 0;
+    range.baseArrayLayer = 0;
+    range.levelCount = 1;
+    range.layerCount = VK_REMAINING_ARRAY_LAYERS;
+
+    vk::CmdClearColorImage(cmdBuffer, m_outTexture, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clrValue, 1, &range);
+
+    VkImageMemoryBarrier clearImageBarrier;
+    AddImageBarrier(clearImageBarrier, m_outTexture, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+    vk::CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &clearImageBarrier);
+
+    currentLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    currentAccess = VK_ACCESS_SHADER_READ_BIT;
+}
+
+void C3DTextureRenderer::WaitComputeFinish()
+{
+    VkImageMemoryBarrier waitBarrier;
+    AddImageBarrier(waitBarrier, m_outTexture, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+
+    vk::CmdPipelineBarrier(vk::g_vulkanContext.m_mainCommandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &waitBarrier);
 }
 
 void C3DTextureRenderer::CopyTexture()
 {
-    unsigned int layers = m_framebuffer->GetLayers();
+    /*unsigned int layers = m_framebuffer->GetLayers();
     unsigned int width = m_framebuffer->GetWidth();
     unsigned int height = m_framebuffer->GetHeight();
 
@@ -174,13 +169,13 @@ void C3DTextureRenderer::CopyTexture()
 
     VkImage outImg = m_framebuffer->GetColorImage(0);
     VkImageMemoryBarrier imageBarriers[2];
-    
+
     VkImageLayout outLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     VkAccessFlags outAccess = 0;
 
     AddImageBarrier(imageBarriers[0], outImg, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,  VK_IMAGE_ASPECT_COLOR_BIT);
-    
+    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,  VK_IMAGE_ASPECT_COLOR_BIT);
+
     vk::CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, imageBarriers);
 
     VkImageSubresourceLayers subresource;
@@ -204,13 +199,13 @@ void C3DTextureRenderer::CopyTexture()
     VkBufferMemoryBarrier buffBarrier;
     AddBufferBarier(buffBarrier, m_copyBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
     AddImageBarrier(imageBarriers[0], outImg, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,  VK_IMAGE_ASPECT_COLOR_BIT);
+    VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,  VK_IMAGE_ASPECT_COLOR_BIT);
     AddImageBarrier(imageBarriers[1], m_outTexture, outLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, outAccess, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
     outAccess = VK_ACCESS_SHADER_READ_BIT;
     outLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    
+
     vk::CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 2, imageBarriers);
-    
+
     cleanStructure(region);
     region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     region.imageSubresource.baseArrayLayer = 0;
@@ -225,7 +220,7 @@ void C3DTextureRenderer::CopyTexture()
     AddImageBarrier(imageBarriers[0], m_outTexture, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 
     vk::CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, imageBarriers);
-
+    */
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////

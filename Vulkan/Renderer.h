@@ -200,7 +200,7 @@ public:
     CPipeline();
     virtual ~CPipeline();
 
-    void Init(CRenderer* renderer, VkRenderPass renderPass, unsigned int subpassId);
+    void Init(CRenderer* renderer, VkRenderPass renderPass, unsigned int subpassId); //this is different for graphic and compute pipelines // TODO find a solution
     void Reload();
     void CreatePipelineLayout(VkDescriptorSetLayout layout);
     void CreatePipelineLayout(const std::vector<VkDescriptorSetLayout>& layouts);
