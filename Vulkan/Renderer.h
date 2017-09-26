@@ -193,6 +193,7 @@ public:
     unsigned int                        m_layers;
 };
 class CRenderer;
+
 class CPipeline
 {
 public:
@@ -201,13 +202,33 @@ public:
 
     void Init(CRenderer* renderer, VkRenderPass renderPass, unsigned int subpassId);
     void Reload();
-    virtual void CreatePipelineLayout(VkDescriptorSetLayout layout);
-    virtual void CreatePipelineLayout(std::vector<VkDescriptorSetLayout> layouts);
-
-    //virtual void GetNeededDescriptorTypes(std::vector<VkDescriptorType>& types){} //? for descriptor pool prolly
+    void CreatePipelineLayout(VkDescriptorSetLayout layout);
+    void CreatePipelineLayout(const std::vector<VkDescriptorSetLayout>& layouts);
 
     VkPipeline Get() { return m_pipeline; }
     VkPipelineLayout GetLayout() { return m_pipelineLayout; }
+
+    virtual VkPipelineBindPoint GetBindPoint() const = 0;
+protected:
+    virtual void CreatePipeline() = 0;
+    virtual void CleanInternal() = 0;
+protected:
+    VkPipeline                  m_pipeline;
+    VkPipelineLayout            m_pipelineLayout;
+    
+    VkRenderPass                m_renderPass;
+    unsigned int                m_subpassIndex;
+
+    bool                        m_initialized;
+};
+
+class CGraphicPipeline : public CPipeline
+{
+public:
+    CGraphicPipeline();
+    virtual ~CGraphicPipeline();
+
+    VkPipelineBindPoint GetBindPoint() const final { return VK_PIPELINE_BIND_POINT_GRAPHICS; };
 
     void SetVertexInputState(VkPipelineVertexInputStateCreateInfo& state);
     void SetTopology(VkPrimitiveTopology topoplogy);
@@ -247,9 +268,14 @@ public:
         return blendAttachs;
     }
 private:
-    void CleanForReload();
-    void CreatePipeline();
+    virtual void CleanInternal() override;
+    virtual void CreatePipeline() override;
 
+protected:
+    void CompileShaders();
+    void CreatePipelineStages();
+    
+private:
     void CreateVertexInput();
     void CreateInputAssemblyState();
     void CreateViewportInfo();
@@ -259,20 +285,10 @@ private:
     void CreateColorBlendInfo();
     void CreateDynamicStateInfo();
 
-protected:
-    void CompileShaders();
-
-    virtual void CreatePipelineStages();
-    
-
-    VkPipeline                                          m_pipeline;
+private:
     VkShaderModule                                      m_vertexShader;
     VkShaderModule                                      m_fragmentShader;
     VkShaderModule                                      m_geometryShader;
-    VkPipelineLayout                                    m_pipelineLayout;
-
-    VkRenderPass                                        m_renderPass;
-    unsigned int                                        m_subpassIndex;
 
     std::string                                         m_vertexFilename;
     std::string                                         m_fragmentFilename;
@@ -296,7 +312,23 @@ private:
     std::vector<VkDynamicState>                         m_dynamicStates;
 
     std::vector<VkPipelineShaderStageCreateInfo>        m_pipelineStages;
-    bool                                                m_initialized;
+};
+
+class CComputePipeline : public CPipeline
+{
+public:
+    CComputePipeline();
+    virtual ~CComputePipeline();
+
+    VkPipelineBindPoint GetBindPoint() const final { return VK_PIPELINE_BIND_POINT_COMPUTE; }
+
+    void SetComputeShaderFile(const std::string& file) { m_computeFilename = file; };
+protected:
+    virtual void CreatePipeline() override;
+    virtual void CleanInternal() override;
+private:
+    VkShaderModule              m_computeShader;
+    std::string                 m_computeFilename;
 };
 
 class CRenderer

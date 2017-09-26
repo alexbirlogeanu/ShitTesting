@@ -76,8 +76,8 @@ private:
 
     SNode*              m_pickedNode;
 
-    CPipeline           m_idPipeline; //lol
-    CPipeline           m_bbPipeline; //lol
+    CGraphicPipeline           m_idPipeline; //lol
+    CGraphicPipeline           m_bbPipeline; //lol
 
     glm::uvec2          m_mouseCoords;
     glm::mat4           m_projection;

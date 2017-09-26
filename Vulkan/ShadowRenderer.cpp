@@ -94,7 +94,7 @@ void CShadowResolveRenderer::Init()
     m_pipeline.SetFragmentShaderFile("shadowresult.frag");
     m_pipeline.SetDepthTest(false);
     m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
-    m_pipeline.AddBlendState(CPipeline::CreateDefaultBlendState(), 2);
+    m_pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 2);
     m_pipeline.SetViewport(width, height);
     m_pipeline.SetScissor(width, height);
     m_pipeline.CreatePipelineLayout(m_descriptorLayout);
@@ -115,20 +115,20 @@ void CShadowResolveRenderer::Render()
     //UpdateShaderParams();
     StartRenderPass();
     VkCommandBuffer cmdBuff = vk::g_vulkanContext.m_mainCommandBuffer;
-    vk::CmdBindPipeline(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.Get());
-    vk::CmdBindDescriptorSets(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.GetLayout(), 0, 1, &m_descriptorSet, 0, nullptr);
+    vk::CmdBindPipeline(cmdBuff, m_pipeline.GetBindPoint(), m_pipeline.Get());
+    vk::CmdBindDescriptorSets(cmdBuff, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, 1, &m_descriptorSet, 0, nullptr);
 
     m_quad->Render();
 #ifdef USE_SHADOW_BLUR
     vk::CmdNextSubpass(cmdBuff, VK_SUBPASS_CONTENTS_INLINE);
-    vk::CmdBindPipeline(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vBlurPipeline.Get());
-    vk::CmdBindDescriptorSets(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vBlurPipeline.GetLayout(), 0, 1, &m_vBlurDescSet, 0, nullptr);
+    vk::CmdBindPipeline(cmdBuff, m_vBlurPipeline.GetBindPoint(), m_vBlurPipeline.Get());
+    vk::CmdBindDescriptorSets(cmdBuff, m_vBlurPipeline.GetBindPoint(), m_vBlurPipeline.GetLayout(), 0, 1, &m_vBlurDescSet, 0, nullptr);
 
     m_quad->Render();
 
     vk::CmdNextSubpass(cmdBuff, VK_SUBPASS_CONTENTS_INLINE);
-    vk::CmdBindPipeline(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_hBlurPipeline.Get());
-    vk::CmdBindDescriptorSets(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_hBlurPipeline.GetLayout(), 0, 1, &m_hBlurDescSet, 0, nullptr);
+    vk::CmdBindPipeline(cmdBuff, m_hBlurPipeline.GetBindPoint(), m_hBlurPipeline.Get());
+    vk::CmdBindDescriptorSets(cmdBuff, m_hBlurPipeline.GetBindPoint(), m_hBlurPipeline.GetLayout(), 0, 1, &m_hBlurDescSet, 0, nullptr);
 
     m_quad->Render();
 #endif
@@ -220,7 +220,7 @@ void CShadowResolveRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>&
 }
 
 #ifdef USE_SHADOW_BLUR
-void CShadowResolveRenderer::SetupBlurPipeline(CPipeline& pipeline, bool isVertical)
+void CShadowResolveRenderer::SetupBlurPipeline(CGraphicPipeline& pipeline, bool isVertical)
 {
     unsigned int width = m_framebuffer->GetWidth();
     unsigned int height = m_framebuffer->GetHeight();
@@ -230,7 +230,7 @@ void CShadowResolveRenderer::SetupBlurPipeline(CPipeline& pipeline, bool isVerti
     //pipeline.SetFragmentShaderFile("passtrough.frag");
     pipeline.SetDepthTest(false);
     pipeline.SetVertexInputState(Mesh::GetVertexDesc());
-    pipeline.AddBlendState(CPipeline::CreateDefaultBlendState());
+    pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState());
     pipeline.SetViewport(width, height);
     pipeline.SetScissor(width, height);
     pipeline.CreatePipelineLayout(m_blurSetLayout);

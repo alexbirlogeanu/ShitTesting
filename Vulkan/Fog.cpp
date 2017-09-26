@@ -43,7 +43,7 @@ void CFogRenderer::Init()
     m_pipline.SetVertexShaderFile("screenquad.vert");
     m_pipline.SetFragmentShaderFile("fog.frag");
     
-    VkPipelineColorBlendAttachmentState blend = CPipeline::CreateDefaultBlendState();
+    VkPipelineColorBlendAttachmentState blend = CGraphicPipeline::CreateDefaultBlendState();
     blend.blendEnable = VK_TRUE;
     blend.colorBlendOp = VK_BLEND_OP_ADD;
     blend.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
@@ -51,7 +51,7 @@ void CFogRenderer::Init()
     blend.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
 
     m_pipline.AddBlendState(blend);
-    m_pipline.AddBlendState(CPipeline::CreateDefaultBlendState());
+    m_pipline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState());
     m_pipline.CreatePipelineLayout(m_descriptorLayout);
     m_pipline.Init(this, m_renderPass, 0);
 
@@ -72,8 +72,8 @@ void CFogRenderer::Render()
 
     StartRenderPass();
     VkCommandBuffer cmdBuff = vk::g_vulkanContext.m_mainCommandBuffer;
-    vk::CmdBindPipeline(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipline.Get());
-    vk::CmdBindDescriptorSets(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipline.GetLayout(), 0, 1, &m_descriptorSet, 0, nullptr);
+    vk::CmdBindPipeline(cmdBuff, m_pipline.GetBindPoint(), m_pipline.Get());
+    vk::CmdBindDescriptorSets(cmdBuff, m_pipline.GetBindPoint(), m_pipline.GetLayout(), 0, 1, &m_descriptorSet, 0, nullptr);
 
     m_quad->Render();
     

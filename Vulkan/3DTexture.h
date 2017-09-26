@@ -34,7 +34,7 @@ protected:
     void AllocateAuxiliarMemory();
 
 private:
-    CPipeline                   m_pipeline;
+    CGraphicPipeline            m_pipeline;
     VkDescriptorSetLayout       m_descSetLayout;
     VkDescriptorSet             m_descSet;
 
@@ -46,7 +46,7 @@ private:
     VkImageView                 m_outTextureView;
     VkDeviceMemory              m_outTextureMemory;
 #ifdef TEST3DTEXT
-    CPipeline                   m_readPipeline;
+    CGraphicPipeline            m_readPipeline;
 #endif
     VkSampler                   m_sampler;
 
@@ -67,12 +67,12 @@ protected:
     virtual void CreateDescriptorSetLayout() override;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override;
 
-    void CreateCullPipeline(CPipeline& pipeline, VkCullModeFlagBits cullmode);
+    void CreateCullPipeline(CGraphicPipeline& pipeline, VkCullModeFlagBits cullmode);
     void UpdateShaderParams();
 private:
-    CPipeline               m_frontCullPipeline;
-    CPipeline               m_backCullPipeline;
-    CPipeline               m_volumetricPipeline;
+    CGraphicPipeline               m_frontCullPipeline;
+    CGraphicPipeline               m_backCullPipeline;
+    CGraphicPipeline               m_volumetricPipeline;
 
     VkDescriptorSetLayout   m_volumeDescLayout;
     VkDescriptorSet         m_volumeDescSet;

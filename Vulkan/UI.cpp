@@ -553,20 +553,20 @@ void CUIRenderer::Render()
 
     StartRenderPass();
     VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
-    vk::CmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_textElemPipeline.Get());
-    vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_textElemPipeline.GetLayout(), 0, 1, &m_commonDescSet, 0, nullptr);
+    vk::CmdBindPipeline(cmdBuffer, m_textElemPipeline.GetBindPoint(), m_textElemPipeline.Get());
+    vk::CmdBindDescriptorSets(cmdBuffer, m_textElemPipeline.GetBindPoint(), m_textElemPipeline.GetLayout(), 0, 1, &m_commonDescSet, 0, nullptr);
 
      for(unsigned int i = 0; i < m_uiNodes.size(); ++i)
      {
          if(m_uiNodes[i].IsValid() && m_uiNodes[i].uiItem->GetVisible())
          {
-            vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_textElemPipeline.GetLayout(), 1, 1, &m_uiNodes[i].descSet, 0, nullptr);
+            vk::CmdBindDescriptorSets(cmdBuffer, m_textElemPipeline.GetBindPoint(), m_textElemPipeline.GetLayout(), 1, 1, &m_uiNodes[i].descSet, 0, nullptr);
             m_uiNodes[i].uiItem->Render();
          }
      }
 
-     vk::CmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vectorElemPipeline.Get());
-     vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vectorElemPipeline.GetLayout(), 0, 1, &m_commonDescSet, 0, nullptr);
+     vk::CmdBindPipeline(cmdBuffer, m_vectorElemPipeline.GetBindPoint(), m_vectorElemPipeline.Get());
+     vk::CmdBindDescriptorSets(cmdBuffer, m_vectorElemPipeline.GetBindPoint(), m_vectorElemPipeline.GetLayout(), 0, 1, &m_commonDescSet, 0, nullptr);
 
      for(unsigned int i = 0; i < m_uiVectors.size(); ++i)
          if(m_uiVectors[i]->GetVisible())

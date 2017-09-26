@@ -77,7 +77,7 @@ void CPickRenderer::Init()
     m_idPipeline.SetScissor(WIDTH, HEIGHT);
     m_idPipeline.SetViewport(WIDTH, HEIGHT);
     m_idPipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-    m_idPipeline.AddBlendState(CPipeline::CreateDefaultBlendState());
+    m_idPipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState());
     m_idPipeline.CreatePipelineLayout(m_descriptorSetLayout);
     m_idPipeline.Init(this, m_renderPass, 0);
 
@@ -89,7 +89,7 @@ void CPickRenderer::Init()
     m_bbPipeline.SetScissor(WIDTH, HEIGHT);
     m_bbPipeline.SetViewport(WIDTH, HEIGHT);
     m_bbPipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
-    m_bbPipeline.AddBlendState(CPipeline::CreateDefaultBlendState());
+    m_bbPipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState());
     m_bbPipeline.CreatePipelineLayout(m_descriptorSetLayout);
     m_bbPipeline.Init(this, m_renderPass, 1);
 }
@@ -101,12 +101,12 @@ void CPickRenderer::Render()
     VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
 
     StartRenderPass();
-    vk::CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_idPipeline.Get());
+    vk::CmdBindPipeline(cmd, m_idPipeline.GetBindPoint(), m_idPipeline.Get());
     if (AreCoordsValid(m_mouseCoords) || m_pickedNode)
     {
         for(unsigned int i = 0; i < m_nodes.size(); ++i)
         {
-            vk::CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_idPipeline.GetLayout(), 0, 1, &m_nodes[i].Set, 0, nullptr);
+            vk::CmdBindDescriptorSets(cmd, m_idPipeline.GetBindPoint(), m_idPipeline.GetLayout(), 0, 1, &m_nodes[i].Set, 0, nullptr);
             m_nodes[i].Pickable->Render();
         }
     }
@@ -114,8 +114,8 @@ void CPickRenderer::Render()
     vk::CmdNextSubpass(cmd, VK_SUBPASS_CONTENTS_INLINE);
     if (m_pickedNode)
     {
-        vk::CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_bbPipeline.Get());
-        vk::CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_bbPipeline.GetLayout(), 0, 1, &m_pickedNode->Set, 0, nullptr);
+        vk::CmdBindPipeline(cmd, m_bbPipeline.GetBindPoint(), m_bbPipeline.Get());
+        vk::CmdBindDescriptorSets(cmd, m_bbPipeline.GetBindPoint(), m_bbPipeline.GetLayout(), 0, 1, &m_pickedNode->Set, 0, nullptr);
 
         VkImage outImg =  m_framebuffer->GetColorImage(1);
         VkImageMemoryBarrier preRenderBarrier;

@@ -25,6 +25,6 @@ private:
     VkBuffer                    m_fogParamsBuffer;
     VkDeviceMemory              m_fogParamsMemory;
 
-    CPipeline                   m_pipline;
+    CGraphicPipeline                   m_pipline;
     Mesh*                       m_quad;
 };

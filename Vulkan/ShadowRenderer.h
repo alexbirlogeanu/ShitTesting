@@ -25,14 +25,14 @@ private:
     virtual void CreateDescriptorSetLayout() override;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override;
 #ifdef USE_SHADOW_BLUR
-    void SetupBlurPipeline(CPipeline& pipeline, bool isVertical);
+    void SetupBlurPipeline(CGraphicPipeline& pipeline, bool isVertical);
 #endif
     void CreateDistributionTextures();
 
 private:
     Mesh*                   m_quad;
 
-    CPipeline               m_pipeline;
+    CGraphicPipeline               m_pipeline;
 
     VkSampler               m_depthSampler;
     VkSampler               m_linearSampler;
@@ -48,8 +48,8 @@ private:
     CTexture*               m_PCFDistrText;
 
 #ifdef USE_SHADOW_BLUR
-    CPipeline               m_vBlurPipeline;
-    CPipeline               m_hBlurPipeline;
+    CGraphicPipeline               m_vBlurPipeline;
+    CGraphicPipeline               m_hBlurPipeline;
     VkDescriptorSetLayout   m_blurSetLayout;
     VkDescriptorSet         m_vBlurDescSet;
     VkDescriptorSet         m_hBlurDescSet;

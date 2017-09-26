@@ -64,9 +64,9 @@ void CSunRenderer::Init()
     unsigned int height = m_framebuffer->GetHeight();
 
     //common.AddBlendState(CPipeline::CreateDefaultBlendState());
-    VkPipelineColorBlendAttachmentState defaultState = CPipeline::CreateDefaultBlendState();
+    VkPipelineColorBlendAttachmentState defaultState = CGraphicPipeline::CreateDefaultBlendState();
 
-    auto initPipeline = [&](CPipeline& pipeline, unsigned int subpass, char* vertex, char* fragment, VkDescriptorSetLayout& layout){
+    auto initPipeline = [&](CGraphicPipeline& pipeline, unsigned int subpass, char* vertex, char* fragment, VkDescriptorSetLayout& layout){
         pipeline.SetCullMode(VK_CULL_MODE_NONE);
         pipeline.SetDepthTest(VK_FALSE);
         pipeline.SetVertexInputState(Mesh::GetVertexDesc());
@@ -102,11 +102,11 @@ void CSunRenderer::Render()
 
     StartRenderPass();
     VkCommandBuffer cmdBuf = vk::g_vulkanContext.m_mainCommandBuffer;
-    auto renderPipeline = [&](CPipeline& pipline, VkDescriptorSet& set) {
+    auto renderPipeline = [&](CGraphicPipeline& pipline, VkDescriptorSet& set) {
         if(!m_renderSun)
             return;
-        vk::CmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipline.Get());
-        vk::CmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipline.GetLayout(), 0, 1, &set, 0, nullptr);
+        vk::CmdBindPipeline(cmdBuf, pipline.GetBindPoint(), pipline.Get());
+        vk::CmdBindDescriptorSets(cmdBuf, pipline.GetBindPoint(), pipline.GetLayout(), 0, 1, &set, 0, nullptr);
 
         m_quad->Render();
     };

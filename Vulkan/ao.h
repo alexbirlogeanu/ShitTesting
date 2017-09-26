@@ -55,8 +55,8 @@ private:
     std::vector<glm::vec4>  m_samples;
     std::vector<glm::vec4>  m_noise;
 
-    CPipeline               m_mainPipeline;
-    CPipeline               m_hblurPipeline;
-    CPipeline               m_vblurPipeline;
+    CGraphicPipeline               m_mainPipeline;
+    CGraphicPipeline               m_hblurPipeline;
+    CGraphicPipeline               m_vblurPipeline;
     Mesh*                   m_quad;
 };

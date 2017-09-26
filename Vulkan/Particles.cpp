@@ -345,8 +345,8 @@ void CParticlesRenderer::Render()
 
     StartRenderPass();
 
-    vk::CmdBindPipeline(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipeline.Get());
-    vk::CmdBindDescriptorSets(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipeline.GetLayout(), 0, 1, &m_graphicGlobalDescriptor, 0, nullptr);
+    vk::CmdBindPipeline(buffer, m_graphicPipeline.GetBindPoint(), m_graphicPipeline.Get());
+    vk::CmdBindDescriptorSets(buffer, m_graphicPipeline.GetBindPoint(), m_graphicPipeline.GetLayout(), 0, 1, &m_graphicGlobalDescriptor, 0, nullptr);
     TRAP(m_quad);
 
     for(unsigned int i = 0; i < m_particleSystems.size(); ++i)
@@ -355,7 +355,7 @@ void CParticlesRenderer::Render()
         unsigned int particles = system->GetSpawnedParticles();
         if(particles)
         {
-            vk::CmdBindDescriptorSets(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicPipeline.GetLayout(), 1, 1, &system->GetGraphicSet(), 0, nullptr);
+            vk::CmdBindDescriptorSets(buffer, m_graphicPipeline.GetBindPoint(), m_graphicPipeline.GetLayout(), 1, 1, &system->GetGraphicSet(), 0, nullptr);
             m_quad->Render(-1, particles);
         }
     }

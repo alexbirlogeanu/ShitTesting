@@ -34,7 +34,7 @@ VkDescriptorSetLayoutBinding CreateDescriptorBinding(unsigned int binding, VkDes
 void NewDescriptorSetLayout(const std::vector<VkDescriptorSetLayoutBinding>& bindings, VkDescriptorSetLayout* layout);
 
 VkSubpassDependency CreateSubpassDependency(unsigned int src, unsigned int dst, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkDependencyFlags depFlags = 0);
-VkSubpassDescription CreateSubpassDesc(VkAttachmentReference* pColorAtts, unsigned int clrCnt, VkAttachmentReference* depthAtt = nullptr);
+VkSubpassDescription CreateSubpassDesc(VkAttachmentReference* pColorAtts, unsigned int clrCnt, VkAttachmentReference* depthAtt = nullptr, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS);
 
 void NewRenderPass(VkRenderPass* renderPass, const std::vector<VkAttachmentDescription>& attachments, const std::vector<VkSubpassDescription>& subpasses, const std::vector<VkSubpassDependency>& dependecies = std::vector<VkSubpassDependency>());
 

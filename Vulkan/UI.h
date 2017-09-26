@@ -322,10 +322,10 @@ private:
     VkDeviceMemory                  m_commonUniformMemory;
 
     std::array<UINode, MAXUIITEMS>  m_uiNodes;
-    CPipeline                       m_textElemPipeline;
+    CGraphicPipeline                       m_textElemPipeline;
 
     std::vector<CUIVector*>         m_uiVectors;            
-    CPipeline                       m_vectorElemPipeline;
+    CGraphicPipeline                       m_vectorElemPipeline;
 
     glm::mat4                       m_projMatrix;
 

@@ -121,7 +121,6 @@
     <ClCompile Include="Fook.cpp" />
     <ClCompile Include="FU.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="xmplparser.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Fook.h" />

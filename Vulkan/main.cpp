@@ -752,9 +752,9 @@ public:
     {
         VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
         StartRenderPass();
-        vk::CmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.Get());
+        vk::CmdBindPipeline(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.Get());
         //bind descriptors prob
-        vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.GetLayout(), 0, 1, &m_descriptorSet, 0, nullptr);
+        vk::CmdBindDescriptorSets(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, 1, &m_descriptorSet, 0, nullptr);
         RenderSpecific(cmdBuffer);
 
         vk::CmdDraw(cmdBuffer, 4, 1, 0, 0);
@@ -870,7 +870,7 @@ public:
         VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_shaderUniformMemory, 0, sizeof(LightShaderParams), 0, &m_memPtr));
 
         m_pipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN);
-        m_pipeline.AddBlendState(CPipeline::CreateDefaultBlendState(), 2);
+        m_pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 2);
         m_pipeline.SetVertexShaderFile("light.vert");
         m_pipeline.SetFragmentShaderFile("light.frag");
         m_pipeline.SetDepthTest(false);
@@ -926,7 +926,7 @@ protected:
     VkDescriptorSet                 m_descriptorSet;
 
     void*                           m_memPtr;
-    CPipeline                       m_pipeline;
+    CGraphicPipeline                       m_pipeline;
 };
 
 class CPointLight
@@ -1116,29 +1116,29 @@ public:
                 renderNodes.push_back(&m_nodes[i]);
 
         StartRenderPass();
-        vk::CmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_stencilCullingPipeline.Get());
-        vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_stencilCullingPipeline.GetLayout(), 0, 1, &m_commonDescSet, 0, nullptr);
+        vk::CmdBindPipeline(cmdBuffer, m_stencilCullingPipeline.GetBindPoint(), m_stencilCullingPipeline.Get());
+        vk::CmdBindDescriptorSets(cmdBuffer, m_stencilCullingPipeline.GetBindPoint(), m_stencilCullingPipeline.GetLayout(), 0, 1, &m_commonDescSet, 0, nullptr);
         VkImage renderSurface = m_framebuffer->GetColorImage(0);
 
         for(unsigned int i = 0; i < renderNodes.size(); ++i)
         {
             if(renderNodes[i]->Light->Emits())
             {
-                vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_stencilCullingPipeline.GetLayout(), 1, 1, &renderNodes[i]->Set, 0, nullptr);
+                vk::CmdBindDescriptorSets(cmdBuffer, m_stencilCullingPipeline.GetBindPoint(), m_stencilCullingPipeline.GetLayout(), 1, 1, &renderNodes[i]->Set, 0, nullptr);
                 m_pointLightMesh->Render();
             }
             
         }
 
         vk::CmdNextSubpass(cmdBuffer, VK_SUBPASS_CONTENTS_INLINE);
-        vk::CmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.Get());
-        vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.GetLayout(), 0, 1, &m_commonDescSet, 0, nullptr);
+        vk::CmdBindPipeline(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.Get());
+        vk::CmdBindDescriptorSets(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, 1, &m_commonDescSet, 0, nullptr);
 
         for(unsigned int i = 0; i < renderNodes.size(); ++i)
         {
             if(renderNodes[i]->Light->Emits())
             {
-                vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.GetLayout(), 1, 1, &renderNodes[i]->Set, 0, nullptr);
+                vk::CmdBindDescriptorSets(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 1, 1, &renderNodes[i]->Set, 0, nullptr);
                 m_pointLightMesh->Render();
             }
         }
@@ -1267,7 +1267,7 @@ public:
         m_stencilCullingPipeline.CreatePipelineLayout(layouts);
         m_stencilCullingPipeline.Init(this, m_renderPass, ELightSubpass_PrePoint);
 
-        VkPipelineColorBlendAttachmentState plState = CPipeline::CreateDefaultBlendState();
+        VkPipelineColorBlendAttachmentState plState = CGraphicPipeline::CreateDefaultBlendState();
         plState.blendEnable = VK_TRUE;
         plState.colorBlendOp = VK_BLEND_OP_ADD;
         plState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
@@ -1276,7 +1276,7 @@ public:
         plState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
         plState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
 
-        VkPipelineColorBlendAttachmentState debugState = CPipeline::CreateDefaultBlendState();
+        VkPipelineColorBlendAttachmentState debugState = CGraphicPipeline::CreateDefaultBlendState();
         debugState.blendEnable = VK_TRUE;
         debugState.colorBlendOp = VK_BLEND_OP_ADD;
         debugState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
@@ -1452,8 +1452,8 @@ private:
     Mesh*           m_pointLightMesh;
     glm::mat4*      m_projPtr;
 
-    CPipeline       m_stencilCullingPipeline;
-    CPipeline       m_pipeline;
+    CGraphicPipeline       m_stencilCullingPipeline;
+    CGraphicPipeline       m_pipeline;
 
     VkSampler       m_sampler;
 
@@ -1499,7 +1499,7 @@ public:
 
     glm::mat4& GetProj() { return m_proj; }
 
-    virtual void AddShaders(CPipeline& pipeline)
+    virtual void AddShaders(CGraphicPipeline& pipeline)
     {
         pipeline.SetVertexShaderFile("vert.spv");
         pipeline.SetFragmentShaderFile("frag.spv");
@@ -1519,7 +1519,7 @@ public:
     {
         VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
 
-        vk::CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.Get());
+        vk::CmdBindPipeline(cmd, m_pipeline.GetBindPoint(), m_pipeline.Get());
         
         vk::CmdSetStencilCompareMask(cmd, VK_STENCIL_FACE_FRONT_BIT, 0xFF);
         vk::CmdSetStencilWriteMask(cmd, VK_STENCIL_FACE_FRONT_BIT, 0xFF);
@@ -1533,7 +1533,7 @@ public:
         for(unsigned int i = 0; i < m_objects.size(); i++)
         {
             m_objects[i]->UpdateShaderParams(m_proj, *m_shadowProjMatrix);
-            vk::CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.GetLayout(), 0, (uint32_t)1, &m_objDescSet[i], 0, nullptr); //try to bind just once
+            vk::CmdBindDescriptorSets(cmd, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, (uint32_t)1, &m_objDescSet[i], 0, nullptr); //try to bind just once
 
             m_objects[i]->Render();
         }
@@ -1560,7 +1560,7 @@ public:
 
         m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
         AddShaders(m_pipeline);
-        m_pipeline.AddBlendState(CPipeline::CreateDefaultBlendState(), GBuffer_InputCnt);
+        m_pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), GBuffer_InputCnt);
 
         m_pipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
         m_pipeline.CreatePipelineLayout(m_objDescSetLayout);
@@ -1592,7 +1592,7 @@ protected:
     glm::mat4*                  m_shadowProjMatrix;
     glm::mat4                   m_proj;
 
-    CPipeline                   m_pipeline;
+    CGraphicPipeline                   m_pipeline;
 
     VkDescriptorSetLayout       m_objDescSetLayout;
     std::vector<VkDescriptorSet>    m_objDescSet;
@@ -1653,7 +1653,7 @@ public:
         CObjectRenderer::SetObjects(objects);
     }
 
-    virtual void AddShaders(CPipeline& pipeline) override
+    virtual void AddShaders(CGraphicPipeline& pipeline) override
     {
         pipeline.SetVertexShaderFile("normal.vert");
         pipeline.SetFragmentShaderFile("normal.frag");
@@ -1721,13 +1721,13 @@ public:
         VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
         StartRenderPass();
 
-        vk::CmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_boxPipeline.Get());
-        vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_boxPipeline.GetLayout(), 0, 1, &m_boxDescriptorSet, 0, nullptr);
+        vk::CmdBindPipeline(cmdBuffer, m_boxPipeline.GetBindPoint(), m_boxPipeline.Get());
+        vk::CmdBindDescriptorSets(cmdBuffer, m_boxPipeline.GetBindPoint(), m_boxPipeline.GetLayout(), 0, 1, &m_boxDescriptorSet, 0, nullptr);
         m_quadMesh->Render();
 
         vk::CmdNextSubpass(cmdBuffer, VK_SUBPASS_CONTENTS_INLINE);
-        vk::CmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_sunPipeline.Get());
-        vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_sunPipeline.GetLayout(), 0, 1, &m_sunDescriptorSet, 0, nullptr);
+        vk::CmdBindPipeline(cmdBuffer, m_sunPipeline.GetBindPoint(), m_sunPipeline.Get());
+        vk::CmdBindDescriptorSets(cmdBuffer, m_sunPipeline.GetBindPoint(), m_sunPipeline.GetLayout(), 0, 1, &m_sunDescriptorSet, 0, nullptr);
         m_quadMesh->Render();
 
         EndRenderPass();
@@ -1749,7 +1749,7 @@ public:
         m_boxPipeline.SetVertexShaderFile("skybox.vert");
         m_boxPipeline.SetFragmentShaderFile("skybox.frag");
         m_boxPipeline.SetVertexInputState(Mesh::GetVertexDesc());
-        m_boxPipeline.AddBlendState(CPipeline::CreateDefaultBlendState());
+        m_boxPipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState());
         m_boxPipeline.SetDepthTest(true);
         m_boxPipeline.SetDepthWrite(false);
         m_boxPipeline.CreatePipelineLayout(m_boxDescriptorSetLayout);
@@ -1877,14 +1877,14 @@ private:
 
     CTexture*           m_skyTexture;
     //CTexture*           m_sunTexture;
-    CPipeline           m_boxPipeline;
+    CGraphicPipeline           m_boxPipeline;
 
     VkDescriptorSet     m_boxDescriptorSet;
     VkDescriptorSetLayout m_boxDescriptorSetLayout;
 
     VkDescriptorSetLayout       m_sunDescriptorSetLayout;
     VkDescriptorSet             m_sunDescriptorSet;
-    CPipeline                   m_sunPipeline;
+    CGraphicPipeline                   m_sunPipeline;
 
     VkSampler                   m_sampler;
 };
@@ -1975,7 +1975,7 @@ public:
     {
         VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
 
-        vk::CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.Get());
+        vk::CmdBindPipeline(cmd, m_pipeline.GetBindPoint(), m_pipeline.Get());
 
         glm::vec3 lightDir (directionalLight.GetDirection());
         glm::vec3 eye = ms_camera.GetPos() - 1.0f * lightDir;
@@ -1991,7 +1991,7 @@ public:
         for(unsigned int i = 0; i < m_shadowCaster.size(); i++)
         {
             m_shadowCaster[i]->UpdateShadowParams(m_shadowViewProj);
-            vk::CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.GetLayout(), 0, (uint32_t)1, &m_shadowCaster[i]->GetDescriptorSet(), 0, nullptr); //try to bind just once
+            vk::CmdBindDescriptorSets(cmd, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, (uint32_t)1, &m_shadowCaster[i]->GetDescriptorSet(), 0, nullptr); //try to bind just once
 
             m_shadowCaster[i]->Render();
         }
@@ -2029,7 +2029,7 @@ private:
     std::vector<ShadowCaster*>      m_shadowCaster;
     glm::mat4                       m_shadowViewProj;
 
-    CPipeline                       m_pipeline;
+    CGraphicPipeline                       m_pipeline;
 
     VkDescriptorSetLayout           m_descriptorSetLayout;
 };
@@ -2070,8 +2070,8 @@ public:
     virtual void Render()
     {
         VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
-        vk::CmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.Get());
-        vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.GetLayout(), 0, 1, &m_descriptorSet, 0, nullptr);
+        vk::CmdBindPipeline(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.Get());
+        vk::CmdBindDescriptorSets(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, 1, &m_descriptorSet, 0, nullptr);
 
         m_quadMesh->Render();
     }
@@ -2131,7 +2131,7 @@ public:
         m_pipeline.SetFragmentShaderFile("hdrgamma.frag");
         m_pipeline.SetDepthTest(false);
         m_pipeline.SetDepthWrite(false);
-        VkPipelineColorBlendAttachmentState blendAtt = CPipeline::CreateDefaultBlendState();
+        VkPipelineColorBlendAttachmentState blendAtt = CGraphicPipeline::CreateDefaultBlendState();
         m_pipeline.AddBlendState(blendAtt);
 
         m_pipeline.CreatePipelineLayout(m_descriptorSetLayout);
@@ -2180,7 +2180,7 @@ private:
     void*           m_uniformPtr;
 
     Mesh*           m_quadMesh;
-    CPipeline       m_pipeline;
+    CGraphicPipeline       m_pipeline;
 
     VkDescriptorSet m_descriptorSet;
     VkDescriptorSetLayout m_descriptorSetLayout;

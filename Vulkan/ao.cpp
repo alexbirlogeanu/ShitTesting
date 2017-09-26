@@ -88,7 +88,7 @@ void CAORenderer::Init()
     m_mainPipeline.SetDepthTest(false);
     m_mainPipeline.SetDepthWrite(false);
     m_mainPipeline.SetVertexInputState(Mesh::GetVertexDesc());
-    m_mainPipeline.AddBlendState(CPipeline::CreateDefaultBlendState(), 2);
+    m_mainPipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 2);
     m_mainPipeline.CreatePipelineLayout(mainPassLayouts);
     m_mainPipeline.Init(this, m_renderPass, ESSAOPass_Main);
 
@@ -97,7 +97,7 @@ void CAORenderer::Init()
     m_hblurPipeline.SetDepthTest(false);
     m_hblurPipeline.SetDepthWrite(false);
     m_hblurPipeline.SetVertexInputState(Mesh::GetVertexDesc());
-    m_hblurPipeline.AddBlendState(CPipeline::CreateDefaultBlendState());
+    m_hblurPipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState());
     m_hblurPipeline.CreatePipelineLayout(m_blurDescSetLayout);
     m_hblurPipeline.Init(this, m_renderPass, ESSAOPass_HBlur);
 
@@ -107,7 +107,7 @@ void CAORenderer::Init()
     m_vblurPipeline.SetDepthTest(false);
     m_vblurPipeline.SetDepthWrite(false);
     m_vblurPipeline.SetVertexInputState(Mesh::GetVertexDesc());
-    m_vblurPipeline.AddBlendState(CPipeline::CreateDefaultBlendState());
+    m_vblurPipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState());
     m_vblurPipeline.CreatePipelineLayout(m_blurDescSetLayout);
     m_vblurPipeline.Init(this, m_renderPass, ESSAOPass_VBlur);
 }
@@ -119,8 +119,8 @@ void CAORenderer::Render()
     StartRenderPass();
     VkCommandBuffer cmdBuff = vk::g_vulkanContext.m_mainCommandBuffer;
 
-    vk::CmdBindPipeline(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_mainPipeline.Get());
-    vk::CmdBindDescriptorSets(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_mainPipeline.GetLayout(), 0, (uint32_t)m_mainPassSets.size(), m_mainPassSets.data(), 0, nullptr);
+    vk::CmdBindPipeline(cmdBuff, m_mainPipeline.GetBindPoint(), m_mainPipeline.Get());
+    vk::CmdBindDescriptorSets(cmdBuff, m_mainPipeline.GetBindPoint(), m_mainPipeline.GetLayout(), 0, (uint32_t)m_mainPassSets.size(), m_mainPassSets.data(), 0, nullptr);
     m_quad->Render();
 
     VkImageMemoryBarrier imgBar;
@@ -131,15 +131,15 @@ void CAORenderer::Render()
 
     vk::CmdNextSubpass(cmdBuff, VK_SUBPASS_CONTENTS_INLINE);
     
-    vk::CmdBindPipeline(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_hblurPipeline.Get());
-    vk::CmdBindDescriptorSets(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_hblurPipeline.GetLayout(), 0, 1, &m_blurPassSets[0], 0, nullptr);
+    vk::CmdBindPipeline(cmdBuff, m_hblurPipeline.GetBindPoint(), m_hblurPipeline.Get());
+    vk::CmdBindDescriptorSets(cmdBuff, m_hblurPipeline.GetBindPoint(), m_hblurPipeline.GetLayout(), 0, 1, &m_blurPassSets[0], 0, nullptr);
 
     m_quad->Render();
     
     vk::CmdNextSubpass(cmdBuff, VK_SUBPASS_CONTENTS_INLINE);
 
-    vk::CmdBindPipeline(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vblurPipeline.Get());
-    vk::CmdBindDescriptorSets(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vblurPipeline.GetLayout(), 0, 1, &m_blurPassSets[1], 0, nullptr);
+    vk::CmdBindPipeline(cmdBuff, m_vblurPipeline.GetBindPoint(), m_vblurPipeline.Get());
+    vk::CmdBindDescriptorSets(cmdBuff, m_vblurPipeline.GetBindPoint(), m_vblurPipeline.GetLayout(), 0, 1, &m_blurPassSets[1], 0, nullptr);
 
     m_quad->Render();
 

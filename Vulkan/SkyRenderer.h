@@ -85,10 +85,10 @@ protected:
     VkDescriptorSet             m_blurRadialDescSet;
     VkDescriptorSet             m_sunDescriptorSet;
     
-    CPipeline                   m_blurVPipeline;
-    CPipeline                   m_blurHPipeline;
-    CPipeline                   m_blurRadialPipeline;
-    CPipeline                   m_sunPipeline;
+    CGraphicPipeline                   m_blurVPipeline;
+    CGraphicPipeline                   m_blurHPipeline;
+    CGraphicPipeline                   m_blurRadialPipeline;
+    CGraphicPipeline                   m_sunPipeline;
 
     Mesh*                       m_quad;
     CTexture*                   m_sunTexture;

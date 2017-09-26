@@ -45,7 +45,7 @@ void C3DTextureRenderer::Init()
     m_pipeline.SetFragmentShaderFile("render3Dtexture.frag");
     m_pipeline.SetGeometryShaderFile("volume.geom");
     m_pipeline.SetCullMode(VK_CULL_MODE_NONE);
-    m_pipeline.AddBlendState(CPipeline::CreateDefaultBlendState());
+    m_pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState());
     m_pipeline.CreatePipelineLayout(m_descSetLayout);
     m_pipeline.Init(this, m_renderPass, 0);
 
@@ -58,7 +58,7 @@ void C3DTextureRenderer::Init()
     m_readPipeline.SetVertexShaderFile("screenquad.vert");
     m_readPipeline.SetFragmentShaderFile("sample3Dtexture.frag");
     m_readPipeline.SetCullMode(VK_CULL_MODE_NONE);
-    m_readPipeline.AddBlendState(CPipeline::CreateDefaultBlendState());
+    m_readPipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState());
     m_readPipeline.CreatePipelineLayout(m_descSetLayout);
     m_readPipeline.Init(this, m_renderPass, 1);
 #endif
@@ -78,14 +78,14 @@ void C3DTextureRenderer::Render()
 {
     StartRenderPass();
     VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
-    vk::CmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.Get());
+    vk::CmdBindPipeline(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.Get());
 
     m_quad->Render(-1, TEXTURE3DLAYERS);
 
 #ifdef TEST3DTEXT
     vk::CmdNextSubpass(cmdBuffer, VK_SUBPASS_CONTENTS_INLINE);
-    vk::CmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_readPipeline.Get());
-    vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_readPipeline.GetLayout(), 0, 1, &m_descSet, 0, nullptr);
+    vk::CmdBindPipeline(cmdBuffer, m_readPipeline.GetBindPoint(), m_readPipeline.Get());
+    vk::CmdBindDescriptorSets(cmdBuffer, m_readPipeline.GetBindPoint(), m_readPipeline.GetLayout(), 0, 1, &m_descSet, 0, nullptr);
 
     m_quad->Render();
 #endif
@@ -282,7 +282,7 @@ void CVolumetricRenderer::Init()
     m_volumetricPipeline.SetDepthTest(false);
     m_volumetricPipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
     m_volumetricPipeline.CreatePipelineLayout(m_volumetricDescLayout);
-    m_volumetricPipeline.AddBlendState(CPipeline::CreateDefaultBlendState(), 2); //change blend state
+    m_volumetricPipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 2); //change blend state
     m_volumetricPipeline.SetVertexInputState(Mesh::GetVertexDesc());
     m_volumetricPipeline.Init(this, m_renderPass, 2);
 }
@@ -292,20 +292,20 @@ void CVolumetricRenderer::Render()
     UpdateShaderParams();
     VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
     StartRenderPass();
-    vk::CmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_frontCullPipeline.Get());
-    vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_frontCullPipeline.GetLayout(), 0, 1, &m_volumeDescSet, 0, nullptr);
+    vk::CmdBindPipeline(cmdBuffer, m_frontCullPipeline.GetBindPoint(), m_frontCullPipeline.Get());
+    vk::CmdBindDescriptorSets(cmdBuffer, m_frontCullPipeline.GetBindPoint(), m_frontCullPipeline.GetLayout(), 0, 1, &m_volumeDescSet, 0, nullptr);
 
     m_cube->Render();
 
     vk::CmdNextSubpass(cmdBuffer, VK_SUBPASS_CONTENTS_INLINE);
-    vk::CmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_backCullPipeline.Get());
-    vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_backCullPipeline.GetLayout(), 0, 1, &m_volumeDescSet, 0, nullptr);
+    vk::CmdBindPipeline(cmdBuffer, m_backCullPipeline.GetBindPoint(), m_backCullPipeline.Get());
+    vk::CmdBindDescriptorSets(cmdBuffer, m_backCullPipeline.GetBindPoint(), m_backCullPipeline.GetLayout(), 0, 1, &m_volumeDescSet, 0, nullptr);
 
     m_cube->Render();
 
     vk::CmdNextSubpass(cmdBuffer, VK_SUBPASS_CONTENTS_INLINE);
-    vk::CmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_volumetricPipeline.Get());
-    vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_volumetricPipeline.GetLayout(), 0, 1, &m_volumetricDescSet, 0, nullptr);
+    vk::CmdBindPipeline(cmdBuffer, m_volumetricPipeline.GetBindPoint(), m_volumetricPipeline.Get());
+    vk::CmdBindDescriptorSets(cmdBuffer, m_volumetricPipeline.GetBindPoint(), m_volumetricPipeline.GetLayout(), 0, 1, &m_volumetricDescSet, 0, nullptr);
 
     m_cube->Render();
 
@@ -358,13 +358,13 @@ void CVolumetricRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& po
     AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3);
 }
 
-void CVolumetricRenderer::CreateCullPipeline(CPipeline& pipeline, VkCullModeFlagBits cullmode)
+void CVolumetricRenderer::CreateCullPipeline(CGraphicPipeline& pipeline, VkCullModeFlagBits cullmode)
 {
     pipeline.SetVertexShaderFile("transform.vert");
     pipeline.SetFragmentShaderFile("volume.frag");
     pipeline.SetVertexInputState(Mesh::GetVertexDesc());
     pipeline.SetDepthTest(false);
-    pipeline.AddBlendState(CPipeline::CreateDefaultBlendState());
+    pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState());
     pipeline.SetCullMode(cullmode);
     pipeline.CreatePipelineLayout(m_volumeDescLayout);
 

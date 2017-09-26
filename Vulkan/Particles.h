@@ -212,7 +212,7 @@ protected:
     VkDescriptorSet                     m_graphicGlobalDescriptor;
 
     VkPipelineLayout                    m_computePipelineLayout;
-    CPipeline                           m_graphicPipeline;
+    CGraphicPipeline                           m_graphicPipeline;
 
     VkBuffer                            m_updateParticlesGlobalBuffer;
     VkDeviceMemory                      m_updateParticlesGlobalMemory;

@@ -189,36 +189,23 @@ void CFrameBuffer::Finalize()
 CPipeline::CPipeline()
     : m_pipeline(VK_NULL_HANDLE)
     , m_pipelineLayout(VK_NULL_HANDLE)
-    , m_vertexShader(VK_NULL_HANDLE)
-    , m_fragmentShader(VK_NULL_HANDLE)
-    , m_geometryShader(VK_NULL_HANDLE)
     , m_initialized(false)
     , m_renderPass(VK_NULL_HANDLE)
     , m_subpassIndex(VK_NULL_HANDLE)
 {
-    CreateVertexInput();
-    CreateInputAssemblyState();
-    CreateViewportInfo();
-    CreateRasterizationInfo();
-    CreateMultisampleInfo();
-    CreateDepthInfo();
 }
 
 CPipeline::~CPipeline()
 {
+    if (!m_initialized)
+        return;
+
     VkDevice dev = vk::g_vulkanContext.m_device;
 
     if(m_pipeline)
         vk::DestroyPipeline(dev, m_pipeline, nullptr);
     if(m_pipelineLayout)
         vk::DestroyPipelineLayout(dev, m_pipelineLayout, nullptr);
-
-    if(m_vertexShader)
-        vk::DestroyShaderModule(dev, m_vertexShader, nullptr);
-    if(m_fragmentShader != VK_NULL_HANDLE)
-        vk::DestroyShaderModule(dev, m_fragmentShader, nullptr);
-    if(m_geometryShader != VK_NULL_HANDLE)
-        vk::DestroyShaderModule(dev, m_geometryShader, nullptr);
 }
 
 void CPipeline::Init(CRenderer* renderer, VkRenderPass renderPass, unsigned int subpassId)
@@ -228,9 +215,73 @@ void CPipeline::Init(CRenderer* renderer, VkRenderPass renderPass, unsigned int 
     TRAP(m_pipelineLayout != VK_NULL_HANDLE);
     CreatePipeline();
     renderer->RegisterPipeline(this);
+    m_initialized = true;
 }
 
-void CPipeline::CreatePipeline()
+void CPipeline::Reload()
+{
+    if(!m_initialized)
+        return;
+
+    VkDevice dev = vk::g_vulkanContext.m_device;
+    vk::DestroyPipeline(dev, m_pipeline, nullptr);
+
+    CleanInternal();
+    CreatePipeline();
+}
+
+void CPipeline::CreatePipelineLayout(VkDescriptorSetLayout layout)
+{
+    std::vector<VkDescriptorSetLayout> layouts (1, layout);
+    CreatePipelineLayout(layouts);
+}
+
+void CPipeline::CreatePipelineLayout(const std::vector<VkDescriptorSetLayout>& layouts)
+{
+    VkPipelineLayoutCreateInfo plci;
+    cleanStructure(plci);
+    plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    plci.pNext = nullptr;
+    plci.flags = 0;
+    plci.setLayoutCount = (uint32_t)layouts.size();
+    plci.pSetLayouts = layouts.data();
+
+    VULKAN_ASSERT(vk::CreatePipelineLayout(vk::g_vulkanContext.m_device, &plci, nullptr, &m_pipelineLayout));
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//CGraphicPipeline
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+CGraphicPipeline::CGraphicPipeline()
+    : m_vertexShader(VK_NULL_HANDLE)
+    , m_fragmentShader(VK_NULL_HANDLE)
+    , m_geometryShader(VK_NULL_HANDLE)    
+{
+    CreateVertexInput();
+    CreateInputAssemblyState();
+    CreateViewportInfo();
+    CreateRasterizationInfo();
+    CreateMultisampleInfo();
+    CreateDepthInfo();
+}
+
+CGraphicPipeline::~CGraphicPipeline()
+{
+    if (!m_initialized)
+        return;
+
+    VkDevice dev = vk::g_vulkanContext.m_device;
+
+    if(m_vertexShader)
+        vk::DestroyShaderModule(dev, m_vertexShader, nullptr);
+    if(m_fragmentShader != VK_NULL_HANDLE)
+        vk::DestroyShaderModule(dev, m_fragmentShader, nullptr);
+    if(m_geometryShader != VK_NULL_HANDLE)
+        vk::DestroyShaderModule(dev, m_geometryShader, nullptr);
+}
+
+void CGraphicPipeline::CreatePipeline()
 {
     CompileShaders();
 
@@ -261,10 +312,9 @@ void CPipeline::CreatePipeline()
     gpci.basePipelineIndex = 0;
 
     VULKAN_ASSERT(vk::CreateGraphicsPipelines(vk::g_vulkanContext.m_device, VK_NULL_HANDLE, 1, &gpci, nullptr, &m_pipeline));
-    m_initialized = true;
 };
 
-void CPipeline::CreateVertexInput()
+void CGraphicPipeline::CreateVertexInput()
 {
     cleanStructure(m_pipelineVertexInfo);
     m_pipelineVertexInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -272,7 +322,7 @@ void CPipeline::CreateVertexInput()
     m_pipelineVertexInfo.flags = 0;
 
 }
-void CPipeline::CreateInputAssemblyState()
+void CGraphicPipeline::CreateInputAssemblyState()
 {
     cleanStructure(m_pipelineInputAssemblyInfo);
     m_pipelineInputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -282,7 +332,7 @@ void CPipeline::CreateInputAssemblyState()
     m_pipelineInputAssemblyInfo.primitiveRestartEnable = false;
 }
 
-void CPipeline::CreateViewportInfo()
+void CGraphicPipeline::CreateViewportInfo()
 {
     cleanStructure(m_viewport);
     m_viewport.width = WIDTH;
@@ -307,7 +357,7 @@ void CPipeline::CreateViewportInfo()
     m_pipelineViewportInfo.pScissors = &m_scissorRect;
 
 }
-void CPipeline::CreateRasterizationInfo()
+void CGraphicPipeline::CreateRasterizationInfo()
 {
     cleanStructure(m_pipelineRasterizationInfo);
     m_pipelineRasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -320,7 +370,7 @@ void CPipeline::CreateRasterizationInfo()
     m_pipelineRasterizationInfo.lineWidth = 1.0f;
 }
 
-void CPipeline::CreateMultisampleInfo()
+void CGraphicPipeline::CreateMultisampleInfo()
 {
     cleanStructure(m_pipelineMultisampleInfo);
     m_pipelineMultisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -330,7 +380,7 @@ void CPipeline::CreateMultisampleInfo()
     m_pipelineMultisampleInfo.alphaToCoverageEnable = false;
     m_pipelineMultisampleInfo.alphaToOneEnable = false;
 }
-void CPipeline::CreateDepthInfo()
+void CGraphicPipeline::CreateDepthInfo()
 {
     cleanStructure(m_pipelineDepthStencilInfo);
     m_pipelineDepthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -354,7 +404,7 @@ void CPipeline::CreateDepthInfo()
     m_pipelineDepthStencilInfo.front = m_pipelineDepthStencilInfo.back;
 }
 
-void CPipeline::CreateColorBlendInfo() 
+void CGraphicPipeline::CreateColorBlendInfo() 
 {
     cleanStructure(m_pipelineBlendStateInfo);
     m_pipelineBlendStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -364,7 +414,7 @@ void CPipeline::CreateColorBlendInfo()
 
 }
 
-void CPipeline::CreateDynamicStateInfo() //before creation update the struct
+void CGraphicPipeline::CreateDynamicStateInfo() //before creation update the struct
 {
     cleanStructure( m_pipelineDynamicState);
     m_pipelineDynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -374,21 +424,9 @@ void CPipeline::CreateDynamicStateInfo() //before creation update the struct
     m_pipelineDynamicState.pDynamicStates = m_dynamicStates.data();
 }
 
-
-void CPipeline::Reload()
-{
-    if(!m_initialized)
-        return;
-
-    CleanForReload();
-    CreatePipeline();
-}
-
-void CPipeline::CleanForReload()
+void CGraphicPipeline::CleanInternal()
 {
     VkDevice dev = vk::g_vulkanContext.m_device;
-
-    vk::DestroyPipeline(dev, m_pipeline, nullptr);
 
     vk::DestroyShaderModule(dev, m_vertexShader, nullptr);
     if(m_fragmentShader != VK_NULL_HANDLE)
@@ -398,75 +436,75 @@ void CPipeline::CleanForReload()
         vk::DestroyShaderModule(dev, m_geometryShader, nullptr);
 }
 
-void CPipeline::SetVertexInputState(VkPipelineVertexInputStateCreateInfo& state)
+void CGraphicPipeline::SetVertexInputState(VkPipelineVertexInputStateCreateInfo& state)
 {
     m_pipelineVertexInfo = state;
 }
 
-void CPipeline::SetTopology(VkPrimitiveTopology topoplogy)
+void CGraphicPipeline::SetTopology(VkPrimitiveTopology topoplogy)
 {
     m_pipelineInputAssemblyInfo.topology = topoplogy;
 }
 
-void CPipeline::SetDepthTest(bool enable)
+void CGraphicPipeline::SetDepthTest(bool enable)
 {
     m_pipelineDepthStencilInfo.depthTestEnable = enable;
 }
 
-void CPipeline::SetDepthWrite(bool enable)
+void CGraphicPipeline::SetDepthWrite(bool enable)
 {
     m_pipelineDepthStencilInfo.depthWriteEnable = enable;
 }
 
-void CPipeline::SetDepthOp(VkCompareOp op)
+void CGraphicPipeline::SetDepthOp(VkCompareOp op)
 {
     m_pipelineDepthStencilInfo.depthCompareOp = op;
 }
 
-void CPipeline::SetStencilTest(bool enable)
+void CGraphicPipeline::SetStencilTest(bool enable)
 {
     m_pipelineDepthStencilInfo.stencilTestEnable = enable;
 }
 
-void CPipeline::SetViewport(unsigned int widht, unsigned int height)
+void CGraphicPipeline::SetViewport(unsigned int widht, unsigned int height)
 {
     m_viewport.width = (float)widht;
     m_viewport.height = (float)height;
 }
 
-void CPipeline::SetScissor(unsigned int widht, unsigned int height)
+void CGraphicPipeline::SetScissor(unsigned int widht, unsigned int height)
 {
     m_scissorRect.extent.width = widht;
     m_scissorRect.extent.height = height;
 }
 
-void CPipeline::SetVertexShaderFile(const std::string& file)
+void CGraphicPipeline::SetVertexShaderFile(const std::string& file)
 {
     m_vertexFilename = file;
 }
 
-void CPipeline::SetFragmentShaderFile(const std::string file)
+void CGraphicPipeline::SetFragmentShaderFile(const std::string file)
 {
     m_fragmentFilename = file;
 }
 
-void CPipeline::SetGeometryShaderFile(const std::string& file)
+void CGraphicPipeline::SetGeometryShaderFile(const std::string& file)
 {
     m_geometryFilename = file;
 }
 
-void CPipeline::SetCullMode(VkCullModeFlagBits cullmode)
+void CGraphicPipeline::SetCullMode(VkCullModeFlagBits cullmode)
 {
     m_pipelineRasterizationInfo.cullMode = cullmode;
 }
 
-void CPipeline::AddBlendState(VkPipelineColorBlendAttachmentState blendState, unsigned int cnt)
+void CGraphicPipeline::AddBlendState(VkPipelineColorBlendAttachmentState blendState, unsigned int cnt)
 {
     for(unsigned int i = 0; i < cnt; ++i)
         m_blendAttachmentState.push_back(blendState);
 }
 
-void CPipeline::SetStencilOperations(VkStencilOp depthFail, VkStencilOp passOp, VkStencilOp failOp)
+void CGraphicPipeline::SetStencilOperations(VkStencilOp depthFail, VkStencilOp passOp, VkStencilOp failOp)
 {
     VkStencilOpState& state = m_pipelineDepthStencilInfo.front;
     state.depthFailOp = depthFail;
@@ -475,7 +513,7 @@ void CPipeline::SetStencilOperations(VkStencilOp depthFail, VkStencilOp passOp, 
     m_pipelineDepthStencilInfo.back = state;
 }
 
-void CPipeline::SetStencilValues(unsigned char comapreMask, unsigned char writeMask, unsigned char ref)
+void CGraphicPipeline::SetStencilValues(unsigned char comapreMask, unsigned char writeMask, unsigned char ref)
 {
     VkStencilOpState& state = m_pipelineDepthStencilInfo.front;
     state.compareMask = comapreMask;
@@ -485,24 +523,24 @@ void CPipeline::SetStencilValues(unsigned char comapreMask, unsigned char writeM
 
 }
 
-void CPipeline::SetLineWidth(float width)
+void CGraphicPipeline::SetLineWidth(float width)
 {
     m_pipelineRasterizationInfo.lineWidth = width;
 }
 
-void CPipeline::SetStencilOp (VkCompareOp op)
+void CGraphicPipeline::SetStencilOp (VkCompareOp op)
 {
     VkStencilOpState& state = m_pipelineDepthStencilInfo.front;
     state.compareOp = op;
     m_pipelineDepthStencilInfo.back = state;
 }
 
-void CPipeline::AddDynamicState(VkDynamicState state)
+void CGraphicPipeline::AddDynamicState(VkDynamicState state)
 {
     m_dynamicStates.push_back(state);
 }
 
-void CPipeline::CompileShaders()
+void CGraphicPipeline::CompileShaders()
 {
     TRAP(!m_vertexFilename.empty());
     TRAP(CreateShaderModule(m_vertexFilename, m_vertexShader));
@@ -512,7 +550,7 @@ void CPipeline::CompileShaders()
         TRAP(CreateShaderModule(m_geometryFilename, m_geometryShader));
 }
 
-void CPipeline::CreatePipelineStages()
+void CGraphicPipeline::CreatePipelineStages()
 {
     m_pipelineStages.clear();
 
@@ -525,30 +563,41 @@ void CPipeline::CreatePipelineStages()
         m_pipelineStages.push_back(CreatePipelineStage(m_geometryShader, VK_SHADER_STAGE_GEOMETRY_BIT));
 }
 
-void CPipeline::CreatePipelineLayout(VkDescriptorSetLayout layout)
-{
-    VkPipelineLayoutCreateInfo plci;
-    cleanStructure(plci);
-    plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    plci.pNext = nullptr;
-    plci.flags = 0;
-    plci.setLayoutCount = 1;
-    plci.pSetLayouts = &layout;
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//CGraphicPipeline
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    VULKAN_ASSERT(vk::CreatePipelineLayout(vk::g_vulkanContext.m_device, &plci, nullptr, &m_pipelineLayout));
+CComputePipeline::CComputePipeline()
+    : CPipeline()
+    , m_computeShader(VK_NULL_HANDLE)
+{
 }
 
-void CPipeline::CreatePipelineLayout(std::vector<VkDescriptorSetLayout> layouts)
+CComputePipeline::~CComputePipeline()
 {
-    VkPipelineLayoutCreateInfo plci;
-    cleanStructure(plci);
-    plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    plci.pNext = nullptr;
-    plci.flags = 0;
-    plci.setLayoutCount = (uint32_t)layouts.size();
-    plci.pSetLayouts = layouts.data();
+    if (m_computeShader)
+        vk::DestroyShaderModule(vk::g_vulkanContext.m_device, m_computeShader, nullptr);
+}
 
-    VULKAN_ASSERT(vk::CreatePipelineLayout(vk::g_vulkanContext.m_device, &plci, nullptr, &m_pipelineLayout));
+void CComputePipeline::CreatePipeline()
+{
+    TRAP(!m_computeFilename.empty());
+    TRAP(m_pipelineLayout);
+    CreateShaderModule(m_computeFilename, m_computeShader);
+
+    VkComputePipelineCreateInfo crtInfo;
+    cleanStructure(crtInfo);
+    crtInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    crtInfo.stage = CreatePipelineStage(m_computeShader, VK_SHADER_STAGE_COMPUTE_BIT);
+    crtInfo.layout = m_pipelineLayout;
+
+    VULKAN_ASSERT(vk::CreateComputePipelines(vk::g_vulkanContext.m_device, nullptr, 1, &crtInfo, nullptr, &m_pipeline));
+}
+
+void CComputePipeline::CleanInternal()
+{
+    if (m_computeShader)
+        vk::DestroyShaderModule(vk::g_vulkanContext.m_device, m_computeShader, nullptr);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
