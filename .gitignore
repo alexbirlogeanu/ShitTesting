@@ -1,0 +1,11 @@
+*.obj
+*.tlog
+*.ilk
+ShitTesting/shaders/bin/
+*.log
+*.lastbuildstate
+*.opensdf
+*.sdf
+*.suo
+*.pdb
+*.idb
