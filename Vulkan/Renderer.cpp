@@ -85,13 +85,6 @@ void CFrameBuffer::CreateFramebuffer(VkRenderPass renderPass, const FramebufferD
         }
     }
 
-    /*for(auto att = m_attachments.begin(); att != m_attachments.end(); ++att)
-    {
-    VkFormat format = att->imageInfo.format;
-    AllocImageMemory(att->imageInfo, att->image, att->imageMemory);
-    CreateImageView(att->imageView, att->image, format);
-    }*/
-
     if(fbDesc.m_depthAttachments.IsValid())
     {
         AddAttachment(m_depthAttachment.imageInfo, fbDesc.m_depthAttachments.format, fbDesc.m_depthAttachments.usage, fbDesc.m_depthAttachments.layers);
@@ -167,7 +160,7 @@ void CFrameBuffer::Finalize()
 
 
     vk::BeginCommandBuffer(cmdBuff, &bufferBeginInfo);
-    vk::CmdPipelineBarrier(cmdBuff, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0, 0, NULL, 0, nullptr, 1, &image_memory_barrier[0]); 
+    vk::CmdPipelineBarrier(cmdBuff, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, NULL, 0, nullptr, 1, &image_memory_barrier[0]); 
     vk::EndCommandBuffer(cmdBuff);
 
 

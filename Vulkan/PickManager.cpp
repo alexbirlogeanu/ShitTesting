@@ -118,18 +118,18 @@ void CPickRenderer::Render()
         vk::CmdBindDescriptorSets(cmd, m_bbPipeline.GetBindPoint(), m_bbPipeline.GetLayout(), 0, 1, &m_pickedNode->Set, 0, nullptr);
 
         VkImage outImg =  m_framebuffer->GetColorImage(1);
-        VkImageMemoryBarrier preRenderBarrier;
+        /* VkImageMemoryBarrier preRenderBarrier;
         AddImageBarrier(preRenderBarrier, outImg, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);*/
 
-        vk::CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &preRenderBarrier);
+        //vk::CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &preRenderBarrier);
         m_bbMesh->Render();
         
-        VkImageMemoryBarrier postRenderBarrier;
+        /*VkImageMemoryBarrier postRenderBarrier;
         AddImageBarrier(postRenderBarrier, outImg, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 
-        vk::CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &postRenderBarrier);
+        vk::CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &postRenderBarrier);*/
 
     }
 
@@ -310,7 +310,7 @@ void CPickRenderer::GetPickedId()
     AddBufferBarier(postCopyBufBarrier, m_copyBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
 
 
-    vk::CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 1, &postCopyBufBarrier, 1, &postCopyImgBarrier);
+    vk::CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 1, &postCopyBufBarrier, 1, &postCopyImgBarrier);
 
     unsigned char* mem;
     VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_copyMemory, 0, VK_WHOLE_SIZE, 0, (void**)&mem));
@@ -456,8 +456,8 @@ void CPickManager::SetupRenderpass(const FramebufferDescription& fbDesc)
     std::vector<VkAttachmentDescription> ad;
     ad.resize(3);
     AddAttachementDesc(ad[0], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[0].format);
-    AddAttachementDesc(ad[1], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[1].format, VK_ATTACHMENT_LOAD_OP_LOAD);
-    AddAttachementDesc(ad[2], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format);
+    AddAttachementDesc(ad[1], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[1].format, VK_ATTACHMENT_LOAD_OP_LOAD);
+    AddAttachementDesc(ad[2], VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format);
 
     std::vector<VkAttachmentReference> attachment_ref;
     attachment_ref.push_back(CreateAttachmentReference(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));

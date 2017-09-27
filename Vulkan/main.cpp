@@ -1520,10 +1520,6 @@ public:
         VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
 
         vk::CmdBindPipeline(cmd, m_pipeline.GetBindPoint(), m_pipeline.Get());
-        
-        vk::CmdSetStencilCompareMask(cmd, VK_STENCIL_FACE_FRONT_BIT, 0xFF);
-        vk::CmdSetStencilWriteMask(cmd, VK_STENCIL_FACE_FRONT_BIT, 0xFF);
-
 
         glm::mat4 view = ms_camera.GetViewMatrix();
         PerspectiveMatrix(m_proj);
@@ -2094,7 +2090,7 @@ public:
          cleanStructure(imgInfo);
          imgInfo.sampler = m_sampler;
          imgInfo.imageView = finalColor;
-         imgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+         imgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
          VkDescriptorBufferInfo buffInfo;
          cleanStructure(buffInfo);
@@ -2683,8 +2679,6 @@ void CApplication::TransferToPresentImage()
     imgCopy.dstSubresource = subRes;
     imgCopy.dstOffset = offset;
     imgCopy.extent = extent;
-    
-    
 
     VkImageMemoryBarrier preCopyBarrier[2];
     AddImageBarrier(preCopyBarrier[0], presentImg, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,  VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
@@ -2693,7 +2687,7 @@ void CApplication::TransferToPresentImage()
 
     vk::CmdPipelineBarrier(cmdBuffer,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 
         VK_DEPENDENCY_BY_REGION_BIT ,
         0,
         nullptr,
@@ -2918,10 +2912,10 @@ void CApplication::CreateDeferredRenderPass(const FramebufferDescription& fbDesc
     std::vector<VkAttachmentDescription> ad;
     ad.resize(size);
     AddAttachementDesc(ad[GBuffer_Final], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, colors[GBuffer_Final].format);
-    AddAttachementDesc(ad[GBuffer_Albedo], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, colors[GBuffer_Albedo].format);
-    AddAttachementDesc(ad[GBuffer_Specular], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, colors[GBuffer_Specular].format);
-    AddAttachementDesc(ad[GBuffer_Normals], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, colors[GBuffer_Normals].format);
-    AddAttachementDesc(ad[GBuffer_Position], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, colors[GBuffer_Position].format);
+    AddAttachementDesc(ad[GBuffer_Albedo], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colors[GBuffer_Albedo].format);
+    AddAttachementDesc(ad[GBuffer_Specular], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colors[GBuffer_Specular].format);
+    AddAttachementDesc(ad[GBuffer_Normals], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colors[GBuffer_Normals].format);
+    AddAttachementDesc(ad[GBuffer_Position], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colors[GBuffer_Position].format);
     AddAttachementDesc(ad[GBuffer_Debug], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, colors[GBuffer_Debug].format);
     AddAttachementDesc(ad[depthIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format); //Depth
 
@@ -2960,7 +2954,7 @@ void CApplication::CreateAORenderPass(const FramebufferDescription& fbDesc)
 {
     std::vector<VkAttachmentDescription> ad;
     ad.resize(3);
-    AddAttachementDesc(ad[0], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[0].format);
+    AddAttachementDesc(ad[0], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[0].format);
     AddAttachementDesc(ad[1], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[1].format);
     AddAttachementDesc(ad[2], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[2].format);
 
@@ -3010,7 +3004,7 @@ void CApplication::CreateDirLightingRenderPass(const FramebufferDescription& fbD
     std::vector<VkAttachmentDescription> ad;
     ad.resize(ELightBuffer_Count);
 
-    AddAttachementDesc(ad[ELightBuffer_Final], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[ELightBuffer_Final].format, VK_ATTACHMENT_LOAD_OP_LOAD);
+    AddAttachementDesc(ad[ELightBuffer_Final], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[ELightBuffer_Final].format, VK_ATTACHMENT_LOAD_OP_LOAD);
     AddAttachementDesc(ad[ELightBuffer_DebugDirLight], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[ELightBuffer_DebugDirLight].format);
     AddAttachementDesc(ad[ELightBUffer_DebugPointLight], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[ELightBUffer_DebugPointLight].format);
     AddAttachementDesc(ad[ELightBuffer_Depth], VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format, VK_ATTACHMENT_LOAD_OP_LOAD);
@@ -3056,7 +3050,7 @@ void CApplication::CreatePointLightingRenderPass(const FramebufferDescription& f
     std::vector<VkAttachmentDescription> ad;
     ad.resize(ELightBuffer_Count);
 
-    AddAttachementDesc(ad[ELightBuffer_Final], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[ELightBuffer_Final].format, VK_ATTACHMENT_LOAD_OP_LOAD);
+    AddAttachementDesc(ad[ELightBuffer_Final], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[ELightBuffer_Final].format, VK_ATTACHMENT_LOAD_OP_LOAD);
     AddAttachementDesc(ad[ELightBuffer_DebugDirLight], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[ELightBuffer_DebugDirLight].format);
     AddAttachementDesc(ad[ELightBUffer_DebugPointLight], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[ELightBUffer_DebugPointLight].format);
     AddAttachementDesc(ad[ELightBuffer_Depth], VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format, VK_ATTACHMENT_LOAD_OP_LOAD);
@@ -3290,7 +3284,7 @@ void CApplication::CreateShadowRenderPass(const FramebufferDescription& fbDesc)
 {
     TRAP(fbDesc.m_depthAttachments.IsValid());
     VkAttachmentDescription ad;
-    AddAttachementDesc(ad, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format);
+    AddAttachementDesc(ad, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_depthAttachments.format);
 
     VkAttachmentReference attachment_ref = CreateAttachmentReference(0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
     VkSubpassDescription sd = CreateSubpassDesc(nullptr, 0, &attachment_ref);
@@ -3314,7 +3308,7 @@ void CApplication::CreateShadowResolveRenderPass(const FramebufferDescription& f
 {
     std::vector<VkAttachmentDescription> ad;
     ad.resize(3);
-    AddAttachementDesc(ad[0], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[0].format);
+    AddAttachementDesc(ad[0], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[0].format);
     AddAttachementDesc(ad[1], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[1].format);
     AddAttachementDesc(ad[2], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[2].format);
 
@@ -3382,7 +3376,7 @@ void CApplication::CreatePostProcessRenderPass(const FramebufferDescription& fbD
 void CApplication::CreateSunRenderPass(const FramebufferDescription& fbDesc)
 {
     VkAttachmentDescription ad[ESunFB_Count];
-    AddAttachementDesc(ad[ESunFB_Final], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[ESunFB_Final].format);
+    AddAttachementDesc(ad[ESunFB_Final], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[ESunFB_Final].format);
     AddAttachementDesc(ad[ESunFB_Sun], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[ESunFB_Sun].format);
     AddAttachementDesc(ad[ESunFB_Blur1], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[ESunFB_Blur1].format);
     AddAttachementDesc(ad[ESunFB_Blur2], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[ESunFB_Blur2].format);
@@ -3459,7 +3453,7 @@ void CApplication::CreateSkyRenderPass(const FramebufferDescription& fbDesc)
     std::vector<VkAttachmentDescription> ad;
     ad.resize(2);
 
-    AddAttachementDesc(ad[0], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[0].format, VK_ATTACHMENT_LOAD_OP_LOAD);
+    AddAttachementDesc(ad[0], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[0].format, VK_ATTACHMENT_LOAD_OP_LOAD);
     AddAttachementDesc(ad[1], VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format, VK_ATTACHMENT_LOAD_OP_LOAD);
 
     std::vector<VkAttachmentReference> attRef;
@@ -3497,7 +3491,7 @@ void CApplication::CreateSkyRenderPass(const FramebufferDescription& fbDesc)
 void CApplication::CreateParticlesRenderPass(const FramebufferDescription& fbDesc)
 {
     VkAttachmentDescription ad[2];
-    AddAttachementDesc(ad[0], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[0].format, VK_ATTACHMENT_LOAD_OP_LOAD);
+    AddAttachementDesc(ad[0], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[0].format, VK_ATTACHMENT_LOAD_OP_LOAD);
     AddAttachementDesc(ad[1], VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format, VK_ATTACHMENT_LOAD_OP_LOAD);
 
     VkAttachmentReference attachment_ref[2];
@@ -3526,7 +3520,7 @@ void CApplication::CreateFogRenderPass(const FramebufferDescription& fbDesc)
 {
     std::vector<VkAttachmentDescription> ad;
     ad.resize(2);
-    AddAttachementDesc(ad[0], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[0].format, VK_ATTACHMENT_LOAD_OP_LOAD);
+    AddAttachementDesc(ad[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[0].format, VK_ATTACHMENT_LOAD_OP_LOAD);
     AddAttachementDesc(ad[1], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[1].format);
 
     std::vector<VkAttachmentReference> attRef;
@@ -3582,7 +3576,7 @@ void CApplication::CreateVolumetricRenderPass(const FramebufferDescription& fbDe
     std::vector<VkAttachmentDescription> ad;
     ad.push_back(AddAttachementDesc(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[0].format));
     ad.push_back(AddAttachementDesc(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[1].format));
-    ad.push_back(AddAttachementDesc(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[2].format, VK_ATTACHMENT_LOAD_OP_LOAD));
+    ad.push_back(AddAttachementDesc(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[2].format, VK_ATTACHMENT_LOAD_OP_LOAD));
     ad.push_back(AddAttachementDesc(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[3].format));
     ad.push_back(AddAttachementDesc(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format, VK_ATTACHMENT_LOAD_OP_LOAD));
 
@@ -3747,8 +3741,8 @@ void CApplication::SetupParticles()
 
 void CApplication::SetupPointLights()
 {
-    //m_pointLightRenderer->AddLight(glm::vec3(0.0f, -.3f, -4.25f), glm::vec3(1.164f, 1.11f, 3.9f), 5.0f);
-    //m_pointLightRenderer->AddLight(glm::vec3(0.0f, 0.0f, -1.25f), glm::vec3(1.164f, 3.911f, 1.1f), 5.0f);
+    m_pointLightRenderer->AddLight(glm::vec3(0.0f, -.3f, -4.25f), glm::vec3(1.164f, 1.11f, 3.9f), 5.0f);
+    m_pointLightRenderer->AddLight(glm::vec3(0.0f, 0.0f, -1.25f), glm::vec3(1.164f, 3.911f, 1.1f), 5.0f);
 }
 
 
@@ -4031,11 +4025,11 @@ void CApplication::RenderPostProcess()
     m_postProcessRenderer->UpdateShaderParams();
     m_postProcessRenderer->StartRenderPass();
 
-    VkImageMemoryBarrier before;
+    /*VkImageMemoryBarrier before;
     VkImage img = m_objectRenderer->GetFramebuffer()->GetColorImage(GBuffer_Final);
     AddImageBarrier(before, img, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-    vk::CmdPipelineBarrier(buff, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &before);
+    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+    vk::CmdPipelineBarrier(buff, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &before);*/
 
     m_postProcessRenderer->Render();
     m_postProcessRenderer->EndRenderPass();

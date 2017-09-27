@@ -130,20 +130,20 @@ void CSunRenderer::UpdateGraphicInterface(VkImageView depthBuffer)
     VkDescriptorImageInfo wSuntImg;
     wSuntImg.imageView = m_framebuffer->GetColorImageView(ESunFB_Sun);
     wSuntImg.sampler = m_sampler;
-    wSuntImg.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    wSuntImg.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkDescriptorImageInfo wBlurVImg;
-    wBlurVImg.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    wBlurVImg.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     wBlurVImg.imageView = m_framebuffer->GetColorImageView(ESunFB_Blur1);
     wBlurVImg.sampler = m_sampler;
 
     VkDescriptorImageInfo wBlurHImg;
-    wBlurHImg.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    wBlurHImg.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     wBlurHImg.imageView = m_framebuffer->GetColorImageView(ESunFB_Blur2);
     wBlurHImg.sampler = m_sampler;
 
     VkDescriptorImageInfo depthImg;
-    depthImg.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    depthImg.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     depthImg.imageView = depthBuffer;
     depthImg.sampler = m_neareastSampler;
 

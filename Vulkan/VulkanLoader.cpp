@@ -657,11 +657,12 @@ namespace vk {
         const char *msg,
         void *user_data)
     {
-
-        std::string typeStr = (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT)? "Error " : "Warning ";
+        bool isError = (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT) != 0;
+        std::string typeStr = (isError)? "Error " : "Warning ";
         typeStr += msg;
         typeStr += "\n";
         OutputDebugString(typeStr.data());
+        TRAP(!isError);
         return false;
     }
 
@@ -701,7 +702,7 @@ namespace vk {
 
     void Load()
     {
-        const char library[] = "vulkan-1-1-0-30-0.dll";
+        const char library[] = "vulkan-1.dll";
         const char renderDoc[] = "renderdoc.dll";
 
         HMODULE vulkanDll = LoadLibrary(library);

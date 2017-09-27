@@ -123,14 +123,13 @@ void CAORenderer::Render()
     vk::CmdBindDescriptorSets(cmdBuff, m_mainPipeline.GetBindPoint(), m_mainPipeline.GetLayout(), 0, (uint32_t)m_mainPassSets.size(), m_mainPassSets.data(), 0, nullptr);
     m_quad->Render();
 
-    VkImageMemoryBarrier imgBar;
+    vk::CmdNextSubpass(cmdBuff, VK_SUBPASS_CONTENTS_INLINE);
+    /*VkImageMemoryBarrier imgBar;
     VkImage img = m_framebuffer->GetColorImage(0);
     AddImageBarrier(imgBar, img, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-    vk::CmdPipelineBarrier(cmdBuff, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &imgBar);  
+    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+    vk::CmdPipelineBarrier(cmdBuff, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &imgBar);  */
 
-    vk::CmdNextSubpass(cmdBuff, VK_SUBPASS_CONTENTS_INLINE);
-    
     vk::CmdBindPipeline(cmdBuff, m_hblurPipeline.GetBindPoint(), m_hblurPipeline.Get());
     vk::CmdBindDescriptorSets(cmdBuff, m_hblurPipeline.GetBindPoint(), m_hblurPipeline.GetLayout(), 0, 1, &m_blurPassSets[0], 0, nullptr);
 
