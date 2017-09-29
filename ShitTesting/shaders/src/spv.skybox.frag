@@ -13,7 +13,7 @@ layout(location=1) in vec4 LightColor;
 vec4 GetSkyColor()
 {
 	vec3 coords = normalize(ViewPosition.xyz);
-	coords.y = (coords.y + 1.0f) / 2.0f;
+	coords.xy = (coords.xy + 1.0f) / 2.0f;
 	return texture(cubeMap, coords.xy);
 }
 

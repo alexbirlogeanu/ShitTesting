@@ -270,7 +270,7 @@ void CVolumetricRenderer::Init()
 
     CreateCullPipeline(m_frontCullPipeline, VK_CULL_MODE_FRONT_BIT);
     CreateCullPipeline(m_backCullPipeline, VK_CULL_MODE_BACK_BIT);
-    CreateLinearSampler(m_sampler);
+    CreateNearestSampler(m_sampler, false);
 
     m_volumetricPipeline.SetVertexShaderFile("transform.vert");
     m_volumetricPipeline.SetFragmentShaderFile("volumetric.frag");

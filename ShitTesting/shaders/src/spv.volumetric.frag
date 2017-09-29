@@ -23,20 +23,27 @@ void main()
 	float steps = 32.0;
 	vec3 dir = stop - start;
 	float len = length(dir);
-	float s = len / steps;
+	float s = 1.0 / steps;
 	dir /= len; //normalize
 	Out = vec4(1.0, 0.0, 0.0, 0.0);
 	Debug = vec4(dir, 1.0);
-	for (int i = 0; i < steps; ++i)
+	 for (int i = 0; i < steps; ++i)
 	{
-		vec3 coords = (dir * i * s);
-		coords.xy  = UV.st;
-		coords.z = -coords.z;
+		vec3 coords = start + (dir * i * s);
+		//coords.xy  = UV.st;
+		coords.xy = coords.xy -(-0.5);
+		coords.y = 1 - coords.y;
+		coords.z = coords.z * 0.5 + 0.5;
+		Debug.xyz = coords;
 		vec4 color = texture(VolumeTexture, coords);
 		if(color.a > 0.0)
 		{
 			Out = color;
 			break;
 		}
-	}
+		
+	} 
+	/* vec4 color = texture(VolumeTexture, vec3(UV.st, 0.25f));
+	if(color.a > 0.0)
+		Out = color; */
 }

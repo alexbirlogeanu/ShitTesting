@@ -3863,7 +3863,7 @@ void CApplication::CreateResources()
     GetPickManager()->CreateDebug(m_uiManager);
     directionalLight.CreateDebug(m_uiManager);
     //SetupParticles();
-    SetupPointLights();
+    //SetupPointLights();
 }
 
 void CApplication::UpdateCamera()

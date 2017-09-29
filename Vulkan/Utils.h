@@ -38,8 +38,8 @@ VkSubpassDescription CreateSubpassDesc(VkAttachmentReference* pColorAtts, unsign
 
 void NewRenderPass(VkRenderPass* renderPass, const std::vector<VkAttachmentDescription>& attachments, const std::vector<VkSubpassDescription>& subpasses, const std::vector<VkSubpassDependency>& dependecies = std::vector<VkSubpassDependency>());
 
-void CreateNearestSampler(VkSampler& sampler);
-void CreateLinearSampler(VkSampler& sampler);
+void CreateNearestSampler(VkSampler& sampler, bool clampToEdge = false);
+void CreateLinearSampler(VkSampler& sampler, bool clampToEdge = true);
 
 Mesh* CreateFullscreenQuad();
 Mesh* CreateUnitCube();

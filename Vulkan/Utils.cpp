@@ -123,17 +123,18 @@ void AllocDescriptorSets(VkDescriptorPool descPool, VkDescriptorSetLayout& layou
     AllocDescriptorSetsInternal(descPool, &layout, 1, pSet);
 }
 
-void CreateSamplerInternal(VkSampler& sampler, VkFilter filer)
+void CreateSamplerInternal(VkSampler& sampler, VkFilter filer, bool clampToEdge)
 {
+    VkSamplerAddressMode adressMode = clampToEdge ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
     VkSamplerCreateInfo samplerCreateInfo;
     cleanStructure(samplerCreateInfo);
     samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerCreateInfo.magFilter = filer;
     samplerCreateInfo.minFilter = filer;
     samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCreateInfo.addressModeU = adressMode;
+    samplerCreateInfo.addressModeV = adressMode;
+    samplerCreateInfo.addressModeW = adressMode;
     samplerCreateInfo.mipLodBias = 0.0;
     samplerCreateInfo.anisotropyEnable = VK_FALSE;
     samplerCreateInfo.maxAnisotropy = 0;
@@ -141,19 +142,19 @@ void CreateSamplerInternal(VkSampler& sampler, VkFilter filer)
     samplerCreateInfo.minLod = 0.0;
     samplerCreateInfo.maxLod = 0.0;
     samplerCreateInfo.compareEnable = VK_FALSE;
-    samplerCreateInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+    samplerCreateInfo.borderColor = VK_BORDER_COLOR_INT_TRANSPARENT_BLACK;
 
     VULKAN_ASSERT(vk::CreateSampler(vk::g_vulkanContext.m_device, &samplerCreateInfo, nullptr, &sampler));
 }
 
-void CreateNearestSampler(VkSampler& sampler)
+void CreateNearestSampler(VkSampler& sampler, bool clampToEdge)
 {
-    CreateSamplerInternal(sampler, VK_FILTER_NEAREST);
+    CreateSamplerInternal(sampler, VK_FILTER_NEAREST, clampToEdge);
 }
 
-void CreateLinearSampler(VkSampler& sampler)
+void CreateLinearSampler(VkSampler& sampler, bool clampToEdge)
 {
-    CreateSamplerInternal(sampler, VK_FILTER_LINEAR);
+    CreateSamplerInternal(sampler, VK_FILTER_LINEAR, clampToEdge);
 }
 
 template<typename TYPE>
