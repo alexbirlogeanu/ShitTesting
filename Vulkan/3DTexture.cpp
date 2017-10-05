@@ -235,7 +235,7 @@ struct SVolumeParams
 };
 
 CVolumetricRenderer::CVolumetricRenderer(VkRenderPass renderPass)
-    : CRenderer(renderPass)
+    : CRenderer(renderPass, "VolumeticRenderPass")
     , m_volumeDescLayout(VK_NULL_HANDLE)
     , m_volumetricDescLayout(VK_NULL_HANDLE)
     , m_volumeDescSet(VK_NULL_HANDLE)

@@ -32,7 +32,7 @@ enum Bindings
 };
 
 CAORenderer::CAORenderer(VkRenderPass renderPass)
-    : CRenderer(renderPass)
+    : CRenderer(renderPass, "AmbientOcclussionRenderPass")
     , m_quad(nullptr)
     , m_constParamsBuffer(VK_NULL_HANDLE)
     , m_constParamsMemory(VK_NULL_HANDLE)

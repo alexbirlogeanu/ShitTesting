@@ -58,5 +58,8 @@ void AddBufferBarier(VkBufferMemoryBarrier& outBarrier, VkBuffer& buffer, VkAcce
 
 VkPipelineShaderStageCreateInfo CreatePipelineStage(VkShaderModule modue, VkShaderStageFlagBits stage);
 
+void StartDebugMarker(const std::string& markerName);
+void EndDebugMarker(const std::string& markerName);
+
 extern CCamera ms_camera;
 extern CDirectionalLight directionalLight;

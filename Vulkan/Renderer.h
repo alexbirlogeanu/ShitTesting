@@ -334,7 +334,7 @@ private:
 class CRenderer
 {
 public:
-    CRenderer(VkRenderPass renderPass);
+    CRenderer(VkRenderPass renderPass, std::string renderPassMarker = std::string());
     virtual ~CRenderer();
 
     virtual void Init();
@@ -364,6 +364,7 @@ protected:
 private:
     bool                                                m_initialized;
     bool                                                m_ownFramebuffer;
+    std::string                                         m_renderPassMarker;
 
     std::unordered_set<CPipeline*>                      m_ownPipelines;
     static std::unordered_set<CRenderer*>               ms_Renderers;

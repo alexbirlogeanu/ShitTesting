@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <fstream>
 #include "Mesh.h"
+#include <cstring>
 
 #define SHADERDIR "shaders/bin/"
 
@@ -532,4 +533,26 @@ VkPipelineShaderStageCreateInfo CreatePipelineStage(VkShaderModule modue, VkShad
     pipelineStage.pSpecializationInfo = nullptr;
 
     return pipelineStage;
+}
+
+static std::vector<std::string> m_markersStack;
+
+void StartDebugMarker(const std::string& markerName)
+{
+    VkDebugMarkerMarkerInfoEXT marker;
+    cleanStructure(marker);
+    marker.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT;
+    marker.pNext = nullptr;
+    marker.pMarkerName = markerName.data();
+    //marker.color[0] = marker.color[2] = marker.color[3] = 1.0f;
+    vk::CmdDebugMarkerBeginEXT(vk::g_vulkanContext.m_mainCommandBuffer, &marker);
+
+    m_markersStack.push_back(markerName);
+}
+
+void EndDebugMarker(const std::string& markerName)
+{
+    TRAP( m_markersStack.back() == markerName); //need to close the current open marker
+    vk::CmdDebugMarkerEndEXT(vk::g_vulkanContext.m_mainCommandBuffer);
+    m_markersStack.pop_back();
 }

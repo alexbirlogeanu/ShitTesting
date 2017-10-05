@@ -13,7 +13,7 @@ struct ShadowResolveParameters
 };
 
 CShadowResolveRenderer::CShadowResolveRenderer(VkRenderPass renderpass)
-    : CRenderer(renderpass)
+    : CRenderer(renderpass, "ShadowFactorRenderPass")
     , m_quad(nullptr)
     , m_depthSampler(VK_NULL_HANDLE)
     , m_descriptorLayout(VK_NULL_HANDLE)

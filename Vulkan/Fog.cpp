@@ -12,7 +12,7 @@ struct SFogParams
 };
 
 CFogRenderer::CFogRenderer(VkRenderPass renderpass)
-    : CRenderer(renderpass)
+    : CRenderer(renderpass, "FogRenderPass")
     , m_descriptorSet(VK_NULL_HANDLE)
     , m_descriptorLayout(VK_NULL_HANDLE)
     , m_sampler(VK_NULL_HANDLE)

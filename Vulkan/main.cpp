@@ -712,7 +712,7 @@ class CLightRenderer : public CRenderer
 {
 public:
     CLightRenderer(VkRenderPass renderPass)
-        : CRenderer(renderPass)
+        : CRenderer(renderPass, "LightRenderPass")
         , m_sampler(VK_NULL_HANDLE)
         , m_shaderUniformBuffer(VK_NULL_HANDLE)
         , m_shaderUniformMemory(VK_NULL_HANDLE)
@@ -1019,7 +1019,7 @@ class CPointLightRenderer : public CRenderer
 {
 public:
     CPointLightRenderer(VkRenderPass renderPass)
-        : CRenderer(renderPass)
+        : CRenderer(renderPass, "PointLightsRenderPass")
         , m_pointLightMesh(nullptr)
         , m_pointLightsCommonBuffer(VK_NULL_HANDLE)
         , m_pointLightsCommonMemory(VK_NULL_HANDLE)
@@ -1484,7 +1484,7 @@ class CObjectRenderer : public CRenderer
 {
 public:
     CObjectRenderer(VkRenderPass renderPass)
-        : CRenderer(renderPass)
+        : CRenderer(renderPass, "SolidRenderPass")
         , m_objDescSetLayout(VK_NULL_HANDLE)
     {
         
@@ -1688,7 +1688,7 @@ class CSkyRenderer : public CRenderer
 {
 public:
     CSkyRenderer(VkRenderPass renderPass)
-        : CRenderer(renderPass)
+        : CRenderer(renderPass, "SkyRenderPasss")
         , m_quadMesh(nullptr)
         , m_skyTexture(nullptr)
         , m_boxParamsBuffer(VK_NULL_HANDLE)
@@ -1889,7 +1889,7 @@ class ShadowRenderer : public CRenderer
 {
 public:
     ShadowRenderer(VkRenderPass renderPass)
-        : CRenderer(renderPass)
+        : CRenderer(renderPass, "ShadowmapRenderPass")
     {
     }
 
@@ -2039,7 +2039,7 @@ class PostProcessRenderer : public CRenderer
 {
 public:
     PostProcessRenderer(VkRenderPass renderPass)
-        : CRenderer(renderPass)
+        : CRenderer(renderPass, "HDRRenderPass")
         , m_sampler(VK_NULL_HANDLE)
         , m_uniformBuffer(VK_NULL_HANDLE)
         , m_quadMesh(nullptr)

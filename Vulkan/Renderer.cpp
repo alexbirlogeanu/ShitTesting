@@ -599,12 +599,13 @@ void CComputePipeline::CleanInternal()
 
 std::unordered_set<CRenderer*> CRenderer::ms_Renderers;
 
-CRenderer::CRenderer(VkRenderPass renderPass)
+CRenderer::CRenderer(VkRenderPass renderPass, std::string renderPassMarker)
     : m_initialized(false)
     , m_renderPass(renderPass)
     , m_framebuffer(nullptr)
     , m_ownFramebuffer(true)
     , m_descriptorPool(VK_NULL_HANDLE)
+    , m_renderPassMarker(renderPassMarker)
 
 {
     ms_Renderers.insert(this);
@@ -621,7 +622,6 @@ void CRenderer::CreateFramebuffer(FramebufferDescription& fbDesc, unsigned int w
 
 void CRenderer::StartRenderPass()
 {
-    
     VkRect2D renderArea = m_framebuffer->GetRenderArea();  
     const std::vector<VkClearValue>& clearValues = m_framebuffer->GetClearValues();
 
@@ -635,12 +635,17 @@ void CRenderer::StartRenderPass()
     renderBeginInfo.clearValueCount = (uint32_t)clearValues.size();
     renderBeginInfo.pClearValues = clearValues.data();
 
+    if (!m_renderPassMarker.empty())
+        StartDebugMarker(m_renderPassMarker);
+
     vk::CmdBeginRenderPass(vk::g_vulkanContext.m_mainCommandBuffer, &renderBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 }
 
 void CRenderer::EndRenderPass()
 {
     vk::CmdEndRenderPass(vk::g_vulkanContext.m_mainCommandBuffer);
+    if (!m_renderPassMarker.empty())
+        EndDebugMarker(m_renderPassMarker);
 }
 
 CRenderer::~CRenderer()

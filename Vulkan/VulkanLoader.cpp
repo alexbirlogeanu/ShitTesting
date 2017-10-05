@@ -190,6 +190,12 @@ namespace vk {
     PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallbackEXT;
     PFN_vkDestroyDebugReportCallbackEXT DestroyDebugReportCallbackEXT;
     PFN_vkDebugReportMessageEXT DebugReportMessageEXT;
+    
+    PFN_vkCmdDebugMarkerBeginEXT CmdDebugMarkerBeginEXT;
+    PFN_vkCmdDebugMarkerEndEXT CmdDebugMarkerEndEXT;
+    PFN_vkCmdDebugMarkerInsertEXT CmdDebugMarkerInsertEXT;
+    PFN_vkDebugMarkerSetObjectNameEXT DebugMarkerSetObjectNameEXT;
+    PFN_vkDebugMarkerSetObjectTagEXT DebugMarkerSetObjectTagEXT;
 
     void init_dispatch_table_top()
     {
@@ -262,7 +268,13 @@ namespace vk {
         CreateDebugReportCallbackEXT = reinterpret_cast<PFN_vkCreateDebugReportCallbackEXT>(GetInstanceProcAddr(instance, "vkCreateDebugReportCallbackEXT"));
         DestroyDebugReportCallbackEXT = reinterpret_cast<PFN_vkDestroyDebugReportCallbackEXT>(GetInstanceProcAddr(instance, "vkDestroyDebugReportCallbackEXT"));
         DebugReportMessageEXT = reinterpret_cast<PFN_vkDebugReportMessageEXT>(GetInstanceProcAddr(instance, "vkDebugReportMessageEXT"));
-
+#ifdef VK_EXT_debug_marker
+        CmdDebugMarkerBeginEXT = reinterpret_cast<PFN_vkCmdDebugMarkerBeginEXT>(GetInstanceProcAddr(instance, "vkCmdDebugMarkerBeginEXT"));
+        CmdDebugMarkerEndEXT = reinterpret_cast<PFN_vkCmdDebugMarkerEndEXT>(GetInstanceProcAddr(instance, "vkCmdDebugMarkerEndEXT"));
+        CmdDebugMarkerInsertEXT = reinterpret_cast<PFN_vkCmdDebugMarkerInsertEXT>(GetInstanceProcAddr(instance, "vkCmdDebugMarkerInsertEXT"));
+        DebugMarkerSetObjectTagEXT = reinterpret_cast<PFN_vkDebugMarkerSetObjectTagEXT>(GetInstanceProcAddr(instance, "vkDebugMarkerSetObjectTagEXT"));
+        DebugMarkerSetObjectNameEXT = reinterpret_cast<PFN_vkDebugMarkerSetObjectNameEXT>(GetInstanceProcAddr(instance, "vkDebugMarkerSetObjectNameEXT"));
+#endif
     }
 
     void init_dispatch_table_bottom(VkInstance instance, VkDevice dev)
@@ -560,6 +572,8 @@ namespace vk {
     bool CheckDeviceExtentions(std::vector<const char*>& deviceMandatoryExt)
     {
         deviceMandatoryExt.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        deviceMandatoryExt.push_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
+
         std::vector<VkExtensionProperties> deviceExtProperties;
         unsigned int devExtCnt;
         

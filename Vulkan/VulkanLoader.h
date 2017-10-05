@@ -239,6 +239,10 @@ namespace vk {
     extern PFN_vkDestroyDebugReportCallbackEXT DestroyDebugReportCallbackEXT;
     extern PFN_vkDebugReportMessageEXT DebugReportMessageEXT;
 
+    //VK_EXT_debug_marker
+    extern PFN_vkCmdDebugMarkerBeginEXT CmdDebugMarkerBeginEXT;
+    extern PFN_vkCmdDebugMarkerEndEXT CmdDebugMarkerEndEXT;
+
     void Load();
     void Unload();
 

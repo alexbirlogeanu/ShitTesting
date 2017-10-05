@@ -3,7 +3,7 @@
 #include "UI.h"
 
 CSunRenderer::CSunRenderer(VkRenderPass renderPass)
-    : CRenderer(renderPass)
+    : CRenderer(renderPass, "SunRenderPass")
     , m_blurSetLayout(VK_NULL_HANDLE)
     , m_blurRadialDescSet(VK_NULL_HANDLE)
     , m_radialBlurSetLayout(VK_NULL_HANDLE)
@@ -111,16 +111,24 @@ void CSunRenderer::Render()
         m_quad->Render();
     };
 
+    StartDebugMarker("RenderSunSprite"); //ugly, but just for testing
     renderPipeline(m_sunPipeline, m_sunDescriptorSet);
+    EndDebugMarker("RenderSunSprite");
 
+    StartDebugMarker("BlurVertical");
     vk::CmdNextSubpass(cmdBuf, VK_SUBPASS_CONTENTS_INLINE);
     renderPipeline(m_blurVPipeline, m_blurVDescSet);
+    EndDebugMarker("BlurVertical");
 
+    StartDebugMarker("BlurHorizontal");
     vk::CmdNextSubpass(cmdBuf, VK_SUBPASS_CONTENTS_INLINE);
     renderPipeline(m_blurHPipeline, m_blurHDescSet);
+    EndDebugMarker("BlurHorizontal");
 
+    StartDebugMarker("RadialBlur");
     vk::CmdNextSubpass(cmdBuf, VK_SUBPASS_CONTENTS_INLINE);
     renderPipeline(m_blurRadialPipeline, m_blurRadialDescSet);
+    EndDebugMarker("RadialBlur");
 
     EndRenderPass();
 }
