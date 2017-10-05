@@ -97,7 +97,7 @@ void C3DTextureRenderer::AllocateOuputTexture()
     imgCrtInfo.pQueueFamilyIndices = NULL;
     imgCrtInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    AllocImageMemory(imgCrtInfo, m_outTexture, m_outTextureMemory);
+    AllocImageMemory(imgCrtInfo, m_outTexture, m_outTextureMemory, "3DTexture2");
 
     VkImageViewCreateInfo viewCrtInfo;
     cleanStructure(viewCrtInfo);

@@ -242,6 +242,9 @@ namespace vk {
     //VK_EXT_debug_marker
     extern PFN_vkCmdDebugMarkerBeginEXT CmdDebugMarkerBeginEXT;
     extern PFN_vkCmdDebugMarkerEndEXT CmdDebugMarkerEndEXT;
+    extern PFN_vkCmdDebugMarkerInsertEXT CmdDebugMarkerInsertEXT;
+    extern PFN_vkDebugMarkerSetObjectNameEXT DebugMarkerSetObjectNameEXT;
+    extern PFN_vkDebugMarkerSetObjectTagEXT DebugMarkerSetObjectTagEXT;
 
     void Load();
     void Unload();

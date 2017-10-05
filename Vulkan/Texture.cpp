@@ -12,6 +12,7 @@ void Read2DTextureData(SImageData& img, const std::string& filename, bool isSRGB
     img.height = FreeImage_GetHeight(fiImage);
     img.depth = 1;
     img.format = (isSRGB)? VK_FORMAT_B8G8R8A8_SRGB : VK_FORMAT_B8G8R8A8_UNORM;
+    img.fileName = filename;
 
     unsigned int size = img.GetDataSize();
     img.data = new unsigned char[size];
@@ -266,7 +267,7 @@ void CTexture::CreateTexture(const SImageData& imageData, bool ownData)
 
     VULKAN_ASSERT(vk::CreateImage(dev, &imgTextInfo, nullptr, &m_textImage));
 
-    AllocImageMemory(imgTextInfo, m_textImage, m_textMemory);
+    AllocImageMemory(imgTextInfo, m_textImage, m_textMemory, imageData.fileName);
 
     VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_1D;
     if (type == VK_IMAGE_TYPE_2D)
@@ -295,6 +296,8 @@ void CTexture::CreateTexture(const SImageData& imageData, bool ownData)
     VULKAN_ASSERT(vk::CreateImageView(dev, &imgViewInfo, nullptr, &m_textImgView));
 
     CreateLinearSampler(m_textSampler);
+
+    SetObjectDebugName(m_textImgView, std::string("View_") + imageData.fileName); //this doesn't create anything ??
 
     m_textureInfo.sampler = m_textSampler;
     m_textureInfo.imageView = m_textImgView;

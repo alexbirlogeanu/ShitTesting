@@ -16,6 +16,7 @@ struct FBAttachment
     //
     VkImage             existingImage;
     VkImageView         existingImageView;
+    std::string         debugName;
 
     FBAttachment()
         : format(VK_FORMAT_UNDEFINED)
@@ -30,11 +31,13 @@ struct FBAttachment
     FBAttachment(VkFormat f
         , VkImageUsageFlags u
         , unsigned int l
-        , VkClearValue clr)
+        , VkClearValue clr
+        , const std::string& debug)
         : format(f)
         , usage(u)
         , clearValue(clr)
         , layers(l)
+        , debugName(debug)
         , existingImage(VK_NULL_HANDLE)
         , existingImageView(VK_NULL_HANDLE)
     {
@@ -74,10 +77,10 @@ struct FramebufferDescription
         TRAP(isValid);
     }
 
-    void AddColorAttachmentDesc(unsigned int index, VkFormat format, VkImageUsageFlags additionalUsage, unsigned int layers = 1, VkClearValue clr = VkClearValue())
+    void AddColorAttachmentDesc(unsigned int index, VkFormat format, VkImageUsageFlags additionalUsage, const std::string& debugName = std::string(), unsigned int layers = 1, VkClearValue clr = VkClearValue())
     {
         TRAP(index < m_numColors);
-        m_colorAttachments[index] = FBAttachment(format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | additionalUsage, layers, clr);
+        m_colorAttachments[index] = FBAttachment(format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | additionalUsage, layers, clr, debugName);
     }
 
     void AddColorAttachmentDesc(unsigned int index, VkFormat format, VkImage existingImage, VkImageView existingImgView, VkClearValue clr = VkClearValue())
@@ -86,13 +89,13 @@ struct FramebufferDescription
         m_colorAttachments[index] = FBAttachment(format, existingImage, existingImgView, clr);
     }
 
-    void AddDepthAttachmentDesc(VkFormat format, VkImageUsageFlags additionalUsage, uint8_t stencilClrValue = 0)
+    void AddDepthAttachmentDesc(VkFormat format, VkImageUsageFlags additionalUsage, const std::string& debugName = std::string(), uint8_t stencilClrValue = 0)
     {
         TRAP(IsDepthFormat(format));
         VkClearValue clrVal;
         clrVal.depthStencil.depth = 1.0f;
         clrVal.depthStencil.stencil = stencilClrValue;
-        m_depthAttachments = FBAttachment(format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | additionalUsage, 1, clrVal);
+        m_depthAttachments = FBAttachment(format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | additionalUsage, 1, clrVal, debugName);
     }
 
      void AddDepthAttachmentDesc(VkFormat format, VkImage existingImage, VkImageView existingImgView, uint8_t stencilClrValue = 0)

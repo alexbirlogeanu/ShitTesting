@@ -39,6 +39,7 @@ struct SImageData
     VkFormat     format;
 
     unsigned char* data;
+    std::string     fileName;
 };
 
 void Read2DTextureData(SImageData& img, const std::string& filename, bool isSRGB = true);

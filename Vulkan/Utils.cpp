@@ -146,6 +146,12 @@ void CreateSamplerInternal(VkSampler& sampler, VkFilter filer, bool clampToEdge)
     samplerCreateInfo.borderColor = VK_BORDER_COLOR_INT_TRANSPARENT_BLACK;
 
     VULKAN_ASSERT(vk::CreateSampler(vk::g_vulkanContext.m_device, &samplerCreateInfo, nullptr, &sampler));
+
+    std::string debugName = "Sampler";
+    debugName += (filer == VK_FILTER_NEAREST) ? "Nearest" : "Linear";
+    debugName += (clampToEdge)? "ClampToEdge" : "ClampToBorder";
+
+    SetObjectDebugName(sampler, debugName);
 }
 
 void CreateNearestSampler(VkSampler& sampler, bool clampToEdge)
@@ -462,11 +468,10 @@ void AllocBufferMemory(VkBuffer& buffer, VkDeviceMemory& memory, uint32_t size, 
     memAllocInfo.allocationSize = memReq.size;
 
     VULKAN_ASSERT(vk::AllocateMemory(vk::g_vulkanContext.m_device, &memAllocInfo, nullptr, &memory));
-
     VULKAN_ASSERT(vk::BindBufferMemory(vk::g_vulkanContext.m_device, buffer, memory, 0));
 }
 
-void AllocImageMemory(const VkImageCreateInfo& imgInfo, VkImage& outImage, VkDeviceMemory& outMemory)
+void AllocImageMemory(const VkImageCreateInfo& imgInfo, VkImage& outImage, VkDeviceMemory& outMemory, const std::string& debugName)
 {
     VkDevice& dev = vk::g_vulkanContext.m_device;
     VULKAN_ASSERT(vk::CreateImage(dev, &imgInfo, nullptr, &outImage));
@@ -484,6 +489,9 @@ void AllocImageMemory(const VkImageCreateInfo& imgInfo, VkImage& outImage, VkDev
     VULKAN_ASSERT(vk::AllocateMemory(dev, &memAllocInfo, nullptr, &outMemory));
 
     VULKAN_ASSERT(vk::BindImageMemory(dev, outImage, outMemory, 0));
+
+    if (!debugName.empty())
+        SetObjectDebugName(outImage, debugName);
 }
 
 
@@ -533,26 +541,4 @@ VkPipelineShaderStageCreateInfo CreatePipelineStage(VkShaderModule modue, VkShad
     pipelineStage.pSpecializationInfo = nullptr;
 
     return pipelineStage;
-}
-
-static std::vector<std::string> m_markersStack;
-
-void StartDebugMarker(const std::string& markerName)
-{
-    VkDebugMarkerMarkerInfoEXT marker;
-    cleanStructure(marker);
-    marker.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT;
-    marker.pNext = nullptr;
-    marker.pMarkerName = markerName.data();
-    //marker.color[0] = marker.color[2] = marker.color[3] = 1.0f;
-    vk::CmdDebugMarkerBeginEXT(vk::g_vulkanContext.m_mainCommandBuffer, &marker);
-
-    m_markersStack.push_back(markerName);
-}
-
-void EndDebugMarker(const std::string& markerName)
-{
-    TRAP( m_markersStack.back() == markerName); //need to close the current open marker
-    vk::CmdDebugMarkerEndEXT(vk::g_vulkanContext.m_mainCommandBuffer);
-    m_markersStack.pop_back();
 }

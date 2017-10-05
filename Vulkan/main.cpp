@@ -2831,14 +2831,14 @@ void CApplication::SetupDeferredRendering()
     FramebufferDescription fbDesc;
     fbDesc.Begin(GBuffer_Count);
 
-    fbDesc.AddColorAttachmentDesc(GBuffer_Albedo, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-    fbDesc.AddColorAttachmentDesc(GBuffer_Specular, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-    fbDesc.AddColorAttachmentDesc(GBuffer_Normals, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-    fbDesc.AddColorAttachmentDesc(GBuffer_Position, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-    fbDesc.AddColorAttachmentDesc(GBuffer_Debug, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-    fbDesc.AddColorAttachmentDesc(GBuffer_Final, OUT_FORMAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+    fbDesc.AddColorAttachmentDesc(GBuffer_Albedo, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "Albedo");
+    fbDesc.AddColorAttachmentDesc(GBuffer_Specular, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "Specular");
+    fbDesc.AddColorAttachmentDesc(GBuffer_Normals, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "Normals");
+    fbDesc.AddColorAttachmentDesc(GBuffer_Position, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "Positions");
+    fbDesc.AddColorAttachmentDesc(GBuffer_Debug, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, "DefferedDebug");
+    fbDesc.AddColorAttachmentDesc(GBuffer_Final, OUT_FORMAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, "DefferedFinal");
 
-    fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+    fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "Main");
     fbDesc.End();
 
     CreateDeferredRenderPass(fbDesc);
@@ -2857,9 +2857,9 @@ void CApplication::SetupAORendering()
 {
     FramebufferDescription fbDesc;
     fbDesc.Begin(3);
-    fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_R16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT);
-    fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT); //debug
-    fbDesc.AddColorAttachmentDesc(2, VK_FORMAT_R16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT);
+    fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_R16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "AOFinal");
+    fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "AODebug"); //debug
+    fbDesc.AddColorAttachmentDesc(2, VK_FORMAT_R16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "AOBlurAux");
     fbDesc.End();
 
     CreateAORenderPass(fbDesc);
@@ -2879,8 +2879,8 @@ void CApplication::SetupLightingRendering()
     VkImageView depthImgView = m_objectRenderer->GetFramebuffer()->GetDepthImageView();
 
     fbDesc.AddColorAttachmentDesc(ELightBuffer_Final, OUT_FORMAT, outImg, outImgView);
-    fbDesc.AddColorAttachmentDesc(ELightBuffer_DebugDirLight, VK_FORMAT_R16G16B16A16_SFLOAT, 0);
-    fbDesc.AddColorAttachmentDesc(ELightBUffer_DebugPointLight, VK_FORMAT_R16G16B16A16_SFLOAT, 0);
+    fbDesc.AddColorAttachmentDesc(ELightBuffer_DebugDirLight, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "DirLightDebug");
+    fbDesc.AddColorAttachmentDesc(ELightBUffer_DebugPointLight, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "PointLightDebug");
     fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, depthImg, depthImgView);
     fbDesc.End();
 
@@ -3099,7 +3099,7 @@ void CApplication::SetupShadowMapRendering()
 {
     FramebufferDescription fbDesc;
     fbDesc.Begin(0);
-    fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+    fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "ShadowMap");
     fbDesc.End();
 
     CreateShadowRenderPass(fbDesc);
@@ -3113,9 +3113,9 @@ void CApplication::SetupShadowMapRendering()
  {
      FramebufferDescription fbDesc;
      fbDesc.Begin(3);
-     fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT);
-     fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT);
-     fbDesc.AddColorAttachmentDesc(2, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT);
+     fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "ShadowResolveFinal");
+     fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "ShadowResolveDebug");
+     fbDesc.AddColorAttachmentDesc(2, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "ShadowResolveBlur");
      fbDesc.End();
 
      CreateShadowResolveRenderPass(fbDesc);
@@ -3130,7 +3130,7 @@ void CApplication::SetupPostProcessRendering()
     //VkFormat format = VK_FORMAT_B8G8R8A8_SRGB;
     FramebufferDescription fbDesc;
     fbDesc.Begin(1);
-    fbDesc.AddColorAttachmentDesc(0, format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+    fbDesc.AddColorAttachmentDesc(0, format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, "PostProcess");
     fbDesc.End();
 
     CreatePostProcessRenderPass(fbDesc);
@@ -3148,10 +3148,10 @@ void CApplication::SetupSunRendering()
     VkImage outImg = m_objectRenderer->GetFramebuffer()->GetColorImage(GBuffer_Final);
     VkImageView outImgView = m_objectRenderer->GetFramebuffer()->GetColorImageView(GBuffer_Final);
 
-    fbDesc.AddColorAttachmentDesc(ESunFB_Final, VK_FORMAT_R16G16B16A16_SFLOAT,  VK_IMAGE_USAGE_SAMPLED_BIT);
-    fbDesc.AddColorAttachmentDesc(ESunFB_Sun, VK_FORMAT_R16G16B16A16_SFLOAT,  VK_IMAGE_USAGE_SAMPLED_BIT);
-    fbDesc.AddColorAttachmentDesc(ESunFB_Blur1, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT);
-    fbDesc.AddColorAttachmentDesc(ESunFB_Blur2, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT);
+    fbDesc.AddColorAttachmentDesc(ESunFB_Final, VK_FORMAT_R16G16B16A16_SFLOAT,  VK_IMAGE_USAGE_SAMPLED_BIT, "SunFinal");
+    fbDesc.AddColorAttachmentDesc(ESunFB_Sun, VK_FORMAT_R16G16B16A16_SFLOAT,  VK_IMAGE_USAGE_SAMPLED_BIT, "SunSprite");
+    fbDesc.AddColorAttachmentDesc(ESunFB_Blur1, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "SunBlur1");
+    fbDesc.AddColorAttachmentDesc(ESunFB_Blur2, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "SunBlur2");
     fbDesc.End();
 
     CreateSunRenderPass(fbDesc);
@@ -3232,7 +3232,7 @@ void CApplication::SetupParticleRendering()
      FramebufferDescription fbDesc;
      fbDesc.Begin(2);
      fbDesc.AddColorAttachmentDesc(0, OUT_FORMAT, outImg, outView);
-     fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, 0); 
+     fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "FogDebug"); 
      fbDesc.End();
 
      CreateFogRenderPass(fbDesc);
@@ -3246,8 +3246,8 @@ void CApplication::SetupParticleRendering()
  {
      FramebufferDescription fbDesc;
      fbDesc.Begin(2);
-     fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, TEXTURE3DLAYERS);
-     fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, 0, TEXTURE3DLAYERS);
+     fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, "3DTexture", TEXTURE3DLAYERS);
+     fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "3DTextureDebug", TEXTURE3DLAYERS);
      fbDesc.End();
 
      Create3DTextureRenderPass(fbDesc);
@@ -3268,10 +3268,10 @@ void CApplication::SetupParticleRendering()
 
     fbDesc.Begin(4);
     fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, depthImg, depthImgView);
-    fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT);
-    fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT);
+    fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "VolumetricFrontCull");
+    fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "VolumetricBackCull");
     fbDesc.AddColorAttachmentDesc(2, VK_FORMAT_R16G16B16A16_SFLOAT, outImg, outImgView);
-    fbDesc.AddColorAttachmentDesc(3, VK_FORMAT_R16G16B16A16_SFLOAT, 0);
+    fbDesc.AddColorAttachmentDesc(3, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "VolumetricDebug");
     fbDesc.End();
 
     CreateVolumetricRenderPass(fbDesc);

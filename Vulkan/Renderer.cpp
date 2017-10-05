@@ -73,9 +73,14 @@ void CFrameBuffer::CreateFramebuffer(VkRenderPass renderPass, const FramebufferD
         m_clearValues[i] = colorAtt[i].clearValue;
 
         VkFormat format = m_attachments[i].imageInfo.format;
+
         if(colorAtt[i].NeedCreateImageView())
         {
-            AllocImageMemory(m_attachments[i].imageInfo, m_attachments[i].image, m_attachments[i].imageMemory);
+            std::string debugName;
+            if (!colorAtt[i].debugName.empty())
+                debugName = colorAtt[i].debugName + std::string("ColorAtt");
+
+            AllocImageMemory(m_attachments[i].imageInfo, m_attachments[i].image, m_attachments[i].imageMemory, debugName);
             CreateImageView(m_attachments[i].imageView, m_attachments[i].image, m_attachments[i].imageInfo);
         }
         else
@@ -92,7 +97,11 @@ void CFrameBuffer::CreateFramebuffer(VkRenderPass renderPass, const FramebufferD
         VkFormat format = m_depthAttachment.imageInfo.format;
         if(fbDesc.m_depthAttachments.NeedCreateImageView())
         {
-            AllocImageMemory(m_depthAttachment.imageInfo, m_depthAttachment.image, m_depthAttachment.imageMemory);
+            std::string debugName;
+            if (!fbDesc.m_depthAttachments.debugName.empty())
+                debugName = fbDesc.m_depthAttachments.debugName + std::string("DepthAtt");
+
+            AllocImageMemory(m_depthAttachment.imageInfo, m_depthAttachment.image, m_depthAttachment.imageMemory, debugName );
             CreateImageView(m_depthAttachment.imageView, m_depthAttachment.image, m_depthAttachment.imageInfo);
         }
         else

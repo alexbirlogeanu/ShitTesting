@@ -5,6 +5,7 @@
 #include "VulkanLoader.h"
 #include "Mesh.h"
 #include "Lights.h"
+#include "DebugMarkers.h"
 
 #include <vector>
 
@@ -50,16 +51,13 @@ bool IsColorFormat(VkFormat format);
 bool CreateShaderModule(const std::string& inFileName, VkShaderModule& outModule);
 void CreateImageView(VkImageView& outImgView, VkImage& img, const VkImageCreateInfo& crtInfo);
 void AllocBufferMemory(VkBuffer& buffer, VkDeviceMemory& memory, uint32_t size, VkBufferUsageFlags usage);
-void AllocImageMemory(const VkImageCreateInfo& imgInfo, VkImage& outImage, VkDeviceMemory& outMemory);
+void AllocImageMemory(const VkImageCreateInfo& imgInfo, VkImage& outImage, VkDeviceMemory& outMemory, const std::string& debugName = std::string());
 
 void AddImageBarrier(VkImageMemoryBarrier& outBarrier, VkImage& img, VkImageLayout oldLayout, VkImageLayout newLayout, 
                      VkAccessFlags srcMask, VkAccessFlags dstMask, VkImageAspectFlags aspectFlags, unsigned int layersCount = VK_REMAINING_ARRAY_LAYERS);
 void AddBufferBarier(VkBufferMemoryBarrier& outBarrier, VkBuffer& buffer, VkAccessFlags srcMask, VkAccessFlags dstMask);
 
 VkPipelineShaderStageCreateInfo CreatePipelineStage(VkShaderModule modue, VkShaderStageFlagBits stage);
-
-void StartDebugMarker(const std::string& markerName);
-void EndDebugMarker(const std::string& markerName);
 
 extern CCamera ms_camera;
 extern CDirectionalLight directionalLight;
