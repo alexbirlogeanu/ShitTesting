@@ -505,7 +505,7 @@ void CUIAxisSystem::Update()
 //////////////////////////////////////////////////////////////////////////
 
 CUIRenderer::CUIRenderer(VkRenderPass renderPass)
-    : CRenderer(renderPass)
+    : CRenderer(renderPass, "UIRenderPass")
     , m_sampler(VK_NULL_HANDLE)
     , m_uiItemDescLayout(VK_NULL_HANDLE)
     , m_uiItemUniformBuffer(VK_NULL_HANDLE)

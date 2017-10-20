@@ -111,24 +111,24 @@ void CSunRenderer::Render()
         m_quad->Render();
     };
 
-    StartDebugMarker("RenderSunSprite"); //ugly, but just for testing
+    BeginMarkerSection("RenderSunSprite");
     renderPipeline(m_sunPipeline, m_sunDescriptorSet);
-    EndDebugMarker("RenderSunSprite");
+    EndMarkerSection();
 
-    StartDebugMarker("BlurVertical");
+    BeginMarkerSection("BlurVertical");
     vk::CmdNextSubpass(cmdBuf, VK_SUBPASS_CONTENTS_INLINE);
     renderPipeline(m_blurVPipeline, m_blurVDescSet);
-    EndDebugMarker("BlurVertical");
+    EndMarkerSection();
 
-    StartDebugMarker("BlurHorizontal");
+    BeginMarkerSection("BlurHorizontal");
     vk::CmdNextSubpass(cmdBuf, VK_SUBPASS_CONTENTS_INLINE);
     renderPipeline(m_blurHPipeline, m_blurHDescSet);
-    EndDebugMarker("BlurHorizontal");
+    EndMarkerSection();
 
-    StartDebugMarker("RadialBlur");
+    BeginMarkerSection("RadialBlur");
     vk::CmdNextSubpass(cmdBuf, VK_SUBPASS_CONTENTS_INLINE);
     renderPipeline(m_blurRadialPipeline, m_blurRadialDescSet);
-    EndDebugMarker("RadialBlur");
+    EndMarkerSection();
 
     EndRenderPass();
 }

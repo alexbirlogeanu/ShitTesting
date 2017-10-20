@@ -7,6 +7,13 @@
 void StartDebugMarker(const std::string& markerName);
 void EndDebugMarker(const std::string& markerName);
 
+#define BeginMarkerSection(label) { \
+    const std::string markerName = label; \
+    StartDebugMarker(markerName);
+
+#define EndMarkerSection() EndDebugMarker(markerName); \
+    }
+
 template<typename T>
 VkDebugReportObjectTypeEXT GetDebugObjectType()
 {

@@ -1116,6 +1116,8 @@ public:
                 renderNodes.push_back(&m_nodes[i]);
 
         StartRenderPass();
+
+        BeginMarkerSection("StencilCulling");
         vk::CmdBindPipeline(cmdBuffer, m_stencilCullingPipeline.GetBindPoint(), m_stencilCullingPipeline.Get());
         vk::CmdBindDescriptorSets(cmdBuffer, m_stencilCullingPipeline.GetBindPoint(), m_stencilCullingPipeline.GetLayout(), 0, 1, &m_commonDescSet, 0, nullptr);
         VkImage renderSurface = m_framebuffer->GetColorImage(0);
@@ -1130,6 +1132,9 @@ public:
             
         }
 
+        EndMarkerSection();
+
+        BeginMarkerSection("RenderLightVolumes");
         vk::CmdNextSubpass(cmdBuffer, VK_SUBPASS_CONTENTS_INLINE);
         vk::CmdBindPipeline(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.Get());
         vk::CmdBindDescriptorSets(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, 1, &m_commonDescSet, 0, nullptr);
@@ -1142,6 +1147,7 @@ public:
                 m_pointLightMesh->Render();
             }
         }
+        EndMarkerSection();
 
         EndRenderPass();
     }
@@ -1688,7 +1694,7 @@ class CSkyRenderer : public CRenderer
 {
 public:
     CSkyRenderer(VkRenderPass renderPass)
-        : CRenderer(renderPass, "SkyRenderPasss")
+        : CRenderer(renderPass, "SkyRenderPass")
         , m_quadMesh(nullptr)
         , m_skyTexture(nullptr)
         , m_boxParamsBuffer(VK_NULL_HANDLE)
@@ -1717,14 +1723,18 @@ public:
         VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
         StartRenderPass();
 
+        BeginMarkerSection("SkyBox");
         vk::CmdBindPipeline(cmdBuffer, m_boxPipeline.GetBindPoint(), m_boxPipeline.Get());
         vk::CmdBindDescriptorSets(cmdBuffer, m_boxPipeline.GetBindPoint(), m_boxPipeline.GetLayout(), 0, 1, &m_boxDescriptorSet, 0, nullptr);
         m_quadMesh->Render();
+        EndMarkerSection();
 
+        BeginMarkerSection("BlendSun");
         vk::CmdNextSubpass(cmdBuffer, VK_SUBPASS_CONTENTS_INLINE);
         vk::CmdBindPipeline(cmdBuffer, m_sunPipeline.GetBindPoint(), m_sunPipeline.Get());
         vk::CmdBindDescriptorSets(cmdBuffer, m_sunPipeline.GetBindPoint(), m_sunPipeline.GetLayout(), 0, 1, &m_sunDescriptorSet, 0, nullptr);
         m_quadMesh->Render();
+        EndMarkerSection();
 
         EndRenderPass();
     }
@@ -2653,6 +2663,7 @@ VkImage CApplication::GetFinalOutput()
 
 void CApplication::TransferToPresentImage()
 {
+    BeginMarkerSection("CopyBackBuffer");
     VkDevice dev = vk::g_vulkanContext.m_device;
     VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
 
@@ -2725,6 +2736,8 @@ void CApplication::TransferToPresentImage()
         nullptr,
         1, 
         &prePresentBarrier);
+
+    EndMarkerSection();
 }
 
 void CApplication::BeginFrame()
@@ -3771,40 +3784,40 @@ void CApplication::CreateResources()
     m_objectMesh = new Mesh("obj\\sphere.obj");
     m_monkeyMesh = new Mesh("obj\\dragon.obj");
 
-    m_objects.resize(NUM_OF_CUBES);
+    //m_objects.resize(NUM_OF_CUBES);
 
-    for(int i = -NUM_OF_CUBES / 2;  i <= NUM_OF_CUBES / 2; ++i )
-    {
-        unsigned int index = i + NUM_OF_CUBES / 2;
-        m_objects[index] = new CObject();
-        m_shadowRenderer->AddShadowCaster(m_objects[index]);
-    }
+    //for(int i = -NUM_OF_CUBES / 2;  i <= NUM_OF_CUBES / 2; ++i )
+    //{
+    //    unsigned int index = i + NUM_OF_CUBES / 2;
+    //    m_objects[index] = new CObject();
+    //    m_shadowRenderer->AddShadowCaster(m_objects[index]);
+    //}
 
-    float z = -3.f;
-    {
-       
-        m_objects[0]->SetTexture(m_texture);
-        m_objects[0]->SetMaterialProperties(0.9f, 0.1f, 0.5f);
-        m_objects[0]->SetPosition(glm::vec3(-1.5f, -0.5f, z));
-        m_objects[0]->SetMesh(m_objectMesh);
-    }
-    
-    {
-        m_objects[1]->SetMaterialProperties(0.45f, 1.0f, 0.5f);
-        m_objects[1]->SetTexture(m_texture);
-        m_objects[1]->SetScale(glm::vec3(1.0f));
-        m_objects[1]->SetPosition(glm::vec3(0.0f, -0.5f, z));
-        m_objects[1]->SetMesh(m_objectMesh);
+    //float z = -3.f;
+    //{
+    //   
+    //    m_objects[0]->SetTexture(m_texture);
+    //    m_objects[0]->SetMaterialProperties(0.9f, 0.1f, 0.5f);
+    //    m_objects[0]->SetPosition(glm::vec3(-1.5f, -0.5f, z));
+    //    m_objects[0]->SetMesh(m_objectMesh);
+    //}
+    //
+    //{
+    //    m_objects[1]->SetMaterialProperties(0.45f, 1.0f, 0.5f);
+    //    m_objects[1]->SetTexture(m_texture);
+    //    m_objects[1]->SetScale(glm::vec3(1.0f));
+    //    m_objects[1]->SetPosition(glm::vec3(0.0f, -0.5f, z));
+    //    m_objects[1]->SetMesh(m_objectMesh);
 
-    }
+    //}
 
-    {
-        m_objects[2]->SetMaterialProperties(1.0, 0.1f, 0.5f);
-        m_objects[2]->SetTexture(m_monkeyTexture);
-        m_objects[2]->SetScale(glm::vec3(0.1f));
-        m_objects[2]->SetPosition(glm::vec3(1.5f, -1.0f, z));
-        m_objects[2]->SetMesh(m_monkeyMesh);
-    }
+    //{
+    //    m_objects[2]->SetMaterialProperties(1.0, 0.1f, 0.5f);
+    //    m_objects[2]->SetTexture(m_monkeyTexture);
+    //    m_objects[2]->SetScale(glm::vec3(0.1f));
+    //    m_objects[2]->SetPosition(glm::vec3(1.5f, -1.0f, z));
+    //    m_objects[2]->SetMesh(m_monkeyMesh);
+    //}
 
     SImageData planeImg;
     Read2DTextureData(planeImg,std::string(TEXTDIR) +  "bricks2.png", isSrgb);

@@ -32,7 +32,7 @@ CPickable::~CPickable()
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 CPickRenderer::CPickRenderer(VkRenderPass renderPass)
-    : CRenderer(renderPass)
+    : CRenderer(renderPass, "PickingRenderPass")
     , m_uniformBuffer(VK_NULL_HANDLE)
     , m_uniformMemory(VK_NULL_HANDLE)
     , m_pickedNode(nullptr)

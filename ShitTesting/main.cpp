@@ -455,14 +455,60 @@ protected:
     int m_value;
 };
 
+class MoveTestClass
+{
+public:
+    MoveTestClass()
+        : id(global_id++)
+    {
+        
+        std::cout << "Default Ctor: " << id << std::endl;
+    }
 
+    ~MoveTestClass()
+    {
+        std::cout << "Dtor: " << id << std::endl;
+    }
+
+    MoveTestClass(const MoveTestClass& other)
+        : id(other.id)
+    {
+        std::cout << "Copy ctor: " << id << std::endl;
+    }
+
+    MoveTestClass(MoveTestClass&& other)
+        : id(other.id)
+    {
+        std::cout << "Move ctor: " << id << std::endl;
+    }
+
+    static int global_id;
+private:
+    int id;
+};
+int MoveTestClass::global_id = 0;
 void Pause()
 {
     std::cout << "Press any key to continue...";
     getchar();
 }
 
+MoveTestClass CreateCopy()
+{
+    MoveTestClass a;
+    return a;
+}
+
+MoveTestClass CreateCopyFrom(const MoveTestClass& other)
+{
+    return other;
+}
+
 int main (int argc, char** argv)
 {
+    MoveTestClass a;// = CreateCopy();
+    MoveTestClass b = CreateCopyFrom(a);
+
+    Pause();
     return 0;
 }

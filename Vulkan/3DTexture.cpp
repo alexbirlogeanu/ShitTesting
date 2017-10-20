@@ -42,6 +42,7 @@ void C3DTextureRenderer::Init()
 
 void C3DTextureRenderer::Render()
 {
+    BeginMarkerSection("GenerateShitty3DTexture");
     PrepareTexture();
     VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
     vk::CmdBindPipeline(cmdBuffer, m_generatePipeline.GetBindPoint(), m_generatePipeline.Get());
@@ -50,6 +51,7 @@ void C3DTextureRenderer::Render()
     vk::CmdDispatch(cmdBuffer, m_width / 32, m_height / 32, m_depth); //??
 
     WaitComputeFinish();
+    EndMarkerSection();
 }
 
 void C3DTextureRenderer::CreateDescriptorSetLayout()
@@ -287,22 +289,30 @@ void CVolumetricRenderer::Render()
     UpdateShaderParams();
     VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
     StartRenderPass();
+    
+    BeginMarkerSection("FrontCullVolume");
     vk::CmdBindPipeline(cmdBuffer, m_frontCullPipeline.GetBindPoint(), m_frontCullPipeline.Get());
     vk::CmdBindDescriptorSets(cmdBuffer, m_frontCullPipeline.GetBindPoint(), m_frontCullPipeline.GetLayout(), 0, 1, &m_volumeDescSet, 0, nullptr);
 
     m_cube->Render();
 
+    EndMarkerSection();
+
+    BeginMarkerSection("BackCullVolume");
     vk::CmdNextSubpass(cmdBuffer, VK_SUBPASS_CONTENTS_INLINE);
     vk::CmdBindPipeline(cmdBuffer, m_backCullPipeline.GetBindPoint(), m_backCullPipeline.Get());
     vk::CmdBindDescriptorSets(cmdBuffer, m_backCullPipeline.GetBindPoint(), m_backCullPipeline.GetLayout(), 0, 1, &m_volumeDescSet, 0, nullptr);
-
+    
     m_cube->Render();
+    EndMarkerSection();
 
+    BeginMarkerSection("VolumetricRender");
     vk::CmdNextSubpass(cmdBuffer, VK_SUBPASS_CONTENTS_INLINE);
     vk::CmdBindPipeline(cmdBuffer, m_volumetricPipeline.GetBindPoint(), m_volumetricPipeline.Get());
     vk::CmdBindDescriptorSets(cmdBuffer, m_volumetricPipeline.GetBindPoint(), m_volumetricPipeline.GetLayout(), 0, 1, &m_volumetricDescSet, 0, nullptr);
 
     m_cube->Render();
+    EndMarkerSection();
 
     EndRenderPass();
 }
@@ -385,7 +395,8 @@ void CVolumetricRenderer::UpdateShaderParams()
 
     SVolumeParams* params = nullptr;
     VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_uniformMemory, 0, VK_WHOLE_SIZE, 0, (void**)&params));
-    params->ModelMatrix = glm::mat4(1.0f);
+    params->ModelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -2.0f));
+    //params->ModelMatrix = glm::mat4(1.0f);
     params->ProjMatrix = proj;
     params->ViewMatrix = ms_camera.GetViewMatrix();
     vk::UnmapMemory(vk::g_vulkanContext.m_device, m_uniformMemory);
