@@ -127,6 +127,7 @@
   <ItemGroup>
     <ClInclude Include="3DTexture.h" />
     <ClInclude Include="ao.h" />
+    <ClInclude Include="DebugMarkers.h" />
     <ClInclude Include="SkyRenderer.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="defines.h" />
@@ -147,6 +148,7 @@
     <ClCompile Include="3DTexture.cpp" />
     <ClCompile Include="ao.cpp" />
     <ClCompile Include="Camera.cpp" />
+    <ClCompile Include="DebugMarkers.cpp" />
     <ClCompile Include="SkyRenderer.cpp" />
     <ClCompile Include="Fog.cpp" />
     <ClCompile Include="Lights.cpp" />
