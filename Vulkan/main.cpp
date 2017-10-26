@@ -2252,6 +2252,8 @@ private:
     void RenderShadows();
     void RenderPostProcess();
 
+    void WaitForFinalImageToComplete();
+
     void StartCommandBuffer();
     void EndCommandBuffer();
     //pipeline
@@ -3368,9 +3370,10 @@ void CApplication::CreatePostProcessRenderPass(const FramebufferDescription& fbD
 
     VkAttachmentReference attachment_ref = CreateAttachmentReference(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     VkSubpassDescription sd = CreateSubpassDesc(&attachment_ref, 1);
-    VkSubpassDependency subpassDep = CreateSubpassDependency(VK_SUBPASS_EXTERNAL, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT);
-
+    std::vector<VkSubpassDependency> subpassDeps; 
+    subpassDeps.push_back(CreateSubpassDependency(VK_SUBPASS_EXTERNAL, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
+    
     VkRenderPassCreateInfo rpci;
     cleanStructure(rpci);
     rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -3380,8 +3383,8 @@ void CApplication::CreatePostProcessRenderPass(const FramebufferDescription& fbD
     rpci.pAttachments = &ad;
     rpci.subpassCount = 1;
     rpci.pSubpasses = &sd;
-    rpci.dependencyCount = 1;
-    rpci.pDependencies =  &subpassDep;
+    rpci.dependencyCount = (uint32_t)subpassDeps.size();
+    rpci.pDependencies =  subpassDeps.data();
 
     VULKAN_ASSERT(vk::CreateRenderPass(vk::g_vulkanContext.m_device, &rpci, nullptr, &m_postProcessPass));
 }
@@ -3980,6 +3983,8 @@ void CApplication::Render()
 
     GetPickManager()->Update();
 
+    WaitForFinalImageToComplete();
+
     RenderPostProcess();
 
     m_uiRenderer->Render();
@@ -4031,18 +4036,23 @@ void CApplication::RenderShadows()
     m_shadowRenderer->EndRenderPass();
 }
 
+void CApplication::WaitForFinalImageToComplete()
+{
+    VkImageMemoryBarrier before;
+    VkImage img = m_objectRenderer->GetFramebuffer()->GetColorImage(GBuffer_Final);
+    AddImageBarrier(before, img, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+    vk::CmdPipelineBarrier(vk::g_vulkanContext.m_mainCommandBuffer, 
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
+        VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &before);
+}
+
 void CApplication::RenderPostProcess()
 {
     VkCommandBuffer buff = vk::g_vulkanContext.m_mainCommandBuffer;
 
     m_postProcessRenderer->UpdateShaderParams();
     m_postProcessRenderer->StartRenderPass();
-
-    /*VkImageMemoryBarrier before;
-    VkImage img = m_objectRenderer->GetFramebuffer()->GetColorImage(GBuffer_Final);
-    AddImageBarrier(before, img, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-    vk::CmdPipelineBarrier(buff, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &before);*/
 
     m_postProcessRenderer->Render();
     m_postProcessRenderer->EndRenderPass();
