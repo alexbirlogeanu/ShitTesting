@@ -3,9 +3,11 @@
 #include "VulkanLoader.h"
 #include "defines.h"
 #include <string>
-#include <vector>
-#include "Utils.h"
 #include <unordered_set>
+#include <vector>
+
+#include "Utils.h"
+#include "ResourceTable.h"
 
 struct FBAttachment
 {
@@ -124,13 +126,15 @@ public:
 
     VkRect2D GetRenderArea();
     VkFramebuffer Get() const { return m_frameBuffer; }
-    VkImage GetColorImage(unsigned int index) { TRAP(index < m_colorsAttNum); return m_attachments[index].image; }
-    VkImageView GetColorImageView(unsigned int index) { TRAP(index < m_colorsAttNum); return m_attachments[index].imageView; }
-    VkDeviceMemory GetColorImageMemory(unsigned int index) { TRAP(index < m_colorsAttNum); return m_attachments[index].imageMemory; }
-    //void SetDepth(unsigned int index) {TRAP(index < m_size); m_depthAttachment = m_attachments[index]; }
+    const VkImage& GetColorImage(unsigned int index) const { TRAP(index < m_colorsAttNum); return m_attachments[index].image; }
+    const VkImageView& GetColorImageView(unsigned int index) const { TRAP(index < m_colorsAttNum); return m_attachments[index].imageView; }
+    VkDeviceMemory GetColorImageMemory(unsigned int index) const { TRAP(index < m_colorsAttNum); return m_attachments[index].imageMemory; }
 
-    VkImage GetDepthImage() { return m_depthAttachment.image; }
-    VkImageView GetDepthImageView() { return m_depthAttachment.imageView; }
+    //VkImage GetDepthImage() const { return m_depthAttachment.image; }
+    //VkImageView GetDepthImageView() const { return m_depthAttachment.imageView; }
+
+    const VkImage& GetDepthImage() const { return m_depthAttachment.image; }
+    const VkImageView& GetDepthImageView() const { return m_depthAttachment.imageView; }
     bool HasDepth() { return m_depthAttachment.IsValid(); }
 
     void AddAttachment(VkImageCreateInfo& imgInfo, VkFormat format, VkImageUsageFlags usage, unsigned int layers, VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL);
@@ -353,12 +357,19 @@ public:
     void RegisterPipeline(CPipeline* pipeline);
 
     static void ReloadAll();
+    static void UpdateAll();
 protected:
     virtual void CreateDescriptorSetLayout()=0;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)=0;
 
+    virtual void UpdateResourceTable() {}
+    virtual void UpdateGraphicInterface() {} // = 0;
+
     void Reload();
     void CreateDescPool(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int maxSets);
+    void UpdateResourceTableForColor(unsigned int fbIndex, EResourceType tableType); // tableType = VkImage, tableType + 1 = VkImageView. Check EResourceType for layout
+    void UpdateResourceTableForDepth( EResourceType tableType); // tableType = VkImage, tableType + 1 = VkImageView. Check EResourceType for layout
+
 protected:
     CFrameBuffer*                                       m_framebuffer;
     VkRenderPass                                        m_renderPass;

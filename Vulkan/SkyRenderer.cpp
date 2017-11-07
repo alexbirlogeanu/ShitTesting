@@ -133,8 +133,10 @@ void CSunRenderer::Render()
     EndRenderPass();
 }
 
-void CSunRenderer::UpdateGraphicInterface(VkImageView depthBuffer)
+void CSunRenderer::UpdateGraphicInterface()
 {
+    VkImageView depthBuffer = g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView);
+
     VkDescriptorImageInfo wSuntImg;
     wSuntImg.imageView = m_framebuffer->GetColorImageView(ESunFB_Sun);
     wSuntImg.sampler = m_sampler;
@@ -355,4 +357,9 @@ void CSunRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize,
     maxSets = 4;
     AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5);
     AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2);
+}
+
+void CSunRenderer::UpdateResourceTable()
+{
+    UpdateResourceTableForColor(ESunFB_Final, EResourceType_SunImage);
 }

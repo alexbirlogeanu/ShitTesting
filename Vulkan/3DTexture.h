@@ -36,6 +36,7 @@ protected:
     void CopyTexture();
     void AllocateAuxiliarMemory();
 
+    virtual void UpdateResourceTable() override;
 private:
     //new Shit
     //prototype 3D Texture
@@ -60,10 +61,10 @@ public:
 
     virtual void Init() override;
     virtual void Render() override;
-    void UpdateGraphicInterface(VkImageView texture3DView, VkImageView depthView);
 protected:
     virtual void CreateDescriptorSetLayout() override;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override;
+    virtual void UpdateGraphicInterface() override;
 
     void CreateCullPipeline(CGraphicPipeline& pipeline, VkCullModeFlagBits cullmode);
     void UpdateShaderParams();

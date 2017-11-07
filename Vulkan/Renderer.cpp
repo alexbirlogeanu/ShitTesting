@@ -1,5 +1,7 @@
 #include "Renderer.h"
 
+ResourceTable   g_commonResources;
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //CFrameBuffer
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -627,6 +629,8 @@ void CRenderer::CreateFramebuffer(FramebufferDescription& fbDesc, unsigned int w
     m_framebuffer->CreateFramebuffer(m_renderPass, fbDesc);
     m_framebuffer->Finalize();
     m_ownFramebuffer = true;
+
+    UpdateResourceTable();
 }
 
 void CRenderer::StartRenderPass()
@@ -688,6 +692,12 @@ void CRenderer::ReloadAll()
         (*it)->Reload();
 }
 
+void CRenderer::UpdateAll()
+{
+    for(auto it = ms_Renderers.begin(); it != ms_Renderers.end(); ++it)
+        (*it)->UpdateGraphicInterface();
+}
+
 void CRenderer::Init()
 {
     std::vector<VkDescriptorPoolSize> poolSize;
@@ -695,6 +705,7 @@ void CRenderer::Init()
     PopulatePoolInfo(poolSize, maxSets);
     CreateDescPool(poolSize, maxSets);
     CreateDescriptorSetLayout();
+    //UpdateResourceTable();
 }
 
 void CRenderer::CreateDescPool(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int maxSets)
@@ -709,4 +720,18 @@ void CRenderer::CreateDescPool(std::vector<VkDescriptorPoolSize>& poolSize, unsi
     descPoolCi.pPoolSizes = poolSize.data();
 
     VULKAN_ASSERT(vk::CreateDescriptorPool(vk::g_vulkanContext.m_device, &descPoolCi, nullptr, &m_descriptorPool));
+}
+
+void CRenderer::UpdateResourceTableForColor(unsigned int fbIndex, EResourceType tableType)
+{
+    g_commonResources.SetAs<VkImage>(&m_framebuffer->GetColorImage(fbIndex), tableType);
+    EResourceType nextType = (EResourceType) ((unsigned int)tableType + 1);
+    g_commonResources.SetAs<VkImageView>(&m_framebuffer->GetColorImageView(fbIndex), nextType);
+}
+
+void CRenderer::UpdateResourceTableForDepth(EResourceType tableType)
+{
+    g_commonResources.SetAs<VkImage>(&m_framebuffer->GetDepthImage(), tableType);
+    EResourceType nextType = (EResourceType) ((unsigned int)tableType + 1);
+    g_commonResources.SetAs<VkImageView>(&m_framebuffer->GetDepthImageView(), nextType);
 }

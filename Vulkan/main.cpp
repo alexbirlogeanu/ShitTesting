@@ -761,62 +761,6 @@ public:
         EndRenderPass();
     }
 
-    virtual void BindDescriptorSet(VkImageView shadowMap, CFrameBuffer* gFB, VkImageView aoMap)
-    {
-        const unsigned int descSize = GBuffer_InputCnt;
-        VkDescriptorImageInfo imgInfo[descSize];
-        imgInfo[GBuffer_Albedo].sampler = m_sampler;
-        imgInfo[GBuffer_Albedo].imageView = gFB->GetColorImageView(GBuffer_Albedo);
-        imgInfo[GBuffer_Albedo].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        imgInfo[GBuffer_Normals].sampler = m_sampler;
-        imgInfo[GBuffer_Normals].imageView = gFB->GetColorImageView(GBuffer_Normals);
-        imgInfo[GBuffer_Normals].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        imgInfo[GBuffer_Position].sampler = m_sampler;
-        imgInfo[GBuffer_Position].imageView = gFB->GetColorImageView(GBuffer_Position);
-        imgInfo[GBuffer_Position].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        imgInfo[GBuffer_Specular].sampler = m_sampler;
-        imgInfo[GBuffer_Specular].imageView = gFB->GetColorImageView(GBuffer_Specular);
-        imgInfo[GBuffer_Specular].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        std::vector<VkWriteDescriptorSet> writeSets;
-        writeSets.resize(4);
-        cleanStructure(writeSets[0]);
-        writeSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeSets[0].pNext = nullptr;
-        writeSets[0].dstSet = m_descriptorSet;
-        writeSets[0].dstBinding = 0;
-        writeSets[0].dstArrayElement = 0;
-        writeSets[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        writeSets[0].descriptorCount = descSize; //this is a little risky. There is no array of sampler in shader. this just work
-        writeSets[0].pImageInfo = imgInfo;
-
-        VkDescriptorBufferInfo buffInfo;
-        buffInfo.buffer = m_shaderUniformBuffer;
-        buffInfo.offset = 0;
-        buffInfo.range = sizeof(LightShaderParams);   
-
-        writeSets[1] = InitUpdateDescriptor(m_descriptorSet, GBuffer_InputCnt, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfo);
-
-        VkDescriptorImageInfo shadowMapDesc;
-        shadowMapDesc.sampler = m_depthSampler;
-        shadowMapDesc.imageView = shadowMap;
-        shadowMapDesc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        writeSets[2] = InitUpdateDescriptor(m_descriptorSet, GBuffer_InputCnt + 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &shadowMapDesc);
-
-        VkDescriptorImageInfo aoMapDesc;
-        aoMapDesc.sampler = m_sampler;
-        aoMapDesc.imageView = aoMap;
-        aoMapDesc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        writeSets[3] = InitUpdateDescriptor(m_descriptorSet, GBuffer_InputCnt + 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &aoMapDesc);
-
-        vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)writeSets.size(), writeSets.data(), 0, nullptr);
-    }
-
     void UpdateShaderParams(glm::mat4 shadowViewProj)
     {
         LightShaderParams newParams;
@@ -885,6 +829,64 @@ protected:
     }
 
 protected:
+    virtual void UpdateGraphicInterface() override
+    {
+        VkImageView shadowMap = g_commonResources.GetAs<VkImageView>(EResourceType_ShadowMapImageView);
+        VkImageView aoMap = g_commonResources.GetAs<VkImageView>(EResourceType_AOBufferImageView);
+
+        const unsigned int descSize = GBuffer_InputCnt;
+        VkDescriptorImageInfo imgInfo[descSize];
+        imgInfo[GBuffer_Albedo].sampler = m_sampler;
+        imgInfo[GBuffer_Albedo].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_AlbedoImageView);
+        imgInfo[GBuffer_Albedo].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        imgInfo[GBuffer_Normals].sampler = m_sampler;
+        imgInfo[GBuffer_Normals].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_NormalsImageView);
+        imgInfo[GBuffer_Normals].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        imgInfo[GBuffer_Position].sampler = m_sampler;
+        imgInfo[GBuffer_Position].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_PositionsImageView);
+        imgInfo[GBuffer_Position].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        imgInfo[GBuffer_Specular].sampler = m_sampler;
+        imgInfo[GBuffer_Specular].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_SpecularImageView);
+        imgInfo[GBuffer_Specular].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        std::vector<VkWriteDescriptorSet> writeSets;
+        writeSets.resize(4);
+        cleanStructure(writeSets[0]);
+        writeSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeSets[0].pNext = nullptr;
+        writeSets[0].dstSet = m_descriptorSet;
+        writeSets[0].dstBinding = 0;
+        writeSets[0].dstArrayElement = 0;
+        writeSets[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writeSets[0].descriptorCount = descSize; //this is a little risky. There is no array of sampler in shader. this just work
+        writeSets[0].pImageInfo = imgInfo;
+
+        VkDescriptorBufferInfo buffInfo;
+        buffInfo.buffer = m_shaderUniformBuffer;
+        buffInfo.offset = 0;
+        buffInfo.range = sizeof(LightShaderParams);   
+
+        writeSets[1] = InitUpdateDescriptor(m_descriptorSet, GBuffer_InputCnt, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfo);
+
+        VkDescriptorImageInfo shadowMapDesc;
+        shadowMapDesc.sampler = m_depthSampler;
+        shadowMapDesc.imageView = shadowMap;
+        shadowMapDesc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        writeSets[2] = InitUpdateDescriptor(m_descriptorSet, GBuffer_InputCnt + 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &shadowMapDesc);
+
+        VkDescriptorImageInfo aoMapDesc;
+        aoMapDesc.sampler = m_sampler;
+        aoMapDesc.imageView = aoMap;
+        aoMapDesc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        writeSets[3] = InitUpdateDescriptor(m_descriptorSet, GBuffer_InputCnt + 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &aoMapDesc);
+
+        vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)writeSets.size(), writeSets.data(), 0, nullptr);
+    }
 
     virtual void CreateDescriptorSetLayout()
     {
@@ -1152,48 +1154,6 @@ public:
         EndRenderPass();
     }
 
-    virtual void BindDescriptorSet(CFrameBuffer* gFB)
-    {
-        const unsigned int descSize = GBuffer_Final;
-        VkDescriptorImageInfo imgInfo[descSize];
-        imgInfo[GBuffer_Albedo].sampler = m_sampler;
-        imgInfo[GBuffer_Albedo].imageView = gFB->GetColorImageView(GBuffer_Albedo);
-        imgInfo[GBuffer_Albedo].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        imgInfo[GBuffer_Normals].sampler = m_sampler;
-        imgInfo[GBuffer_Normals].imageView = gFB->GetColorImageView(GBuffer_Normals);
-        imgInfo[GBuffer_Normals].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        imgInfo[GBuffer_Position].sampler = m_sampler;
-        imgInfo[GBuffer_Position].imageView = gFB->GetColorImageView(GBuffer_Position);
-        imgInfo[GBuffer_Position].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        imgInfo[GBuffer_Specular].sampler = m_sampler;
-        imgInfo[GBuffer_Specular].imageView = gFB->GetColorImageView(GBuffer_Specular);
-        imgInfo[GBuffer_Specular].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        std::vector<VkWriteDescriptorSet> writeSets;
-        writeSets.resize(2);
-        cleanStructure(writeSets[0]);
-        writeSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeSets[0].pNext = nullptr;
-        writeSets[0].dstSet = m_commonDescSet;
-        writeSets[0].dstBinding = 0;
-        writeSets[0].dstArrayElement = 0;
-        writeSets[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        writeSets[0].descriptorCount = descSize; //same problem as light renderer
-        writeSets[0].pImageInfo = imgInfo;
-
-        VkDescriptorBufferInfo buffInfo;
-        buffInfo.buffer = m_pointLightsCommonBuffer;
-        buffInfo.offset = 0;
-        buffInfo.range = sizeof(SPointLightCommon);
-
-        writeSets[1] = InitUpdateDescriptor(m_commonDescSet, GBuffer_Final + 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfo);
-
-        vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)writeSets.size(), writeSets.data(), 0, nullptr);
-    }
-
     void SetProjMatrixPtr(glm::mat4* ptr) { m_projPtr = ptr; }
     
     void CycleLights(int step)
@@ -1311,6 +1271,49 @@ public:
     }
 
 protected:
+
+    virtual void UpdateGraphicInterface() override
+    {
+        const unsigned int descSize = GBuffer_Final;
+        VkDescriptorImageInfo imgInfo[descSize];
+        imgInfo[GBuffer_Albedo].sampler = m_sampler;
+        imgInfo[GBuffer_Albedo].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
+        imgInfo[GBuffer_Albedo].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        imgInfo[GBuffer_Normals].sampler = m_sampler;
+        imgInfo[GBuffer_Normals].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_NormalsImageView);
+        imgInfo[GBuffer_Normals].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        imgInfo[GBuffer_Position].sampler = m_sampler;
+        imgInfo[GBuffer_Position].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_PositionsImageView);
+        imgInfo[GBuffer_Position].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        imgInfo[GBuffer_Specular].sampler = m_sampler;
+        imgInfo[GBuffer_Specular].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_SpecularImageView);
+        imgInfo[GBuffer_Specular].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        std::vector<VkWriteDescriptorSet> writeSets;
+        writeSets.resize(2);
+        cleanStructure(writeSets[0]);
+        writeSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeSets[0].pNext = nullptr;
+        writeSets[0].dstSet = m_commonDescSet;
+        writeSets[0].dstBinding = 0;
+        writeSets[0].dstArrayElement = 0;
+        writeSets[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writeSets[0].descriptorCount = descSize; //same problem as light renderer
+        writeSets[0].pImageInfo = imgInfo;
+
+        VkDescriptorBufferInfo buffInfo;
+        buffInfo.buffer = m_pointLightsCommonBuffer;
+        buffInfo.offset = 0;
+        buffInfo.range = sizeof(SPointLightCommon);
+
+        writeSets[1] = InitUpdateDescriptor(m_commonDescSet, GBuffer_Final + 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfo);
+
+        vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)writeSets.size(), writeSets.data(), 0, nullptr);
+    }
+
     void UpdateSpecificBuffers()
     {
         std::array<VkDescriptorBufferInfo, ms_plCnt> buffInfo;
@@ -1588,6 +1591,16 @@ protected:
         VULKAN_ASSERT(vk::CreateDescriptorSetLayout(vk::g_vulkanContext.m_device, &descSetLayoutCi, nullptr, &m_objDescSetLayout));
     }
 
+    virtual void UpdateResourceTable() override
+    {
+        UpdateResourceTableForColor(GBuffer_Final, EResourceType_FinalImage);
+        UpdateResourceTableForColor(GBuffer_Albedo, EResourceType_AlbedoImage);
+        UpdateResourceTableForColor(GBuffer_Specular, EResourceType_SpecularImage);
+        UpdateResourceTableForColor(GBuffer_Normals, EResourceType_NormalsImage);
+        UpdateResourceTableForColor(GBuffer_Position, EResourceType_PositionsImage);
+        UpdateResourceTableForDepth(EResourceType_DepthBufferImage);
+    }
+
 protected:
     
     std::vector<CObject*>       m_objects;
@@ -1778,8 +1791,10 @@ public:
         m_sunPipeline.Init(this, m_renderPass, 1);
     }
 
-    void SetSkyImageView(VkImageView skyView)
+    void SetSkyImageView()
     {
+        VkImageView skyView = g_commonResources.GetAs<VkImageView>(EResourceType_SunImageView);
+
         CreateLinearSampler(m_sampler);
 
         VkDescriptorImageInfo imgInfo;
@@ -2015,6 +2030,11 @@ public:
     VkImageView GetShadowMap() { return m_framebuffer->GetDepthImageView();}
 protected:
 
+    void UpdateResourceTable()
+    {
+        UpdateResourceTableForDepth(EResourceType_ShadowMapImage);
+    }
+
     void CreateDescriptorSetLayout() override
     {
         std::vector<VkDescriptorSetLayoutBinding> descCnt;
@@ -2093,30 +2113,6 @@ public:
 
         memcpy(m_uniformPtr, &params, sizeof(PostProcessParam));
     }
-
-    void BindDescriptorSet(VkImageView finalColor)
-    {
-         VkDescriptorImageInfo imgInfo;
-         cleanStructure(imgInfo);
-         imgInfo.sampler = m_sampler;
-         imgInfo.imageView = finalColor;
-         imgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-         VkDescriptorBufferInfo buffInfo;
-         cleanStructure(buffInfo);
-         buffInfo.buffer = m_uniformBuffer;
-         buffInfo.offset = 0;
-         buffInfo.range = sizeof(PostProcessParam);
-
-         VkDescriptorImageInfo lutInfo = m_lut->GetTextureDescriptor();
-
-         std::vector<VkWriteDescriptorSet> wDescSet;
-         wDescSet.push_back(InitUpdateDescriptor(m_descriptorSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfo));
-         wDescSet.push_back(InitUpdateDescriptor(m_descriptorSet, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &imgInfo));
-         wDescSet.push_back(InitUpdateDescriptor(m_descriptorSet, 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &lutInfo));
-
-         vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDescSet.size(), wDescSet.data(), 0, nullptr);
-    }
     
     virtual void Init() override
     {
@@ -2159,6 +2155,11 @@ protected:
         AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2);
     }
 
+    virtual void UpdateResourceTable() override
+    {
+        UpdateResourceTableForColor(0, EResourceType_AfterPostProcessImage);
+    }
+
     virtual void CreateDescriptorSetLayout()
     {
         std::vector<VkDescriptorSetLayoutBinding> descCnt;
@@ -2176,6 +2177,31 @@ protected:
         descLayoutCrtInfo.pBindings = descCnt.data();
 
         VULKAN_ASSERT(vk::CreateDescriptorSetLayout(vk::g_vulkanContext.m_device, &descLayoutCrtInfo, nullptr, &m_descriptorSetLayout));
+    }
+
+    virtual void UpdateGraphicInterface() override
+    {
+        VkImageView finalColor = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView); 
+        VkDescriptorImageInfo imgInfo;
+        cleanStructure(imgInfo);
+        imgInfo.sampler = m_sampler;
+        imgInfo.imageView = finalColor;
+        imgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkDescriptorBufferInfo buffInfo;
+        cleanStructure(buffInfo);
+        buffInfo.buffer = m_uniformBuffer;
+        buffInfo.offset = 0;
+        buffInfo.range = sizeof(PostProcessParam);
+
+        VkDescriptorImageInfo lutInfo = m_lut->GetTextureDescriptor();
+
+        std::vector<VkWriteDescriptorSet> wDescSet;
+        wDescSet.push_back(InitUpdateDescriptor(m_descriptorSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfo));
+        wDescSet.push_back(InitUpdateDescriptor(m_descriptorSet, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &imgInfo));
+        wDescSet.push_back(InitUpdateDescriptor(m_descriptorSet, 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &lutInfo));
+
+        vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDescSet.size(), wDescSet.data(), 0, nullptr);
     }
 private:
     VkSampler       m_sampler;
@@ -2452,7 +2478,7 @@ CApplication::CApplication()
     SetupVolumetricRendering();
 
     CPickManager::CreateInstance();
-    GetPickManager()->Setup(m_objectRenderer->GetFramebuffer()->GetColorImage(GBuffer_Final), m_objectRenderer->GetFramebuffer()->GetColorImageView(GBuffer_Final));
+    GetPickManager()->Setup();
     
     CreateSynchronizationHelpers();
     srand((unsigned int)time(NULL));
@@ -2660,7 +2686,9 @@ void CApplication::CreateSurface()
 VkImage CApplication::GetFinalOutput()
 {
     //return m_objectRenderer->GetFramebuffer()->GetColorImage(GBuffer_DirLight);
+
     return m_postProcessRenderer->GetFramebuffer()->GetColorImage(0);
+
 }
 
 void CApplication::TransferToPresentImage()
@@ -2888,10 +2916,10 @@ void CApplication::SetupLightingRendering()
 {
     FramebufferDescription fbDesc;
     fbDesc.Begin(ELightBuffer_Count - 1); //without depth
-    VkImage outImg = m_objectRenderer->GetFramebuffer()->GetColorImage(GBuffer_Final);
-    VkImageView outImgView = m_objectRenderer->GetFramebuffer()->GetColorImageView(GBuffer_Final);
-    VkImage depthImg = m_objectRenderer->GetFramebuffer()->GetDepthImage();
-    VkImageView depthImgView = m_objectRenderer->GetFramebuffer()->GetDepthImageView();
+    VkImage outImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
+    VkImageView outImgView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
+    VkImage depthImg = g_commonResources.GetAs<VkImage>(EResourceType_DepthBufferImage);
+    VkImageView depthImgView = g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView);
 
     fbDesc.AddColorAttachmentDesc(ELightBuffer_Final, OUT_FORMAT, outImg, outImgView);
     fbDesc.AddColorAttachmentDesc(ELightBuffer_DebugDirLight, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "DirLightDebug");
@@ -3160,8 +3188,8 @@ void CApplication::SetupSunRendering()
 {
     FramebufferDescription fbDesc;
     fbDesc.Begin(ESunFB_Count);
-    VkImage outImg = m_objectRenderer->GetFramebuffer()->GetColorImage(GBuffer_Final);
-    VkImageView outImgView = m_objectRenderer->GetFramebuffer()->GetColorImageView(GBuffer_Final);
+    VkImage outImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
+    VkImageView outImgView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
 
     fbDesc.AddColorAttachmentDesc(ESunFB_Final, VK_FORMAT_R16G16B16A16_SFLOAT,  VK_IMAGE_USAGE_SAMPLED_BIT, "SunFinal");
     fbDesc.AddColorAttachmentDesc(ESunFB_Sun, VK_FORMAT_R16G16B16A16_SFLOAT,  VK_IMAGE_USAGE_SAMPLED_BIT, "SunSprite");
@@ -3182,12 +3210,13 @@ void CApplication::SetupUIRendering()
 {
     FramebufferDescription fbDesc;
     fbDesc.Begin(1);
-    VkImageView postProcessOutView = m_postProcessRenderer->GetFramebuffer()->GetColorImageView(0);
-    VkImage postProcessOutImg = m_postProcessRenderer->GetFramebuffer()->GetColorImage(0);
+    VkImageView postProcessOutView = g_commonResources.GetAs<VkImageView>(EResourceType_AfterPostProcessImageView);
+    VkImage postProcessOutImg = g_commonResources.GetAs<VkImage>(EResourceType_AfterPostProcessImage);
     //VkImageView postProcessOutView = m_objectRenderer->GetFramebuffer()->GetColorImageView(GBuffer_DirLight);
     //VkImage postProcessOutImg = m_objectRenderer->GetFramebuffer()->GetColorImage(GBuffer_DirLight);
-    VkImageView depthOutView = m_objectRenderer->GetFramebuffer()->GetDepthImageView();
-    VkImage depthOutImg = m_objectRenderer->GetFramebuffer()->GetDepthImage();
+    VkImageView depthOutView = g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView);
+    VkImage depthOutImg = g_commonResources.GetAs<VkImage>(EResourceType_DepthBufferImage);
+
     fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_B8G8R8A8_UNORM, postProcessOutImg, postProcessOutView);
     fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, depthOutImg, depthOutView);
     fbDesc.End();
@@ -3203,10 +3232,10 @@ void CApplication::SetupSkyRendering()
 {
     FramebufferDescription fbDesc;
     fbDesc.Begin(1);
-    VkImageView passView = m_objectRenderer->GetFramebuffer()->GetColorImageView(GBuffer_Final);
-    VkImage passImg = m_objectRenderer->GetFramebuffer()->GetColorImage(GBuffer_Final);
-    VkImageView depthView = m_objectRenderer->GetFramebuffer()->GetDepthImageView();
-    VkImage depthImg = m_objectRenderer->GetFramebuffer()->GetDepthImage();
+    VkImageView passView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
+    VkImage passImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
+    VkImageView depthView = g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView);
+    VkImage depthImg = g_commonResources.GetAs<VkImage>(EResourceType_DepthBufferImage);
 
     fbDesc.AddColorAttachmentDesc(0, OUT_FORMAT, passImg, passView);
     fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, depthImg, depthView);
@@ -3223,10 +3252,10 @@ void CApplication::SetupParticleRendering()
 {
     FramebufferDescription fbDesc;
     fbDesc.Begin(1);
-    VkImageView passView = m_objectRenderer->GetFramebuffer()->GetColorImageView(GBuffer_Final);
-    VkImage passImg = m_objectRenderer->GetFramebuffer()->GetColorImage(GBuffer_Final);
-    VkImage depthImg = m_objectRenderer->GetFramebuffer()->GetDepthImage();
-    VkImageView depthView = m_objectRenderer->GetFramebuffer()->GetDepthImageView();
+    VkImageView passView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
+    VkImage passImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
+    VkImageView depthView = g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView);
+    VkImage depthImg = g_commonResources.GetAs<VkImage>(EResourceType_DepthBufferImage);
 
     fbDesc.AddColorAttachmentDesc(0, OUT_FORMAT, passImg, passView);
     fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, depthImg, depthView);
@@ -3241,8 +3270,8 @@ void CApplication::SetupParticleRendering()
 
  void CApplication::SetupFogRendering()
  {
-     VkImageView outView = m_objectRenderer->GetFramebuffer()->GetColorImageView(GBuffer_Final);
-     VkImage outImg = m_objectRenderer->GetFramebuffer()->GetColorImage(GBuffer_Final);
+     VkImageView outView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
+     VkImage outImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
 
      FramebufferDescription fbDesc;
      fbDesc.Begin(2);
@@ -3276,10 +3305,10 @@ void CApplication::SetupParticleRendering()
  void CApplication::SetupVolumetricRendering()
  {
     FramebufferDescription fbDesc;
-    VkImage depthImg = m_objectRenderer->GetFramebuffer()->GetDepthImage();
-    VkImageView depthImgView = m_objectRenderer->GetFramebuffer()->GetDepthImageView();
-    VkImage outImg = m_objectRenderer->GetFramebuffer()->GetColorImage(GBuffer_Final);
-    VkImageView outImgView = m_objectRenderer->GetFramebuffer()->GetColorImageView(GBuffer_Final);
+    VkImage depthImg = g_commonResources.GetAs<VkImage>(EResourceType_DepthBufferImage);
+    VkImageView depthImgView = g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView);
+    VkImage outImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
+    VkImageView outImgView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
 
     fbDesc.Begin(4);
     fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, depthImg, depthImgView);
@@ -3851,30 +3880,18 @@ void CApplication::CreateResources()
     m_terrainRenderer->SetObjects(std::vector<CObject*>(1, m_plane));
     m_terrainRenderer->SetShadowMatrixPtr(&m_shadowRenderer->GetProjViewMatrix());
 
-    m_aoRenderer->UpdateGraphicInterface(m_objectRenderer->GetFramebuffer());
-
-    m_shadowResolveRenderer->UpdateGraphicInterface(m_objectRenderer->GetFramebuffer()->GetColorImageView(GBuffer_Normals), 
-        m_objectRenderer->GetFramebuffer()->GetColorImageView(GBuffer_Position), m_shadowRenderer->GetShadowMap());
-
-    m_lightRenderer->BindDescriptorSet(m_shadowResolveRenderer->GetFramebuffer()->GetColorImageView(0), m_objectRenderer->GetFramebuffer(), m_aoRenderer->GetFramebuffer()->GetColorImageView(0));
-    m_pointLightRenderer->BindDescriptorSet(m_objectRenderer->GetFramebuffer());
-
-    m_postProcessRenderer->BindDescriptorSet(m_objectRenderer->GetFramebuffer()->GetColorImageView(GBuffer_Final));
+    CRenderer::UpdateAll();
 
     m_uiManager = new CUIManager();
     m_uiManager->SetupRenderer(m_uiRenderer);
-    
-    m_sunRenderer->SetSunTexture(m_sunTexture);
+
     m_particlesRenderer->RegisterDebugManager(m_uiManager);
 
-    m_skyRenderer->SetTexture(m_skyTexture2D);
-    m_skyRenderer->SetSkyImageView(m_sunRenderer->GetFramebuffer()->GetColorImageView(ESunFB_Final));
-
-    m_fogRenderer->UpdateGraphicInterface(m_objectRenderer->GetFramebuffer()->GetColorImageView(GBuffer_Position));
-    m_sunRenderer->UpdateGraphicInterface(m_objectRenderer->GetFramebuffer()->GetDepthImageView());
-    m_volumetricRenderer->UpdateGraphicInterface(m_3dTextureRenderer->GetOutTexture(), m_objectRenderer->GetFramebuffer()->GetDepthImageView());
-
+    m_sunRenderer->SetSunTexture(m_sunTexture);
     m_sunRenderer->CreateEditInfo(m_uiManager);
+
+    m_skyRenderer->SetTexture(m_skyTexture2D);
+    m_skyRenderer->SetSkyImageView();
 
     GetPickManager()->CreateDebug(m_uiManager);
     directionalLight.CreateDebug(m_uiManager);
@@ -4039,7 +4056,7 @@ void CApplication::RenderShadows()
 void CApplication::WaitForFinalImageToComplete()
 {
     VkImageMemoryBarrier before;
-    VkImage img = m_objectRenderer->GetFramebuffer()->GetColorImage(GBuffer_Final);
+    VkImage img = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
     AddImageBarrier(before, img, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
     vk::CmdPipelineBarrier(vk::g_vulkanContext.m_mainCommandBuffer, 

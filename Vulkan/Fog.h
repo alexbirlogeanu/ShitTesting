@@ -13,10 +13,10 @@ public:
     virtual void Init() override;
     virtual void Render() override;
 
-    void UpdateGraphicInterface(VkImageView imgView);
 protected:
     virtual void CreateDescriptorSetLayout() override;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>&, unsigned int& maxSets) override;
+    virtual void UpdateGraphicInterface() override;
 private:
     VkDescriptorSetLayout       m_descriptorLayout;
     VkDescriptorSet             m_descriptorSet;

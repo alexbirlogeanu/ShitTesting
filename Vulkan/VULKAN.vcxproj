@@ -128,6 +128,7 @@
     <ClInclude Include="3DTexture.h" />
     <ClInclude Include="ao.h" />
     <ClInclude Include="DebugMarkers.h" />
+    <ClInclude Include="ResourceTable.h" />
     <ClInclude Include="SkyRenderer.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="defines.h" />

@@ -18,12 +18,14 @@ public:
     virtual void Init() override;
     virtual void Render() override;
 
-    void UpdateGraphicInterface(VkImageView normalView, VkImageView posView, VkImageView shadowMapView);
     void UpdateShaderParams(glm::mat4 shadowProj);
 
 private:
     virtual void CreateDescriptorSetLayout() override;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override;
+    virtual void UpdateResourceTable() override;
+    virtual void UpdateGraphicInterface() override;
+
 #ifdef USE_SHADOW_BLUR
     void SetupBlurPipeline(CGraphicPipeline& pipeline, bool isVertical);
 #endif

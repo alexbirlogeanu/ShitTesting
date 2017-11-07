@@ -161,6 +161,12 @@ void C3DTextureRenderer::WaitComputeFinish()
     vk::CmdPipelineBarrier(vk::g_vulkanContext.m_mainCommandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &waitBarrier);
 }
 
+void C3DTextureRenderer::UpdateResourceTable()
+{
+    g_commonResources.SetAs<VkImage>(&m_outTexture, EResourceType_VolumetricImage);
+    g_commonResources.SetAs<VkImageView>(&m_outTextureView, EResourceType_VolumetricImageView);
+}
+
 void C3DTextureRenderer::CopyTexture()
 {
     /*unsigned int layers = m_framebuffer->GetLayers();
@@ -317,8 +323,11 @@ void CVolumetricRenderer::Render()
     EndRenderPass();
 }
 
-void CVolumetricRenderer::UpdateGraphicInterface(VkImageView texture3DView, VkImageView depthView)
+void CVolumetricRenderer::UpdateGraphicInterface()
 {
+    VkImageView texture3DView = g_commonResources.GetAs<VkImageView>(EResourceType_VolumetricImageView);
+    VkImageView depthView = g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView);
+
     VkDescriptorBufferInfo uniformInfo = CreateDescriptorBufferInfo(m_uniformBuffer);
     VkDescriptorImageInfo text3DInfo = CreateDescriptorImageInfo(m_sampler, texture3DView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     VkDescriptorImageInfo depthInfo = CreateDescriptorImageInfo(m_sampler, depthView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);

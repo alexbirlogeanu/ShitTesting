@@ -110,7 +110,7 @@ public:
     void RegisterKey(unsigned int key);
     void Update();
 
-    void Setup(VkImage outImg, VkImageView outImgView);
+    void Setup();
     void CreateDebug(CUIManager* manager);
 
     void ToggleEditMode();

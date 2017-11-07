@@ -35,8 +35,6 @@ public:
     virtual void Init() override;
     virtual void Render() override;
 
-    void UpdateGraphicInterface(VkImageView inImage);
-
     void SetSunTexture(CTexture* t) { m_sunTexture = t; UpdateSunDescriptors(); }
     bool RegisterPick(unsigned int key);
 
@@ -63,8 +61,10 @@ protected:
         glm::vec4 ShaftSamples;
     };
 
+    virtual void UpdateGraphicInterface() override;
     virtual void CreateDescriptorSetLayout() override;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>&, unsigned int& maxSets) override;
+    virtual void UpdateResourceTable() override;
 
     void UpdateSunDescriptors();
     void UpdateShaderParams();

@@ -80,8 +80,10 @@ void CFogRenderer::Render()
     EndRenderPass();
 }
 
-void CFogRenderer::UpdateGraphicInterface(VkImageView imgView)
+void CFogRenderer::UpdateGraphicInterface()
 {
+    VkImageView imgView = g_commonResources.GetAs<VkImageView>(EResourceType_PositionsImageView);
+
     VkDescriptorImageInfo imgInfo;
     imgInfo.sampler = m_sampler;
     imgInfo.imageView = imgView;

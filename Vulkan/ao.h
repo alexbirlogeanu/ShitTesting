@@ -26,16 +26,17 @@ public:
     virtual void Init() override;
     virtual void Render() override;
 
-    VkImageView GetOuput() { return m_framebuffer->GetColorImageView(0); }
+    //VkImageView GetOuput() { return m_framebuffer->GetColorImageView(0); }
 
-    void UpdateGraphicInterface(CFrameBuffer* gbuffer);
 protected:
     virtual void CreateDescriptorSetLayout() override;
     void AllocDescriptors();
     void InitSSAOParams();
+    virtual void UpdateGraphicInterface() override;
 
     void UpdateParams();
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets);
+    virtual void UpdateResourceTable() override;
 private:
     //buffers
     VkBuffer                m_constParamsBuffer;

@@ -146,22 +146,22 @@ void CAORenderer::Render()
     EndRenderPass();
 }
 
-void CAORenderer::UpdateGraphicInterface(CFrameBuffer* gbuffer)
+void CAORenderer::UpdateGraphicInterface()
 {
     std::vector<VkWriteDescriptorSet> wDescSets;
     VkDescriptorImageInfo normalsImgInfo;
     normalsImgInfo.sampler = m_sampler;
-    normalsImgInfo.imageView = gbuffer->GetColorImageView(2); //GBuffer_Normals
+    normalsImgInfo.imageView = g_commonResources.GetAs<VkImageView>(EResourceType_NormalsImageView); //GBuffer_Normals
     normalsImgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     
     VkDescriptorImageInfo positionsImgInfo;
     positionsImgInfo.sampler = m_sampler;
-    positionsImgInfo.imageView = gbuffer->GetColorImageView(3); //GBuffer_Position
+    positionsImgInfo.imageView = g_commonResources.GetAs<VkImageView>(EResourceType_PositionsImageView); //GBuffer_Position
     positionsImgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     VkDescriptorImageInfo depthImgInfo;
     depthImgInfo.sampler = m_sampler;
-    depthImgInfo.imageView = gbuffer->GetDepthImageView();
+    depthImgInfo.imageView = g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView);
     depthImgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     VkDescriptorBufferInfo constBuffInfo;
@@ -248,6 +248,11 @@ void CAORenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, 
     AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5);
     AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2);
     maxSets = 4;
+}
+
+void CAORenderer::UpdateResourceTable()
+{
+    UpdateResourceTableForColor(ESSAOPass_Main, EResourceType_AOBufferImage);
 }
 
 void CAORenderer::AllocDescriptors()

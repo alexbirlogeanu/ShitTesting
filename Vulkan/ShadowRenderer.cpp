@@ -145,8 +145,12 @@ void CShadowResolveRenderer::UpdateShaderParams(glm::mat4 shadowProj)
     vk::UnmapMemory(vk::g_vulkanContext.m_device, m_uniformMemory);
 }
 
-void CShadowResolveRenderer::UpdateGraphicInterface(VkImageView normalView, VkImageView posView, VkImageView shadowMapView)
+void CShadowResolveRenderer::UpdateGraphicInterface()
 {
+    VkImageView normalView = g_commonResources.GetAs<VkImageView>(EResourceType_NormalsImageView);
+    VkImageView posView = g_commonResources.GetAs<VkImageView>(EResourceType_PositionsImageView);
+    VkImageView shadowMapView = g_commonResources.GetAs<VkImageView>(EResourceType_ShadowMapImageView);
+
     VkDescriptorImageInfo normalInfo = CreateDescriptorImageInfo(m_nearSampler, normalView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     VkDescriptorImageInfo posInfo = CreateDescriptorImageInfo(m_nearSampler, posView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     VkDescriptorImageInfo shadowhInfo = CreateDescriptorImageInfo(m_depthSampler, shadowMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -217,6 +221,11 @@ void CShadowResolveRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>&
     maxSets = 3;
     AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1);
     AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8);
+}
+
+void CShadowResolveRenderer::UpdateResourceTable()
+{
+    UpdateResourceTableForColor(0, EResourceType_ResolvedShadowImage);
 }
 
 #ifdef USE_SHADOW_BLUR
