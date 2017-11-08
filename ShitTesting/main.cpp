@@ -12,6 +12,7 @@
 #include <ctime>
 #include <functional>
 #include <queue>
+#include <typeinfo>
 
 #include <crtdbg.h>
 #include <windows.h>
@@ -22,6 +23,7 @@
 #include <limits>
 
 #include "FU.h"
+#include "../vulkan/VulkanLoader.h"
 
 #include "rapidxml/rapidxml.hpp"
 
@@ -504,10 +506,89 @@ MoveTestClass CreateCopyFrom(const MoveTestClass& other)
     return other;
 }
 
+int ShittySum(int& a, int& b) //rusine...
+{
+    a = 3;
+    b = 4;
+    return a + b;
+}
+
+class GenericItem
+{
+public:
+    GenericItem()
+        : m_ptr(nullptr)
+    {}
+
+    virtual ~GenericItem(){}
+
+    inline void* Get()
+    {
+        return m_ptr;
+    }
+protected:
+    inline void Set(void* ptr)
+    {
+        m_ptr = ptr;
+    }
+private:
+    void* m_ptr;
+};
+
+template <typename T>
+class Item : public GenericItem
+{
+public:
+    Item(T* ptr)
+    {
+        Set(ptr);
+    }
+
+    virtual ~Item(){}
+};
+
+class Container
+{
+public:
+    Container()
+    {
+        m_items.resize(10);
+    }
+
+    template<typename T>
+    T GetAs(unsigned int index)
+    {
+        Item<T>* item = dynamic_cast<Item<T>*>(m_items[index]);
+        BREAKPOINT(item && "Not correct type");
+        return *(T*)item->Get();
+    }
+
+    template<typename T>
+    void SetAs(T* ptr, unsigned int index)
+    {
+        m_items[index] = new Item<T>(ptr);
+    }
+private:
+    std::vector<GenericItem*> m_items;
+};
+
 int main (int argc, char** argv)
 {
-    MoveTestClass a;// = CreateCopy();
-    MoveTestClass b = CreateCopyFrom(a);
+    //MoveTestClass a;// = CreateCopy();
+    //MoveTestClass b = CreateCopyFrom(a);
+    
+    VkImage img = VK_NULL_HANDLE;
+    VkImageView imgView = VK_NULL_HANDLE;
+    Container c;
+    c.SetAs<VkImage>(&img, 0);
+    c.SetAs<VkImageView>(&imgView, 1);
+
+    VkImage i = c.GetAs<VkImage>(0);
+    VkImageView v = c.GetAs<VkImageView>(1);
+
+    VkImageView v2 = c.GetAs<VkImageView>(1);
+
+    //c.SetAs<VkIm>
 
     Pause();
     return 0;
