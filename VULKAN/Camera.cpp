@@ -47,7 +47,7 @@ void CFrustrum::GetPointsFromPlane(glm::vec3 start, glm::vec3 dir, glm::vec3 rig
 //////////////////////////////////////////////////////////////////////////////////////
 
 CCamera::CCamera()
-    : m_position(0.0f)  
+    : m_position(0.0f, 0.5f, 0.0)  
     , m_angles(0.0f, 0.0f, 0.0f)
     , m_dirty(true)
     , m_angularSpeed(glm::pi<float>() / 30.f)

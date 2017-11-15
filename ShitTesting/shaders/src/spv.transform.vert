@@ -14,11 +14,12 @@ layout(set=0,binding=0) uniform Params
 layout(location = 0) out vec4 ViewPosition;
 layout(location = 1) out mat4 InvModelMatrix;
 layout(location = 5) out vec4 uv;
+
 void main()
 {
-	ViewPosition =  ModelMatrix * vec4(position, 1.0);
+	ViewPosition = ModelMatrix * vec4(position, 1.0);
 	InvModelMatrix = inverse(ModelMatrix);
-	gl_Position = ProjMatrix * ViewMatrix * ViewPosition;
+	gl_Position = ProjMatrix *   ViewMatrix * ViewPosition;
 	uv = vec4(in_uv, 0.0f, 0.0f);
 	uv.t = 1.0 - uv.t;
 }

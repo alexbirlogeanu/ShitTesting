@@ -1,5 +1,8 @@
 #include "3DTexture.h"
 #include "Mesh.h"
+#include "Texture.h"
+
+#include <random>
 
 C3DTextureRenderer::C3DTextureRenderer (VkRenderPass renderPass)
     : CRenderer(renderPass)
@@ -11,6 +14,8 @@ C3DTextureRenderer::C3DTextureRenderer (VkRenderPass renderPass)
     , m_width(512)
     , m_height(512)
     , m_depth(TEXTURE3DLAYERS)
+    , m_uniformBuffer(VK_NULL_HANDLE)
+    , m_uniformMemory(VK_NULL_HANDLE)
 {
 }
 
@@ -23,32 +28,51 @@ C3DTextureRenderer::~C3DTextureRenderer()
     vk::FreeMemory(dev, m_outTextureMemory, nullptr);
     vk::DestroyImage(dev, m_outTexture, nullptr);
     vk::DestroyImageView(dev, m_outTextureView, nullptr);
+
+    vk::FreeMemory(dev, m_uniformMemory, nullptr);
+    vk::DestroyBuffer(dev, m_uniformBuffer, nullptr);
+
+    delete m_patternTexture;
 }
 
 void C3DTextureRenderer::Init()
 {
     CRenderer::Init();
     AllocateOuputTexture();
+
     AllocDescriptorSets(m_descriptorPool, m_generateDescLayout, &m_generateDescSet);
+    AllocBufferMemory(m_uniformBuffer, m_uniformMemory, sizeof(FogParameters), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+
+    FillParams();
+
+    SImageData patData;
+    Read2DTextureData(patData, std::string(TEXTDIR) + "fog.png", true);
+
+    m_patternTexture = new CTexture(patData, true);
 
     m_generatePipeline.SetComputeShaderFile("generateVolumeTexture.comp");
     m_generatePipeline.CreatePipelineLayout(m_generateDescLayout);
     m_generatePipeline.Init(this, VK_NULL_HANDLE, -1); //compute pipelines dont need render pass .. need to change CPipeline
 
     VkDescriptorImageInfo imgInfo = CreateDescriptorImageInfo(VK_NULL_HANDLE, m_outTextureView, VK_IMAGE_LAYOUT_GENERAL);
-    VkWriteDescriptorSet wDesc = InitUpdateDescriptor(m_generateDescSet, 0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &imgInfo);
-    vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, 1, &wDesc, 0, nullptr);
+    VkDescriptorBufferInfo bufInfo = CreateDescriptorBufferInfo(m_uniformBuffer);
+    std::vector<VkWriteDescriptorSet> wDescs;
+    wDescs.push_back(InitUpdateDescriptor(m_generateDescSet, 0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &imgInfo));
+    wDescs.push_back(InitUpdateDescriptor(m_generateDescSet, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &m_patternTexture->GetTextureDescriptor()));
+    wDescs.push_back(InitUpdateDescriptor(m_generateDescSet, 2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &bufInfo));
+    vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDescs.size(), wDescs.data(), 0, nullptr);
 }
 
 void C3DTextureRenderer::Render()
 {
     BeginMarkerSection("GenerateShitty3DTexture");
+    UpdateParams();
     PrepareTexture();
     VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
     vk::CmdBindPipeline(cmdBuffer, m_generatePipeline.GetBindPoint(), m_generatePipeline.Get());
     vk::CmdBindDescriptorSets(cmdBuffer, m_generatePipeline.GetBindPoint(), m_generatePipeline.GetLayout(),0, 1, &m_generateDescSet, 0, nullptr);
     TRAP(m_width % 32 == 0 && m_height % 32 == 0);
-    vk::CmdDispatch(cmdBuffer, m_width / 32, m_height / 32, m_depth); //??
+    vk::CmdDispatch(cmdBuffer, m_width / 32, 1, m_depth); //??
 
     WaitComputeFinish();
     EndMarkerSection();
@@ -58,6 +82,8 @@ void C3DTextureRenderer::CreateDescriptorSetLayout()
 {
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     bindings.push_back(CreateDescriptorBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT));
+    bindings.push_back(CreateDescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT));
+    bindings.push_back(CreateDescriptorBinding(2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT));
 
     VkDescriptorSetLayoutCreateInfo crtInfo;
     cleanStructure(crtInfo);
@@ -72,6 +98,8 @@ void C3DTextureRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poo
 {
     maxSets = 1;
     AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1);
+    AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1);
+    AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1);
 }
 
 void C3DTextureRenderer::AllocateOuputTexture()
@@ -167,68 +195,47 @@ void C3DTextureRenderer::UpdateResourceTable()
     g_commonResources.SetAs<VkImageView>(&m_outTextureView, EResourceType_VolumetricImageView);
 }
 
+void C3DTextureRenderer::FillParams()
+{
+    unsigned int seed = 162039;
+    std::mt19937 generator (seed);
+    std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+
+    glm::vec2 dir  = glm::normalize(glm::vec2(0.3f, 0.76f));
+    auto directionNoise = [&]()
+    {
+        float limit = 0.15f;
+        float noise = limit * distribution(generator);
+        float alpha = glm::atan(dir.x, dir.y);
+        alpha += noise;
+        return glm::normalize(glm::vec2(glm::cos(alpha), glm::sin(alpha)));
+    };
+
+    unsigned int waves = 4;
+    m_parameters.Globals = glm::vec4(dir, 0.0f, 1.0f);
+    m_parameters.NumberOfWaves = glm::vec4(waves);
+    //                                A,     Wavelength,  Speed * Dir
+    m_parameters.Waves[0] = glm::vec4(0.4f, 0.5f, 0.055f * directionNoise());
+    m_parameters.Waves[1] = glm::vec4(0.75f, 0.8f, 0.04f * directionNoise());
+    m_parameters.Waves[2] = glm::vec4(0.5f, 0.4f, 0.05f * directionNoise());
+    m_parameters.Waves[3] = glm::vec4(0.3f, 0.85f, 0.1f * directionNoise());
+}
+
+void C3DTextureRenderer::UpdateParams()
+{
+    static DWORD startTime = GetTickCount();
+    DWORD now = GetTickCount();
+    float timeSec = float(now - startTime) / 1000;
+    m_parameters.Globals.z = timeSec;
+
+    FogParameters* params = nullptr;
+    vk::MapMemory(vk::g_vulkanContext.m_device, m_uniformMemory, 0, VK_WHOLE_SIZE, 0, (void**)&params);
+    memcpy(params, &m_parameters, sizeof(FogParameters));
+    vk::UnmapMemory(vk::g_vulkanContext.m_device, m_uniformMemory);
+}
+
 void C3DTextureRenderer::CopyTexture()
 {
-    /*unsigned int layers = m_framebuffer->GetLayers();
-    unsigned int width = m_framebuffer->GetWidth();
-    unsigned int height = m_framebuffer->GetHeight();
-
-    VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
-
-    VkImage outImg = m_framebuffer->GetColorImage(0);
-    VkImageMemoryBarrier imageBarriers[2];
-
-    VkImageLayout outLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    VkAccessFlags outAccess = 0;
-
-    AddImageBarrier(imageBarriers[0], outImg, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 
-    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,  VK_IMAGE_ASPECT_COLOR_BIT);
-
-    vk::CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, imageBarriers);
-
-    VkImageSubresourceLayers subresource;
-    subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    subresource.baseArrayLayer = 0;
-    subresource.layerCount = layers;
-    subresource.mipLevel = 0;
-
-    VkBufferImageCopy region;
-    cleanStructure(region);
-    region.imageExtent.width = width;
-    region.imageExtent.height = height;
-    region.imageExtent.depth = 1;
-    region.imageOffset.x = 0;
-    region.imageOffset.y = 0;
-    region.imageOffset.z = 0;
-    region.imageSubresource = subresource;
-
-    vk::CmdCopyImageToBuffer(cmdBuffer, outImg, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_copyBuffer,1, &region);
-
-    VkBufferMemoryBarrier buffBarrier;
-    AddBufferBarier(buffBarrier, m_copyBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-    AddImageBarrier(imageBarriers[0], outImg, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,  VK_IMAGE_ASPECT_COLOR_BIT);
-    AddImageBarrier(imageBarriers[1], m_outTexture, outLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, outAccess, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-    outAccess = VK_ACCESS_SHADER_READ_BIT;
-    outLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-    vk::CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 2, imageBarriers);
-
-    cleanStructure(region);
-    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    region.imageSubresource.baseArrayLayer = 0;
-    region.imageSubresource.layerCount = 1;
-    region.imageSubresource.mipLevel = 0;
-    region.imageExtent.width = width;
-    region.imageExtent.height = height;
-    region.imageExtent.depth = layers;
-
-    vk::CmdCopyBufferToImage(cmdBuffer, m_copyBuffer, m_outTexture, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-
-    AddImageBarrier(imageBarriers[0], m_outTexture, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-
-    vk::CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, imageBarriers);
-    */
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -278,14 +285,25 @@ void CVolumetricRenderer::Init()
 
     CreateCullPipeline(m_frontCullPipeline, VK_CULL_MODE_FRONT_BIT);
     CreateCullPipeline(m_backCullPipeline, VK_CULL_MODE_BACK_BIT);
-    CreateNearestSampler(m_sampler, false);
+    CreateLinearSampler(m_sampler, false);
+
+    VkPipelineColorBlendAttachmentState blend;
+    blend.blendEnable = VK_TRUE;
+    blend.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    blend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    blend.colorBlendOp = VK_BLEND_OP_ADD;
+    blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend.alphaBlendOp = VK_BLEND_OP_ADD;
+    blend.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
 
     m_volumetricPipeline.SetVertexShaderFile("transform.vert");
     m_volumetricPipeline.SetFragmentShaderFile("volumetric.frag");
-    m_volumetricPipeline.SetDepthTest(false);
+    m_volumetricPipeline.SetDepthTest(true);
     m_volumetricPipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
     m_volumetricPipeline.CreatePipelineLayout(m_volumetricDescLayout);
-    m_volumetricPipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 2); //change blend state
+    m_volumetricPipeline.AddBlendState(blend);
+    m_volumetricPipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState()); //change blend state
     m_volumetricPipeline.SetVertexInputState(Mesh::GetVertexDesc());
     m_volumetricPipeline.Init(this, m_renderPass, 2);
 }
@@ -401,11 +419,15 @@ void CVolumetricRenderer::UpdateShaderParams()
     glm::mat4 proj;
     PerspectiveMatrix(proj);
     ConvertToProjMatrix(proj);
+    float s = 10.0f;
+
+    glm::mat4 modelMatrix (1.0f);
+    modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, -0.75f, -3.0f));
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(s, 1.0f, s));
 
     SVolumeParams* params = nullptr;
     VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_uniformMemory, 0, VK_WHOLE_SIZE, 0, (void**)&params));
-    params->ModelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -2.0f));
-    //params->ModelMatrix = glm::mat4(1.0f);
+    params->ModelMatrix = modelMatrix;
     params->ProjMatrix = proj;
     params->ViewMatrix = ms_camera.GetViewMatrix();
     vk::UnmapMemory(vk::g_vulkanContext.m_device, m_uniformMemory);

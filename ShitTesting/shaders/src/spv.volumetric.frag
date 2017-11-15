@@ -12,38 +12,57 @@ layout(set=0, binding=3) uniform sampler2D BackTexture;
 
 layout(location = 0) out vec4 Out;
 layout(location = 1) out vec4 Debug;
+
+float Depth()
+{
+	float z = gl_FragCoord.z;
+	float near = 0.1;
+	float far = 75.0f;
+	return (2 * near) / (far + near - z * (far - near));
+}
+
 void main()
 {
 	vec2 size = vec2(textureSize(FrontTexture, 0));
 	vec2 uv = vec2(gl_FragCoord.xy) / size;
 	
-	vec3 start = vec3(InvModelMatrix * vec4(texture(BackTexture, uv).xyz, 0.0f));
-	vec3 stop = vec3(InvModelMatrix * vec4(texture(FrontTexture, uv).xyz, 0.0f));
+	vec3 start = vec3(InvModelMatrix * vec4(texture(BackTexture, uv).xyz, 1.0f));
+	vec3 stop = vec3(InvModelMatrix * vec4(texture(FrontTexture, uv).xyz, 1.0f));
 	
-	float steps = 32.0;
+	//vec3 start = texture(BackTexture, uv).xyz;
+	//vec3 stop =  texture(FrontTexture, uv).xyz;
+	
+	float steps = 128.0;
 	vec3 dir = stop - start;
 	float len = length(dir);
-	float s = 1.0 / steps;
+	
+	if(len < 0.01f) //?
+		return;
+		
 	dir /= len; //normalize
 	Out = vec4(1.0, 0.0, 0.0, 0.0);
-	Debug = vec4(dir, 1.0);
-	 for (int i = 0; i < steps; ++i)
+	vec3 s = 1.0 / steps * dir;
+	
+	vec4 acumColor = vec4(0.0f);
+	for (int i = 0; i < steps; ++i)
 	{
-		vec3 coords = start + (dir * i * s);
-		//coords.xy  = UV.st;
-		coords.xy = coords.xy -(-0.5);
-		coords.y = 1 - coords.y;
-		coords.z = coords.z * 0.5 + 0.5;
-		Debug.xyz = coords;
-		vec4 color = texture(VolumeTexture, coords);
-		if(color.a > 0.0)
-		{
-			Out = color;
-			break;
-		}
+		vec3 coords = start + (i * s);
+		coords.xyz = coords.xyz + 0.5f;
 		
-	} 
-	/* vec4 color = texture(VolumeTexture, vec3(UV.st, 0.25f));
-	if(color.a > 0.0)
-		Out = color; */
+		vec4 color = texture(VolumeTexture, coords);
+		
+		color.rgb *= color.a;
+		color.a *= 0.01f;
+		
+		acumColor += (1.0f - acumColor.a) * color;
+		Debug = vec4(acumColor.rgb, 1.0);
+		Debug.w = len;
+		
+		if (acumColor.a > 0.45) //this should be parametrize
+			break;
+			
+	}
+	//Debug = acumColor;
+	Out = acumColor;
+	gl_FragDepth = Depth();
 }

@@ -831,7 +831,7 @@ protected:
 protected:
     virtual void UpdateGraphicInterface() override
     {
-        VkImageView shadowMap = g_commonResources.GetAs<VkImageView>(EResourceType_ShadowMapImageView);
+        VkImageView shadowMap = g_commonResources.GetAs<VkImageView>(EResourceType_ResolvedShadowImageView);
         VkImageView aoMap = g_commonResources.GetAs<VkImageView>(EResourceType_AOBufferImageView);
 
         const unsigned int descSize = GBuffer_InputCnt;
@@ -2393,6 +2393,7 @@ private:
     bool                        m_centerCursor;
     bool                        m_hideCursor;
     bool                        m_mouseMoved;
+    bool                        m_enableFog;
     float                       m_normMouseDX;
     float                       m_normMouseDY;
     float                       dt;
@@ -2452,6 +2453,7 @@ CApplication::CApplication()
     , m_normMouseDX(0.0f)
     , m_normMouseDY(0.0f)
     , m_needReset(false)
+    , m_enableFog(false)
 {
     vk::Load();
     InitWindow();
@@ -3816,40 +3818,40 @@ void CApplication::CreateResources()
     m_objectMesh = new Mesh("obj\\sphere.obj");
     m_monkeyMesh = new Mesh("obj\\dragon.obj");
 
-    //m_objects.resize(NUM_OF_CUBES);
+    m_objects.resize(NUM_OF_CUBES);
 
-    //for(int i = -NUM_OF_CUBES / 2;  i <= NUM_OF_CUBES / 2; ++i )
-    //{
-    //    unsigned int index = i + NUM_OF_CUBES / 2;
-    //    m_objects[index] = new CObject();
-    //    m_shadowRenderer->AddShadowCaster(m_objects[index]);
-    //}
+    for(int i = -NUM_OF_CUBES / 2;  i <= NUM_OF_CUBES / 2; ++i )
+    {
+        unsigned int index = i + NUM_OF_CUBES / 2;
+        m_objects[index] = new CObject();
+        m_shadowRenderer->AddShadowCaster(m_objects[index]);
+    }
 
-    //float z = -3.f;
-    //{
-    //   
-    //    m_objects[0]->SetTexture(m_texture);
-    //    m_objects[0]->SetMaterialProperties(0.9f, 0.1f, 0.5f);
-    //    m_objects[0]->SetPosition(glm::vec3(-1.5f, -0.5f, z));
-    //    m_objects[0]->SetMesh(m_objectMesh);
-    //}
-    //
-    //{
-    //    m_objects[1]->SetMaterialProperties(0.45f, 1.0f, 0.5f);
-    //    m_objects[1]->SetTexture(m_texture);
-    //    m_objects[1]->SetScale(glm::vec3(1.0f));
-    //    m_objects[1]->SetPosition(glm::vec3(0.0f, -0.5f, z));
-    //    m_objects[1]->SetMesh(m_objectMesh);
+    float z = -3.f;
+    {
 
-    //}
+        m_objects[0]->SetTexture(m_texture);
+        m_objects[0]->SetMaterialProperties(0.9f, 0.1f, 0.5f);
+        m_objects[0]->SetPosition(glm::vec3(-1.5f, -0.5f, z));
+        m_objects[0]->SetMesh(m_objectMesh);
+    }
 
-    //{
-    //    m_objects[2]->SetMaterialProperties(1.0, 0.1f, 0.5f);
-    //    m_objects[2]->SetTexture(m_monkeyTexture);
-    //    m_objects[2]->SetScale(glm::vec3(0.1f));
-    //    m_objects[2]->SetPosition(glm::vec3(1.5f, -1.0f, z));
-    //    m_objects[2]->SetMesh(m_monkeyMesh);
-    //}
+    {
+        m_objects[1]->SetMaterialProperties(0.45f, 1.0f, 0.5f);
+        m_objects[1]->SetTexture(m_texture);
+        m_objects[1]->SetScale(glm::vec3(1.0f));
+        m_objects[1]->SetPosition(glm::vec3(0.0f, -0.5f, z));
+        m_objects[1]->SetMesh(m_objectMesh);
+
+    }
+
+    {
+        m_objects[2]->SetMaterialProperties(1.0, 0.1f, 0.5f);
+        m_objects[2]->SetTexture(m_monkeyTexture);
+        m_objects[2]->SetScale(glm::vec3(0.1f));
+        m_objects[2]->SetPosition(glm::vec3(1.5f, -1.0f, z));
+        m_objects[2]->SetMesh(m_monkeyMesh);
+    }
 
     SImageData planeImg;
     Read2DTextureData(planeImg,std::string(TEXTDIR) +  "bricks2.png", isSrgb);
@@ -3984,7 +3986,7 @@ void CApplication::Render()
 
     m_lightRenderer->Render();
 
-    m_fogRenderer->Render();
+    //m_fogRenderer->Render();
 
     m_pointLightRenderer->Render();
     
@@ -3994,9 +3996,11 @@ void CApplication::Render()
     m_skyRenderer->Render();
     //m_particlesRenderer->Render();
 
-    m_3dTextureRenderer->Render();
-
-    m_volumetricRenderer->Render();
+    if (m_enableFog)
+    {
+        m_3dTextureRenderer->Render();
+        m_volumetricRenderer->Render();
+    }
 
     GetPickManager()->Update();
 
@@ -4251,6 +4255,11 @@ void CApplication::ProcMsg(UINT uMsg, WPARAM wParam,LPARAM lParam)
         if (wParam == VK_F4)
         {
             GetPickManager()->ToggleEditMode();
+        }
+
+        if (wParam == VK_F5)
+        {
+            m_enableFog = !m_enableFog;
         }
 
         if (wParam == 'Q')

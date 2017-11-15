@@ -10,10 +10,11 @@
 ///////////////////////
 //Test class
 //////////////////////
-#define TEXTURE3DLAYERS (unsigned int)32
+#define TEXTURE3DLAYERS (unsigned int)128
 //#define TEST3DTEXT
 
 class Mesh;
+class CTexture;
 class C3DTextureRenderer : public CRenderer
 {
 public:
@@ -37,16 +38,32 @@ protected:
     void AllocateAuxiliarMemory();
 
     virtual void UpdateResourceTable() override;
+    void FillParams();
+    void UpdateParams();
+
+    struct FogParameters
+    {
+        glm::vec4 Globals; //xy - Dir, Z - time
+        glm::vec4 NumberOfWaves;
+        glm::vec4 Waves[8]; // x - A, y - freq, zw - Velocity
+    };
+
 private:
-    //new Shit
-    //prototype 3D Texture
+   
     unsigned int                m_width;
     unsigned int                m_height;
     unsigned int                m_depth;
 
+    FogParameters               m_parameters;
+
     VkImage                     m_outTexture;
     VkImageView                 m_outTextureView;
     VkDeviceMemory              m_outTextureMemory;
+
+    CTexture*                   m_patternTexture;
+    
+    VkBuffer                    m_uniformBuffer;
+    VkDeviceMemory              m_uniformMemory;
 
     CComputePipeline            m_generatePipeline;
     VkDescriptorSetLayout       m_generateDescLayout;
