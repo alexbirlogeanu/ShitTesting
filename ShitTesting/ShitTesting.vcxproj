@@ -123,6 +123,7 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Callback.h" />
     <ClInclude Include="Fook.h" />
     <ClInclude Include="FU.h" />
     <ClInclude Include="xmlparser.h" />

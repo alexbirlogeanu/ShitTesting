@@ -21,11 +21,13 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <limits>
+#include <memory>
 
 #include "FU.h"
 #include "../vulkan/VulkanLoader.h"
 
 #include "rapidxml/rapidxml.hpp"
+#include "Callback.h"
 
 using namespace std;
 
@@ -141,13 +143,6 @@ int SumRef(std::vector<int>& vec)
     }
     return sum;
 }
-
-class A
-{
-public:
-    char a : 2;
-    bool b : 1;
-};
 
 int power(int b, int x)
 {
@@ -506,13 +501,42 @@ MoveTestClass CreateCopyFrom(const MoveTestClass& other)
     return other;
 }
 
-int ShittySum(int& a, int& b) //rusine...
+class Base
 {
-    a = 3;
-    b = 4;
-    return a + b;
-}
+public:
+    virtual ~Base()
+    {}
 
+    virtual void f()
+    {
+        std::cout << "Base::f" << std::endl;
+    }
+
+    void g()
+    {
+        std::cout << "Base::g" << std::endl;
+
+    }
+};
+
+class Derived : public Base
+{
+public:
+    virtual ~Derived()
+    {
+    }
+
+    void f() override
+    {
+        std::cout << "Derived::f" << std::endl;
+    }
+
+    void g()
+    {
+        std::cout << "Derived::g" << std::endl;
+
+    }
+};
 class GenericItem
 {
 public:
@@ -572,24 +596,246 @@ private:
     std::vector<GenericItem*> m_items;
 };
 
+class Callable
+{
+public:
+    virtual ~Callable()
+    {}
+};
+
+//template<typename TR, typename R>
+//class Callback0
+//{
+//public:
+//    typedef R (TR::*f)();
+//
+//    Callback0()
+//        : m_obj(nullptr)
+//    {}
+//
+//    Callback0(TR* o, f func)
+//        : m_obj(o)
+//        , m_func(func)
+//    {
+//    }
+//
+//    R operator()()
+//    {
+//        return (m_obj->*m_func)();
+//    }
+//private:
+//    TR*                 m_obj;
+//    f                   m_func;
+//};
+
+//template<typename TR, typename R, typename T1>
+//class Callback1
+//{
+//public:
+//    typedef R (TR::*f)(T1);
+//
+//    Callback1()
+//        : m_obj(nullptr)
+//        , m_func(nullptr)
+//    {}
+//
+//    Callback1(TR* o, f func)
+//        : m_obj(o)
+//        , m_func(func)
+//    {
+//    }
+//
+//    R operator()(T1 p1)
+//    {
+//        return (m_obj->*m_func)(p1);
+//    }
+//private:
+//    TR*                 m_obj;
+//    f                   m_func;
+//};
+
+struct P
+{
+    int a;
+    int b;
+
+    P(){};
+    P(int f1, int f2) : a(f1), b(f2){}
+};
+
+
+class A
+{
+public:
+    virtual ~A()
+    {
+    }
+
+    void f()
+    {
+        cout << "A::f" << endl;
+    }
+
+    int GetResult() const
+    {
+        return result;
+    }
+
+    virtual void PrintResult()
+    {
+        cout << "A::Result: " << GetResult() << endl;
+    }
+
+    virtual int g(int r)
+    {
+        cout << "A::g: " << r << endl;
+        return ++r;
+    }
+
+    virtual int Compute(P p)
+    {
+        cout << "A::Compute" << endl;
+        result = p.a + p.b;
+        return result;
+    }
+protected:
+    int result;
+};
+
+class B : public A 
+{
+public:
+    virtual ~B()
+    {
+    }
+
+    void NotOk()
+    {
+        cout << "Not Ok" << endl;
+    }
+
+    virtual void PrintResult()
+    {
+        cout << "B::Result: " << GetResult() << endl;
+    }
+
+    void f()
+    {
+        cout << "B::f" << endl;
+    }
+
+    virtual int Compute(P p)
+    {
+        cout << "B::Compute" << endl;
+        result = p.a * p.b;
+        return result;
+    }
+};
+
+class C : public B
+{
+public:
+    int Compute(P p)
+    {
+        cout << "C::Compute" << endl;
+        result = p.a - p.b;
+        return result;
+    }
+
+    virtual void PrintResult()
+    {
+        cout << "C::Result: " << GetResult() << endl;
+    }
+};
+
+class Wait
+{
+public:
+    ~Wait()
+    {
+        Pause();
+    }
+};
+
+static Wait w;
+
+template<typename TR, typename R>
+class CB
+{
+public:
+    typedef R (*func)(TR&);
+    CB(TR* obj, func f)
+        : m_obj(obj)
+        , m_func(f)
+    {}
+
+    R operator()()
+    {
+        return m_func(m_obj);
+    }
+
+private:
+    TR*     m_obj;
+    func    m_func;
+};
+
+//class Event;
+//class ListenerBase
+//{
+//public:
+//    ListenerBase();
+//    virtual ~ListenerBase();
+//
+//    void Send(Event* ) = 0;
+//};
+//
+//template<typename EVENT, typename FUNC>
+//class Listener : public ListenerBase
+//{
+//public:
+//
+//};
+
+
+
 int main (int argc, char** argv)
 {
-    //MoveTestClass a;// = CreateCopy();
-    //MoveTestClass b = CreateCopyFrom(a);
-    
-    VkImage img = VK_NULL_HANDLE;
-    VkImageView imgView = VK_NULL_HANDLE;
-    Container c;
-    c.SetAs<VkImage>(&img, 0);
-    c.SetAs<VkImageView>(&imgView, 1);
+    A a;
+    B b;
+    C c;
 
-    VkImage i = c.GetAs<VkImage>(0);
-    VkImageView v = c.GetAs<VkImageView>(1);
+    typedef Callback1<int,P> Callback;
+    Callback acb (&a, &A::Compute);
+    Callback bcb (&b, &B::Compute);
+    Callback ccb (&c, &C::Compute);
 
-    VkImageView v2 = c.GetAs<VkImageView>(1);
+    std::vector<Callback> callbacks;
+    callbacks.push_back(std::move(acb));
+    callbacks.push_back(std::move(bcb));
+    callbacks.push_back(std::move(ccb));
 
-    //c.SetAs<VkIm>
+    P p (5, 4);
+    for(unsigned int i = 0; i < callbacks.size(); ++i)
+        callbacks[i](p);
 
-    Pause();
+    typedef Callback0<void> Printer;
+    std::vector<Printer> printers;
+    Printer printA(&a, &A::PrintResult);
+    Printer printB(&b, &A::PrintResult);
+    Printer printC(&c, &A::PrintResult);
+
+    printers.push_back(std::move(printA));
+    printers.push_back(std::move(printB));
+    printers.push_back(std::move(printC));
+
+    for(unsigned int i = 0; i < printers.size(); ++i)
+        printers[i]();
+
+    cout << "Result A: " << a.GetResult() << endl;
+    cout << "Result B: " << b.GetResult() << endl;
+    cout << "Result c: " << c.GetResult() << endl;
+
+    callbacks.clear();
+    printers.clear();
     return 0;
 }
