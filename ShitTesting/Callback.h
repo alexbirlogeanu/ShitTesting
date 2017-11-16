@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 template<typename R>
 class CB_Base0
 {
