@@ -34,6 +34,7 @@ private:
 
     std::unique_ptr<CB_Base0<R>>   m_cb;
 public:
+    Callback0() {}
     template<typename C, typename F>
     Callback0(C* obj, F func) { m_cb.reset(new CBImpl<C,F>(obj, func));}
     virtual ~Callback0() { }
@@ -74,6 +75,7 @@ private:
 
     std::unique_ptr<CB_Base1<R,T1>>   m_cb;
 public:
+    Callback1() {};
     template<typename C, typename F>
     Callback1(C* obj, F func) { m_cb.reset(new CBImpl<C,F>(obj, func));}
     virtual ~Callback1() { }
