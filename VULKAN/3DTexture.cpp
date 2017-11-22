@@ -16,6 +16,7 @@ C3DTextureRenderer::C3DTextureRenderer (VkRenderPass renderPass)
     , m_depth(TEXTURE3DLAYERS)
     , m_uniformBuffer(VK_NULL_HANDLE)
     , m_uniformMemory(VK_NULL_HANDLE)
+    , m_needGenerateTexture(true)
 {
 }
 
@@ -46,11 +47,13 @@ void C3DTextureRenderer::Init()
     FillParams();
 
     SImageData patData;
-    Read2DTextureData(patData, std::string(TEXTDIR) + "fog.png", true);
+    Read2DTextureData(patData, std::string(TEXTDIR) + "wisp.png", true);
 
     m_patternTexture = new CTexture(patData, true);
 
-    m_generatePipeline.SetComputeShaderFile("generateVolumeTexture.comp");
+    //m_generatePipeline.SetComputeShaderFile("generateVolumeTexture.comp");
+    m_generatePipeline.SetComputeShaderFile("splitVolumeTexture.comp");
+
     m_generatePipeline.CreatePipelineLayout(m_generateDescLayout);
     m_generatePipeline.Init(this, VK_NULL_HANDLE, -1); //compute pipelines dont need render pass .. need to change CPipeline
 
@@ -65,17 +68,22 @@ void C3DTextureRenderer::Init()
 
 void C3DTextureRenderer::Render()
 {
-    BeginMarkerSection("GenerateShitty3DTexture");
-    UpdateParams();
-    PrepareTexture();
-    VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
-    vk::CmdBindPipeline(cmdBuffer, m_generatePipeline.GetBindPoint(), m_generatePipeline.Get());
-    vk::CmdBindDescriptorSets(cmdBuffer, m_generatePipeline.GetBindPoint(), m_generatePipeline.GetLayout(),0, 1, &m_generateDescSet, 0, nullptr);
-    TRAP(m_width % 32 == 0 && m_height % 32 == 0);
-    vk::CmdDispatch(cmdBuffer, m_width / 32, 1, m_depth); //??
+    if (m_needGenerateTexture)
+    {
+        BeginMarkerSection("GenerateShitty3DTexture");
+        UpdateParams();
+        PrepareTexture();
+        VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
+        vk::CmdBindPipeline(cmdBuffer, m_generatePipeline.GetBindPoint(), m_generatePipeline.Get());
+        vk::CmdBindDescriptorSets(cmdBuffer, m_generatePipeline.GetBindPoint(), m_generatePipeline.GetLayout(),0, 1, &m_generateDescSet, 0, nullptr);
+        TRAP(m_width % 32 == 0 && m_height % 32 == 0);
+        //vk::CmdDispatch(cmdBuffer, m_width / 32, 1, m_depth); //??
+        vk::CmdDispatch(cmdBuffer, 2048 / 32, 2048 / 32, 1);
 
-    WaitComputeFinish();
-    EndMarkerSection();
+        WaitComputeFinish();
+        EndMarkerSection();
+        m_needGenerateTexture = false;
+    }
 }
 
 void C3DTextureRenderer::CreateDescriptorSetLayout()
@@ -104,8 +112,8 @@ void C3DTextureRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poo
 
 void C3DTextureRenderer::AllocateOuputTexture()
 {
-    unsigned int width = m_width;
-    unsigned int height = m_height;
+    unsigned int width = 2048 / 12; //m_width;
+    unsigned int height = 2048 / 12; //m_height;
     unsigned int depth = m_depth;
 
     VkImageCreateInfo imgCrtInfo;
@@ -117,7 +125,7 @@ void C3DTextureRenderer::AllocateOuputTexture()
     imgCrtInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
     imgCrtInfo.extent.width = width;
     imgCrtInfo.extent.height = height;
-    imgCrtInfo.extent.depth = depth;
+    imgCrtInfo.extent.depth = 144;
     imgCrtInfo.mipLevels = 1;
     imgCrtInfo.arrayLayers = 1;
     imgCrtInfo.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -300,6 +308,7 @@ void CVolumetricRenderer::Init()
     m_volumetricPipeline.SetVertexShaderFile("transform.vert");
     m_volumetricPipeline.SetFragmentShaderFile("volumetric.frag");
     m_volumetricPipeline.SetDepthTest(true);
+    m_volumetricPipeline.SetDepthWrite(false);
     m_volumetricPipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
     m_volumetricPipeline.CreatePipelineLayout(m_volumetricDescLayout);
     m_volumetricPipeline.AddBlendState(blend);
@@ -419,11 +428,13 @@ void CVolumetricRenderer::UpdateShaderParams()
     glm::mat4 proj;
     PerspectiveMatrix(proj);
     ConvertToProjMatrix(proj);
-    float s = 10.0f;
+    float s = 2.0f;
 
     glm::mat4 modelMatrix (1.0f);
-    modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, -0.75f, -3.0f));
-    modelMatrix = glm::scale(modelMatrix, glm::vec3(s, 1.0f, s));
+    //modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, -0.75f, -3.0f));
+    //modelMatrix = glm::scale(modelMatrix, glm::vec3(s, 1.0f, s));
+    modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 0.0f, -3.0f));
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(s, s, s));
 
     SVolumeParams* params = nullptr;
     VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_uniformMemory, 0, VK_WHOLE_SIZE, 0, (void**)&params));

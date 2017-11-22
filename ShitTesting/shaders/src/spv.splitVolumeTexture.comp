@@ -1,0 +1,30 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shading_language_420pack : enable
+
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform image3D VolumeTexture;
+layout(set = 0, binding = 1) uniform sampler2D GridTexture;
+
+layout(set = 0, binding = 2) uniform FogParameters //unused. just to keep the input interface the same with generateVolumeTexture.comp
+{
+	vec4 Globals; //xy - Dir, Z - time
+	vec4 NumberOfWaves;
+	vec4 Waves[8]; // x - A, y - wave, z - Speed
+};
+
+void main()
+{
+	uvec2 resolution = gl_NumWorkGroups.xy * gl_WorkGroupSize.xy;
+	vec2 uv = vec2(gl_GlobalInvocationID.xy) / vec2(resolution);
+	uv.y = 1 - uv.y;
+	vec4 c = vec4(texture(GridTexture, uv).a);
+	
+	ivec3 writeCoords;
+	const uvec2 grid = uvec2(12, 12); //12 images in the grid for this particular texture
+	uvec2 elemSize = resolution / grid;
+	writeCoords.xy = ivec2(mod(gl_GlobalInvocationID.xy, elemSize)) ;
+	writeCoords.z = int(gl_GlobalInvocationID.y / elemSize.y * grid.x + gl_GlobalInvocationID.x / elemSize.x);
+	imageStore(VolumeTexture, writeCoords, c);
+}

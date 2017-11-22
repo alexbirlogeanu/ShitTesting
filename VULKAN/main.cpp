@@ -2453,7 +2453,7 @@ CApplication::CApplication()
     , m_normMouseDX(0.0f)
     , m_normMouseDY(0.0f)
     , m_needReset(false)
-    , m_enableFog(false)
+    , m_enableFog(true)
 {
     vk::Load();
     InitWindow();

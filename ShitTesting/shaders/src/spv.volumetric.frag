@@ -52,7 +52,7 @@ void main()
 		vec4 color = texture(VolumeTexture, coords);
 		
 		color.rgb *= color.a;
-		color.a *= 0.01f;
+		color.a *= 0.1f;
 		
 		acumColor += (1.0f - acumColor.a) * color;
 		Debug = vec4(acumColor.rgb, 1.0);

@@ -15,7 +15,7 @@
 
 class Mesh;
 class CTexture;
-class C3DTextureRenderer : public CRenderer
+class C3DTextureRenderer : public CRenderer //give a proper name
 {
 public:
     C3DTextureRenderer (VkRenderPass renderPass);
@@ -68,6 +68,8 @@ private:
     CComputePipeline            m_generatePipeline;
     VkDescriptorSetLayout       m_generateDescLayout;
     VkDescriptorSet             m_generateDescSet;
+
+    bool                        m_needGenerateTexture;
 };
 
 class CVolumetricRenderer : public CRenderer

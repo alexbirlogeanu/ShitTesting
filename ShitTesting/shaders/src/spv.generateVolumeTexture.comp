@@ -25,8 +25,8 @@ float Compute(vec2 dir, float A, float wave, float speed, float time, vec2 coord
 
 vec3 colors[3] = {vec3(1.0f, 0.0f, 0.0f), vec3(0.0f, 1.0f, 0.0f), vec3(0.0f, 0.0f, 1.0f)};
 
- void main()
- {
+void GenerateRandomTexture()
+{
 	float layers = float(gl_NumWorkGroups.z);
 	
 	//vec4 c = texture(PatternTexture, uv);
@@ -55,8 +55,12 @@ vec3 colors[3] = {vec3(1.0f, 0.0f, 0.0f), vec3(0.0f, 1.0f, 0.0f), vec3(0.0f, 0.0
 	{
 		ivec3 currPosition = ivec3(row, y, int(layer));
 		imageStore(VolumeTexture, currPosition, c);
-	}
-	
-	
- }
+	}	
+
+}
+
+void main()
+{
+	GenerateRandomTexture();
+}
  
