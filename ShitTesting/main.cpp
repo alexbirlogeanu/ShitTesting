@@ -13,7 +13,11 @@
 #include <functional>
 #include <queue>
 #include <typeinfo>
+#include <unordered_set>
+#include <memory>
+#include <array>
 
+#include "Event.h"
 #include <crtdbg.h>
 #include <windows.h>
 #include <random>
@@ -21,7 +25,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <limits>
-#include <memory>
 
 #include "FU.h"
 #include "../vulkan/VulkanLoader.h"
@@ -169,23 +172,6 @@ public:
         p = v.data();
     }
 };
-
-class Device
-{
-};
-
-template<class VKTYPE, class P = Device>
-class VkHandle
-{
-private:
-    VKTYPE m_handle;
-    P m_parent;
-};
-
-class Buffer
-{
-};
-
 
 class CThread
 {
@@ -667,6 +653,10 @@ struct P
 class A
 {
 public:
+    A() 
+        : result(5)
+    {}
+
     virtual ~A()
     {
     }
@@ -695,6 +685,14 @@ public:
     virtual int Compute(P p)
     {
         cout << "A::Compute" << endl;
+        result = p.a + p.b;
+        return result;
+    }
+
+    int Compute2(P& p)
+    {
+        cout << "A::Compute2" << endl;
+        p.a *= 2;
         result = p.a + p.b;
         return result;
     }
@@ -751,6 +749,7 @@ public:
 class Wait
 {
 public:
+
     ~Wait()
     {
         Pause();
@@ -759,83 +758,162 @@ public:
 
 static Wait w;
 
-template<typename TR, typename R>
-class CB
+template <typename T>
+struct has_typedef_foobar {
+    // Types "yes" and "no" are guaranteed to have different sizes,
+    // specifically sizeof(yes) == 1 and sizeof(no) == 2.
+    typedef char yes[1];
+    typedef char no[2];
+
+    template <typename C>
+    static yes& test(typename C::foobar*);
+
+    template <typename>
+    static no& test(...);
+
+    // If the "sizeof" of the result of calling test<T>(0) would be equal to sizeof(yes),
+    // the first overload worked and T has a nested type named foobar.
+    static const bool value = sizeof(test<T>(0)) == sizeof(yes);
+};
+
+struct foo {    
+    typedef float foobar;
+};
+
+class State
 {
 public:
-    typedef R (*func)(TR&);
-    CB(TR* obj, func f)
-        : m_obj(obj)
-        , m_func(f)
+    State()
     {}
+    virtual ~State(){}
 
-    R operator()()
+    virtual void Execute() = 0;
+    virtual bool IsLeaf() = 0;
+    virtual State* GetSelectedState() const = 0;
+    virtual void Link(){};
+};
+
+template<typename T>
+class StateImpl : public State
+{
+public:
+    StateImpl()
+        //: m_outs(nullptr)
+        : m_selectedState(nullptr)
     {
-        return m_func(m_obj);
+    }
+
+    virtual ~StateImpl(){}
+    virtual void Execute() = 0;
+    State* GetSelectedState() const final
+    {
+        return m_selectedState;
+    }
+
+    bool IsLeaf()  final
+    {
+        return m_outs.size() == 0;
+    }
+    void Link(T index, State* state) 
+    { 
+        BREAKPOINT(index < T::Count);
+        m_outs[(unsigned int)index] = state;
+    }
+
+protected:
+    //methods
+    void SelectOutState(T index)
+    {
+         BREAKPOINT(index < T::Count);
+         unsigned int uIndex = (unsigned int)index;
+         BREAKPOINT(m_outs[uIndex]);
+         m_selectedState = m_outs[uIndex];
     }
 
 private:
-    TR*     m_obj;
-    func    m_func;
+    std::array<State*, (unsigned int)T::Count> m_outs;
+    State*          m_selectedState;
 };
 
-//class Event;
-//class ListenerBase
-//{
-//public:
-//    ListenerBase();
-//    virtual ~ListenerBase();
-//
-//    void Send(Event* ) = 0;
-//};
-//
-//template<typename EVENT, typename FUNC>
-//class Listener : public ListenerBase
-//{
-//public:
-//
-//};
+enum class EBinary
+{
+    False,
+    True,
+    Count
+};
 
+enum class EEmpty
+{
+    Count
+};
+class BinaryState : public StateImpl<EBinary>
+{
+public:
+    BinaryState(bool defaultValue)
+        : m_value(defaultValue)
+    {}
 
+    void Execute()
+    {
+        std::cout << "Executing Binary State with value= " <<  ((m_value)? "True" : "False") << std::endl;
+        EBinary outIndex = EBinary::False;
+        if (m_value)
+            outIndex = EBinary::True;
+
+        SelectOutState(outIndex);
+    }
+    
+private:
+    bool        m_value;
+};
+
+class NoState : public StateImpl<EEmpty>
+{
+public:
+    void Execute()
+    {
+        std::cout << "Transitioning to No State" << std::endl;
+    }
+};
+
+class YesState : public StateImpl<EEmpty>
+{
+public:
+    void Execute()
+    {
+        std::cout << "Transitioning to Yes State" << std::endl;
+    }
+};
 
 int main (int argc, char** argv)
 {
-    A a;
-    B b;
-    C c;
+    /*std::cout << std::boolalpha;
+    std::cout << has_typedef_foobar<int>::value << std::endl;
+    std::cout << has_typedef_foobar<foo>::value << std::endl;*/
 
-    typedef Callback1<int,P> Callback;
-    Callback acb (&a, &A::Compute);
-    Callback bcb (&b, &B::Compute);
-    Callback ccb (&c, &C::Compute);
 
-    std::vector<Callback> callbacks;
-    callbacks.push_back(std::move(acb));
-    callbacks.push_back(std::move(bcb));
-    callbacks.push_back(std::move(ccb));
+    BinaryState trueState(true);
+    BinaryState falseState(false);
+    NoState noState;
+    YesState yesState;
 
-    P p (5, 4);
-    for(unsigned int i = 0; i < callbacks.size(); ++i)
-        callbacks[i](p);
+    trueState.Link(EBinary::True, &falseState);
+    trueState.Link(EBinary::False, &noState);
 
-    typedef Callback0<void> Printer;
-    std::vector<Printer> printers;
-    Printer printA(&a, &A::PrintResult);
-    Printer printB(&b, &A::PrintResult);
-    Printer printC(&c, &A::PrintResult);
+    falseState.Link(EBinary::True, &yesState);
+    falseState.Link(EBinary::False, &noState);
 
-    printers.push_back(std::move(printA));
-    printers.push_back(std::move(printB));
-    printers.push_back(std::move(printC));
+    State* currentState;
+    currentState = &trueState; //starting state
 
-    for(unsigned int i = 0; i < printers.size(); ++i)
-        printers[i]();
+    while (!currentState->IsLeaf())
+    {
+        currentState->Execute();
+        currentState = currentState->GetSelectedState();
+    }
 
-    cout << "Result A: " << a.GetResult() << endl;
-    cout << "Result B: " << b.GetResult() << endl;
-    cout << "Result c: " << c.GetResult() << endl;
+    if (currentState)
+        currentState->Execute();
 
-    callbacks.clear();
-    printers.clear();
     return 0;
 }
