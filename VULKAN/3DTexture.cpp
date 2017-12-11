@@ -221,7 +221,7 @@ void C3DTextureRenderer::FillParams()
 
     unsigned int waves = 4;
     m_parameters.Globals = glm::vec4(dir, 0.0f, 1.0f);
-    m_parameters.NumberOfWaves = glm::vec4(waves);
+    m_parameters.NumberOfWaves = glm::vec4((float)waves);
     //                                A,     Wavelength,  Speed * Dir
     m_parameters.Waves[0] = glm::vec4(0.4f, 0.5f, 0.055f * directionNoise());
     m_parameters.Waves[1] = glm::vec4(0.75f, 0.8f, 0.04f * directionNoise());

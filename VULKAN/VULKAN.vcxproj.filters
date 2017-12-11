@@ -66,6 +66,9 @@
     <ClCompile Include="DebugMarkers.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Object.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="VulkanLoader.h">
@@ -123,6 +126,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ResourceTable.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Object.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

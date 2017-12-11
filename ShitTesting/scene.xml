@@ -1,0 +1,26 @@
+<!-- for the object type: 0 -means an object just with albedo text, 1 - means an object wuth normal map -->
+<?xml version="1.0" encoding="UTF-8"?>
+<objects> 
+	<object mesh="obj\\sphere.obj" type="0" castShadow="1" roughness="0.9" metalness="0.1" F0="0.5f" name="plastic_sphere">
+		<albedoText file="pussy.png" sRGB="1"/>
+		<position x="-1.5" y="-0.5" z="-3.0"/>
+	</object>
+	
+	<object mesh="obj\\sphere.obj" type="0" castShadow="1" roughness="0.45" metalness="1.0" F0="0.5f" name="metal_sphere">
+		<albedoText file="pussy.png" sRGB="1"/>
+		<position x="0.0" y="-0.5" z="-3.0"/>
+	</object>
+	
+	<object mesh="obj\\dragon.obj" type="0" castShadow="1" roughness="1.0" metalness="0.1" F0="0.5f" name="dragon">
+		<albedoText file="grey.png" sRGB="1"/>
+		<position x="1.5" y="-1.0" z="-3.0"/>
+		<scale value="0.1"/>
+	</object>
+	
+	<object mesh="obj\\plane.obj" type="1" castShadow="0" roughness="0.95" metalness="0.05" F0="0.9" name="plane">
+		<albedoText file="bricks2.png" sRGB="1"/>
+		<normalMap file="bricks2_normal.png" sRGB="0" />
+		<position x="0.0" y="-1.0" z="-3.0"/>
+		<scale x="10.0" y="1.0" z="10.0"/>
+	</object>
+</objects>

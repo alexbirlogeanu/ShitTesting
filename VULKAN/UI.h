@@ -62,7 +62,6 @@ public:
 private:
     void GatherPointsOfInterests(TXmlDocument* doc);
     void GatherMetadata();
-    void ReadXmlFile(const std::string& xml, char** fileContent);
     void LoadFontTexture();
     void GetGlyphs();
     void ParseGlyphs(TXmlNode* charNode);

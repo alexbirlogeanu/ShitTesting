@@ -6,7 +6,6 @@ layout(std140, set = 0, binding = 0) uniform in_params
 {
 	mat4 mvp;
 	mat4 worldMatrix;
-	mat4 shadowMatrix;
 	vec4 materialProp; //x = roughness, y = k, z = F0
 	vec4 viewPos;
 }param;

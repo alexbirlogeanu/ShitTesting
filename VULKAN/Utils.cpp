@@ -1,11 +1,13 @@
 #include "Utils.h"
 
-#include "Camera.h"
-#include "defines.h"
 #include <algorithm>
 #include <fstream>
-#include "Mesh.h"
 #include <cstring>
+#include <fstream>
+
+#include "Camera.h"
+#include "defines.h"
+#include "Mesh.h"
 
 #define SHADERDIR "shaders/bin/"
 
@@ -541,4 +543,30 @@ VkPipelineShaderStageCreateInfo CreatePipelineStage(VkShaderModule modue, VkShad
     pipelineStage.pSpecializationInfo = nullptr;
 
     return pipelineStage;
+}
+
+void ReadXmlFile(const std::string& xmlFile, char** fileContent)
+{
+    std::ifstream hXml (xmlFile, std::ifstream::in);
+    TRAP(hXml.is_open());
+
+    hXml.seekg(0, std::ios_base::end);
+    std::streamoff size = hXml.tellg();
+    hXml.seekg(0, std::ios_base::beg);
+    *fileContent = new char[size + 1];
+    char* line = new char[512];
+    uint64_t offset = 0;
+    while(true)
+    {
+        hXml.getline(line, 512);
+        if(hXml.eof())
+            break;
+
+        TRAP(!hXml.fail());
+        std::streamoff bytes = hXml.gcount();
+        memcpy(*fileContent + offset, line, bytes - 1); //exclude \0
+        offset += bytes - 1; //gcount count delim too
+    }
+    (*fileContent)[offset] = '\0';
+    hXml.close();
 }

@@ -34,6 +34,7 @@
 #include "SkyRenderer.h"
 #include "3DTexture.h"
 #include "ShadowRenderer.h"
+#include "Object.h"
 
 #define NUM_OF_CUBES 3
 
@@ -404,239 +405,24 @@ private:
 };
 
 //=======================Scene prototype=============================
-class CObject;
 class CScene
 {
 public:
-    static void AddObject(CObject* obj);
+    static void AddObject(Object* obj);
 
     static BoundingBox GetBoundingBox() { return ms_sceneBoundingBox; };
 private:
     static void UpdateBoundingBox();
 private:
-    static std::unordered_set<CObject*>     ms_sceneObjects;
+    static std::unordered_set<Object*>      ms_sceneObjects;
     static BoundingBox                      ms_sceneBoundingBox;
 };
 
-std::unordered_set<CObject*> CScene::ms_sceneObjects;
+std::unordered_set<Object*> CScene::ms_sceneObjects;
 BoundingBox CScene::ms_sceneBoundingBox;
 
 //======================= End: Scene prototype=============================
-class CObject : public ShadowCaster, public CPickable
-{
-private:
-    
-public:
-    CObject()
-        :  m_shaderParamBuffer(VK_NULL_HANDLE)
-        , m_shaderParamMemory(VK_NULL_HANDLE)
-        , m_texture(nullptr)
-        , m_shaderParamsData(nullptr)
-        , m_yRot(0.0f)
-        , m_xRot(0.0f)
-        , m_worldPosition(glm::vec3(0))
-        , m_mesh(nullptr)
-        , m_scale(1.0f)
-        , m_roughtness(1.0f)
-        , m_metallic(0.5f)
-        , F0(0.8f)
-
-    {
-
-        CreateShaderBuffer();
-    }
-
-    void SetTexture(CTexture* text)
-    {
-        m_texture = text;
-    }
-
-    void SetMesh(Mesh* mesh)
-    {
-        m_mesh = mesh;
-        CScene::AddObject(this);
-    }
-
-    void RotateX(float dir)
-    {
-        m_xRot += dir * glm::quarter_pi<float>();
-    }
-
-    void RotateY(float dir)
-    {
-        m_yRot += dir * glm::quarter_pi<float>();
-    }
-
-    void Translatez(float dir)
-    {
-        m_worldPosition += glm::vec3(.0f, .0f, dir);
-    }
-
-    void TranslateX(float dir)
-    {
-        m_worldPosition += glm::vec3(dir, .0f, .0f);
-    }
-
-    void SetScale(glm::vec3 scale)
-    {
-        m_scale = scale;
-    }
-
-    void SetPosition(glm::vec3 pos)
-    {
-        m_worldPosition = pos;
-    }
-
-    void SetMaterialProperties(float roughness = 1, float k = 0.5, float F0 = 0.8)
-    {
-        m_roughtness = roughness;
-        this->m_metallic = k;
-        this->F0 = F0;
-    }
-
-    virtual void GetPickableDescription(std::vector<std::string>& texts) override
-    {
-        texts.reserve(2);
-        texts.push_back("R/T Change roughness: " + std::to_string(m_roughtness));
-        texts.push_back("F/G Change metallic: " + std::to_string(m_metallic));
-    }
-
-    virtual bool ChangePickableProperties(unsigned int key) override
-    {
-        if (key == 'R')
-        {
-            m_roughtness = glm::max(m_roughtness - 0.05f, 0.0f);
-            return true;
-        }
-        else if(key == 'T')
-        {
-            m_roughtness = glm::min(m_roughtness + 0.05f, 1.0f);
-            return true;
-        }
-        else if(key == 'F')
-        {
-            m_metallic = glm::max(m_metallic - 0.05f, 0.0f);
-            return true;
-        }
-        else if(key == 'G')
-        {
-            m_metallic = glm::min(m_metallic + 0.05f, 1.0f);
-            return true;
-        }
-
-        return false;
-    }
-
-    virtual glm::mat4 GetModelMatrix()
-    {
-        glm::mat4 model = glm::mat4(1.0f);
-
-        model = glm::translate(model, m_worldPosition);
-        model = glm::scale(model, m_scale);
-
-        glm::mat4 rotateMatY = glm::rotate(glm::mat4(1.0), m_yRot, glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 rotateMatX = glm::rotate(glm::mat4(1.0), m_xRot, glm::vec3(1.0f, 0.0f, 0.0f));
-        glm::mat4 rotateMat = rotateMatX * rotateMatY;
-        
-        model = model * rotateMat;
-
-        return model;
-    }
-
-    BoundingBox GetBoundingBox() 
-    {
-        return m_mesh->GetBB();
-    }
-
-    virtual void BindDescriptors(VkDescriptorSet updateSet)
-    {
-        VkDescriptorBufferInfo buffInfo;
-
-        buffInfo.offset = 0;
-        buffInfo.range = sizeof(ShaderParams);
-        buffInfo.buffer = m_shaderParamBuffer;
-        VkWriteDescriptorSet writes[2];
-        writes[0] = InitUpdateDescriptor(updateSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfo);
-
-        TRAP(m_texture);
-        writes[1] = InitUpdateDescriptor(updateSet, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &m_texture->GetTextureDescriptor());
-
-        vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, 2, writes, 0, nullptr);
-    }
-
-
-
-    void UpdateShaderParams(glm::mat4& projView, glm::mat4& shadowMat)
-    {
-        //compute matrix
-        glm::mat4 model = glm::mat4(1.0f);
-        
-        model = glm::translate(model, m_worldPosition);
-        model = glm::scale(model, m_scale);
-
-        glm::mat4 rotateMatY = glm::rotate(glm::mat4(1.0), m_yRot, glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 rotateMatX = glm::rotate(glm::mat4(1.0), m_xRot, glm::vec3(1.0f, 0.0f, 0.0f));
-        glm::mat4 rotateMat = rotateMatX * rotateMatY;
-        glm::mat4 projViewMatrix =  projView;
-        //ConvertToProjMatrix(projViewMatrix);
-
-        model = model * rotateMat;
-
-        ShaderParams newParams;
-        newParams.mvpMatrix =  projViewMatrix * model;
-        newParams.worldMatrix = model;
-        newParams.shadowMatrix = shadowMat;
-        newParams.materialProperties = glm::vec4(m_roughtness, m_metallic, F0, 0.0f);
-        newParams.viewPos = glm::vec4(ms_camera.GetPos(), 1.0f);
-
-        ShaderParams* params = (ShaderParams*)m_shaderParamsData;
-        memcpy(params, &newParams, sizeof(ShaderParams));
-    }
-    
-    void Render()
-    {
-        m_mesh->Render();
-    }
-
-    ~CObject()
-    {
-        VkDevice dev = vk::g_vulkanContext.m_device;
-        vk::UnmapMemory(vk::g_vulkanContext.m_device, m_shaderParamMemory);
-        vk::DestroyBuffer(vk::g_vulkanContext.m_device, m_shaderParamBuffer, nullptr);
-        vk::FreeMemory(vk::g_vulkanContext.m_device, m_shaderParamMemory, nullptr);
-    }
-
-protected:
-    void CreateShaderBuffer()
-    {
-        AllocBufferMemory(m_shaderParamBuffer, m_shaderParamMemory, sizeof(ShaderParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-        VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_shaderParamMemory, 0, sizeof(ShaderParams), 0, &m_shaderParamsData));
-    }
-    
-    Mesh*            m_mesh;
-
-    VkBuffer                m_shaderParamBuffer;
-    VkDeviceMemory          m_shaderParamMemory;
-    void*                   m_shaderParamsData;
-
-    CTexture*               m_texture;
-
-    //VkDescriptorSet         m_descriptor;
-
-    glm::vec3               m_worldPosition;
-    glm::vec3               m_scale;
-
-    //material properties
-    float                   m_roughtness;
-    float                   F0;
-    float                   m_metallic;
-
-    float                   m_yRot;
-    float                   m_xRot;
-};
-
-
-void CScene::AddObject(CObject* obj)
+void CScene::AddObject(Object* obj)
 {
     auto result = ms_sceneObjects.insert(obj);
     TRAP(result.second == true);
@@ -668,27 +454,6 @@ void CScene::UpdateBoundingBox()
     ms_sceneBoundingBox.Max = maxLimits;
     ms_sceneBoundingBox.Min = minLimits;
 }
-
-
-enum GBuffer //until refactoring change values into ao.cpp too
-{
-    GBuffer_Albedo,
-    GBuffer_Specular,
-    GBuffer_Normals,
-    GBuffer_Position,
-    GBuffer_Final,
-    GBuffer_Debug,
-    GBuffer_Count,
-    GBuffer_InputCnt = GBuffer_Position - GBuffer_Albedo + 1,
-};
-
-class CObject;
-
-enum EDeferredSubpass //obsolete
-{
-    EDefSubpass_Solid,
-    EDefSubpass_Count
-};
 
 enum ELightSubpass
 {
@@ -787,26 +552,6 @@ public:
 
         AllocDescriptorSets(m_descriptorPool);
         CreateNearestSampler(m_sampler);
-
-        /*VkSamplerCreateInfo samplerDepthCreateInfo;
-        cleanStructure(samplerDepthCreateInfo);
-        samplerDepthCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerDepthCreateInfo.magFilter = VK_FILTER_LINEAR;
-        samplerDepthCreateInfo.minFilter = VK_FILTER_LINEAR;
-        samplerDepthCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        samplerDepthCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-        samplerDepthCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-        samplerDepthCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-        samplerDepthCreateInfo.mipLodBias = 0.0;
-        samplerDepthCreateInfo.anisotropyEnable = VK_FALSE;
-        samplerDepthCreateInfo.maxAnisotropy = 0;
-        samplerDepthCreateInfo.compareOp = VK_COMPARE_OP_LESS;
-        samplerDepthCreateInfo.minLod = 0.0;
-        samplerDepthCreateInfo.maxLod = 0.0;
-        samplerDepthCreateInfo.compareEnable = VK_TRUE;
-        samplerDepthCreateInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-
-        VULKAN_ASSERT(vk::CreateSampler(vk::g_vulkanContext.m_device, &samplerDepthCreateInfo, nullptr, &m_depthSampler));*/
 
         CreateNearestSampler(m_depthSampler);
 
@@ -1153,8 +898,6 @@ public:
 
         EndRenderPass();
     }
-
-    void SetProjMatrixPtr(glm::mat4* ptr) { m_projPtr = ptr; }
     
     void CycleLights(int step)
     {
@@ -1199,6 +942,8 @@ public:
     virtual void Init() override
     {
         CRenderer::Init();
+        PerspectiveMatrix(m_projPtr);
+        ConvertToProjMatrix(m_projPtr);
 
         AllocDescriptors(m_descriptorPool);
 
@@ -1363,12 +1108,13 @@ protected:
         if (m_editModeEnabled)
             UpdateEditMode();
 
+
         VkDevice dev = vk::g_vulkanContext.m_device;
         //update uniform params
         SPointLightCommon* common = nullptr;
         VULKAN_ASSERT(vk::MapMemory(dev, m_pointLightsCommonMemory, 0, VK_WHOLE_SIZE, 0, (void**)&common));
         common->CameraPosition = glm::vec4(ms_camera.GetPos(), 1.0f);
-        common->ProjViewMatrix = *m_projPtr; //in projMat is in fact ProjView, because good programming
+        common->ProjViewMatrix = m_projPtr * ms_camera.GetViewMatrix();
         vk::UnmapMemory(dev, m_pointLightsCommonMemory);
 
         for(unsigned int i = 0; i < m_nodes.size(); ++i)
@@ -1459,7 +1205,7 @@ private:
     std::array<SLightNode, ms_plCnt> m_nodes;
 
     Mesh*           m_pointLightMesh;
-    glm::mat4*      m_projPtr;
+    glm::mat4       m_projPtr;
 
     CGraphicPipeline       m_stencilCullingPipeline;
     CGraphicPipeline       m_pipeline;
@@ -1486,221 +1232,6 @@ private:
     CUIManager*     m_manager;
     CUITextContainer*        m_editModeInfo;
 
-};
-
-class CObject;
-class CObjectRenderer : public CRenderer
-{
-public:
-    CObjectRenderer(VkRenderPass renderPass)
-        : CRenderer(renderPass, "SolidRenderPass")
-        , m_objDescSetLayout(VK_NULL_HANDLE)
-    {
-        
-    }
-
-    virtual ~CObjectRenderer()
-    {
-        VkDevice dev = vk::g_vulkanContext.m_device;
-
-        vk::DestroyDescriptorSetLayout(dev, m_objDescSetLayout, nullptr);
-    }
-
-    glm::mat4& GetProj() { return m_proj; }
-
-    virtual void AddShaders(CGraphicPipeline& pipeline)
-    {
-        pipeline.SetVertexShaderFile("vert.spv");
-        pipeline.SetFragmentShaderFile("frag.spv");
-    }
-
-    virtual void SetObjects(std::vector<CObject*> objects)
-    {
-        m_objects = objects;
-        for(unsigned int i = 0; i < m_objects.size(); ++i)
-        {
-            m_objects[i]->BindDescriptors(m_objDescSet[i]);
-        }
-    }
-
-    void SetShadowMatrixPtr(glm::mat4* mPtr) { m_shadowProjMatrix = mPtr; }
-    virtual void Render() override
-    {
-        VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
-
-        vk::CmdBindPipeline(cmd, m_pipeline.GetBindPoint(), m_pipeline.Get());
-
-        glm::mat4 view = ms_camera.GetViewMatrix();
-        PerspectiveMatrix(m_proj);
-        ConvertToProjMatrix(m_proj);
-
-        m_proj = m_proj * view;
-        for(unsigned int i = 0; i < m_objects.size(); i++)
-        {
-            m_objects[i]->UpdateShaderParams(m_proj, *m_shadowProjMatrix);
-            vk::CmdBindDescriptorSets(cmd, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, (uint32_t)1, &m_objDescSet[i], 0, nullptr); //try to bind just once
-
-            m_objects[i]->Render();
-        }
-    }
-
-    virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override
-    {
-        uint32_t size = (uint32_t)NUM_OF_CUBES;
-        AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, size);
-        AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, size);
-
-        maxSets = size;
-    }
-
-    virtual void Init() override
-    {
-        CRenderer::Init();
-
-        unsigned int size = (uint32_t)NUM_OF_CUBES;
-        std::vector<VkDescriptorSetLayout> layouts (size, m_objDescSetLayout);
-        m_objDescSet.resize(size);
-
-        AllocDescriptorSets(m_descriptorPool, layouts, m_objDescSet);
-
-        m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
-        AddShaders(m_pipeline);
-        m_pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), GBuffer_InputCnt);
-
-        m_pipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
-        m_pipeline.CreatePipelineLayout(m_objDescSetLayout);
-        m_pipeline.Init(this, m_renderPass, EDefSubpass_Solid);
-    }
-
-protected:
-    virtual void CreateDescriptorSetLayout() override
-    {
-        std::vector<VkDescriptorSetLayoutBinding> descCnt;
-        descCnt.resize(2);
-        descCnt[0] = CreateDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-        descCnt[1] = CreateDescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-
-        VkDescriptorSetLayoutCreateInfo descSetLayoutCi;
-        cleanStructure(descSetLayoutCi);
-        descSetLayoutCi.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        descSetLayoutCi.pNext = nullptr;
-        //flags
-        descSetLayoutCi.bindingCount = (uint32_t)descCnt.size();
-        descSetLayoutCi.pBindings = descCnt.data();
-
-        VULKAN_ASSERT(vk::CreateDescriptorSetLayout(vk::g_vulkanContext.m_device, &descSetLayoutCi, nullptr, &m_objDescSetLayout));
-    }
-
-    virtual void UpdateResourceTable() override
-    {
-        UpdateResourceTableForColor(GBuffer_Final, EResourceType_FinalImage);
-        UpdateResourceTableForColor(GBuffer_Albedo, EResourceType_AlbedoImage);
-        UpdateResourceTableForColor(GBuffer_Specular, EResourceType_SpecularImage);
-        UpdateResourceTableForColor(GBuffer_Normals, EResourceType_NormalsImage);
-        UpdateResourceTableForColor(GBuffer_Position, EResourceType_PositionsImage);
-        UpdateResourceTableForDepth(EResourceType_DepthBufferImage);
-    }
-
-protected:
-    
-    std::vector<CObject*>       m_objects;
-    glm::mat4*                  m_shadowProjMatrix;
-    glm::mat4                   m_proj;
-
-    CGraphicPipeline                   m_pipeline;
-
-    VkDescriptorSetLayout       m_objDescSetLayout;
-    std::vector<VkDescriptorSet>    m_objDescSet;
-};
-
-
-class CTerrain : public CObject
-{
-public:
-    CTerrain() 
-        : CObject()
-        , m_normalMap(nullptr)
-        , m_depthMap(nullptr)
-    {
-    }
-
-    virtual void BindDescriptors(VkDescriptorSet updateSet) override
-    {
-        CObject::BindDescriptors(updateSet);
-
-        TRAP(m_normalMap);
-        TRAP(m_depthMap);
-
-        VkWriteDescriptorSet wDesc[2];
-        wDesc[0] = InitUpdateDescriptor(updateSet, 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &m_normalMap->GetTextureDescriptor());
-        wDesc[1] = InitUpdateDescriptor(updateSet, 3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &m_depthMap->GetTextureDescriptor());
-
-        vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, 2, &wDesc[0], 0, nullptr);
-    }
-
-    void SetNormalMap(CTexture* text) { m_normalMap = text; }
-    void SetDepthMap(CTexture* text) { m_depthMap = text; }
-
-    CTexture* GetNormalMap() { return m_normalMap; }
-private:
-    CTexture*   m_normalMap;
-    CTexture*   m_depthMap;
-};
-
-class CTerrainRenderer : public CObjectRenderer
-{
-public:
-    CTerrainRenderer(VkRenderPass renderPass)
-        : CObjectRenderer(renderPass)
-    {
-    }
-
-    virtual ~CTerrainRenderer()
-    {
-    }
-
-    virtual void SetObjects(std::vector<CObject*> objects) override
-    {
-        TRAP(objects.size() == 1);
-        CTerrain* terrain = dynamic_cast<CTerrain*>(objects[0]);
-        TRAP(terrain);
-
-        CObjectRenderer::SetObjects(objects);
-    }
-
-    virtual void AddShaders(CGraphicPipeline& pipeline) override
-    {
-        pipeline.SetVertexShaderFile("normal.vert");
-        pipeline.SetFragmentShaderFile("normal.frag");
-    }
-
-protected:
-    virtual void CreateDescriptorSetLayout() override
-    {
-        std::vector<VkDescriptorSetLayoutBinding> descCnt;
-        descCnt.resize(4);
-        descCnt[0] = CreateDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-        descCnt[1] = CreateDescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-        descCnt[2] = CreateDescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-        descCnt[3] = CreateDescriptorBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-
-        VkDescriptorSetLayoutCreateInfo descSetLayoutCi;
-        cleanStructure(descSetLayoutCi);
-        descSetLayoutCi.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        descSetLayoutCi.pNext = nullptr;
-        //flags
-        descSetLayoutCi.bindingCount = (uint32_t)descCnt.size();
-        descSetLayoutCi.pBindings = descCnt.data();
-
-        VULKAN_ASSERT(vk::CreateDescriptorSetLayout(vk::g_vulkanContext.m_device, &descSetLayoutCi, nullptr, &m_objDescSetLayout));
-    }
-
-    virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)
-    {
-        AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, NUM_OF_CUBES * 3);
-        AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NUM_OF_CUBES * 1);
-        maxSets = NUM_OF_CUBES;
-    }
 };
 
 class CSkyRenderer : public CRenderer
@@ -2342,22 +1873,9 @@ private:
     VkFence                     m_renderFence;
     VkSemaphore                 m_renderSemaphore;
 
-    CTexture*                   m_texture;
-    Mesh*                       m_objectMesh;
-    Mesh*                       m_monkeyMesh;
-    CTexture*                   m_monkeyTexture;
-    std::vector<CObject*>       m_objects;
-    //CObject*                    m_plane;
-
-    CTerrain*                   m_plane;
-    CTexture*                   m_planeTexture;
-    CTexture*                   m_normalMap;
-    CTexture*                   m_depthMap;
-
     CCubeMapTexture*            m_skyTextureCube;
     CTexture*                   m_skyTexture2D;
     CTexture*                   m_sunTexture;
-    Mesh*                       m_planeMesh;
 
     //particles
     CConeSpawner*               m_coneSpawner;
@@ -2367,8 +1885,7 @@ private:
     CTexture*                   m_smokeTexture;
     CTexture*                   m_rainTexture;
 
-    CObjectRenderer*            m_objectRenderer;
-    CTerrainRenderer*           m_terrainRenderer;
+    ObjectRenderer*             m_objectRenderer;
     CAORenderer*                m_aoRenderer;
     CLightRenderer*             m_lightRenderer;
     CPointLightRenderer*        m_pointLightRenderer;
@@ -2425,7 +1942,6 @@ CApplication::CApplication()
     , m_renderSemaphore(VK_NULL_HANDLE)
     , m_renderFence(VK_NULL_HANDLE)
     , m_currentBuffer(-1)
-    , m_texture(nullptr)
     , m_skyTextureCube(nullptr)
     , m_skyTexture2D(nullptr)
     , m_sunTexture(nullptr)
@@ -2434,7 +1950,6 @@ CApplication::CApplication()
     , m_pointLightRenderer(nullptr)
     , m_particlesRenderer(nullptr)
     , m_objectRenderer(nullptr)
-    , m_terrainRenderer(nullptr)
     , m_aoRenderer(nullptr)
     , m_shadowRenderer(nullptr)
     , m_shadowResolveRenderer(nullptr)
@@ -2463,6 +1978,9 @@ CApplication::CApplication()
 
     CreateCommandBuffer();
 
+    CPickManager::CreateInstance();
+
+    ObjectFactory::LoadXml("scene.xml");
     //CreateDescriptorPool();
 
     SetupDeferredRendering();
@@ -2478,10 +1996,9 @@ CApplication::CApplication()
     SetupFogRendering();
     Setup3DTextureRendering();
     SetupVolumetricRendering();
-
-    CPickManager::CreateInstance();
-    GetPickManager()->Setup();
     
+    GetPickManager()->Setup();
+
     CreateSynchronizationHelpers();
     srand((unsigned int)time(NULL));
 
@@ -2494,19 +2011,10 @@ CApplication::~CApplication()
 
     delete m_uiManager;
 
-    for(auto cube : m_objects)
-    {
-        delete cube;
-    }
-
     delete m_smokeTexture;
-    delete m_texture;
-    delete m_monkeyTexture;
-    delete m_objectMesh;
-    delete m_monkeyMesh;
+
 
     delete m_objectRenderer;
-    delete m_terrainRenderer;
     delete m_aoRenderer;
     delete m_lightRenderer;
     delete m_pointLightRenderer;
@@ -2888,13 +2396,9 @@ void CApplication::SetupDeferredRendering()
 
     CreateDeferredRenderPass(fbDesc);
 
-    m_objectRenderer = new CObjectRenderer(m_deferredRenderPass);
+    m_objectRenderer = new ObjectRenderer(m_deferredRenderPass, ObjectFactory::GetObjects());
     m_objectRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
     m_objectRenderer->Init();
-
-    m_terrainRenderer = new CTerrainRenderer(m_deferredRenderPass);
-    m_terrainRenderer->SetFramebuffer(m_objectRenderer->GetFramebuffer());
-    m_terrainRenderer->Init();
 
 }
 
@@ -2942,7 +2446,6 @@ void CApplication::SetupLightingRendering()
     m_pointLightRenderer->Init();
     m_pointLightRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
 
-    m_pointLightRenderer->SetProjMatrixPtr(&m_objectRenderer->GetProj());//kek
 }
 
 void CApplication::CreateDeferredRenderPass(const FramebufferDescription& fbDesc)
@@ -2977,8 +2480,8 @@ void CApplication::CreateDeferredRenderPass(const FramebufferDescription& fbDesc
 
     std::vector<VkAttachmentReference> defAtts (&attachment_ref[GBuffer_Albedo], &attachment_ref[GBuffer_Albedo] + GBuffer_InputCnt) ;
     std::vector<VkSubpassDescription> sd;
-    sd.resize(EDefSubpass_Count);
-    sd[EDefSubpass_Solid] = CreateSubpassDesc(defAtts.data(), (uint32_t)defAtts.size(), &attachment_ref[depthIndex]);
+    sd.resize(1);
+    sd[0] = CreateSubpassDesc(defAtts.data(), (uint32_t)defAtts.size(), &attachment_ref[depthIndex]);
 
     VkRenderPassCreateInfo rpci;
     cleanStructure(rpci);
@@ -3797,90 +3300,11 @@ void CApplication::CreateResources()
 {
     bool isSrgb = true;
 
-    SImageData illImg;
-    SImageData monkeyImg;
-    Read2DTextureData(illImg, std::string(TEXTDIR) +  "pussy.png", isSrgb);
-    Read2DTextureData(monkeyImg, std::string(TEXTDIR) +  "grey.png", isSrgb);
-
-    //m_skyTextureCube = CreateSkyTexture();
-    //m_skyTextureCube->FinalizeCubeMap();
-
     m_skyTexture2D = Create2DSkyTexture();
 
     SImageData sun;
     Read2DTextureData(sun, std::string(TEXTDIR) + "sun2.png", false);
     m_sunTexture = new CTexture(sun, true);
-
-    m_texture = new CTexture(illImg, true);
-    
-    m_monkeyTexture = new CTexture(monkeyImg, true);
-
-    m_objectMesh = new Mesh("obj\\sphere.obj");
-    m_monkeyMesh = new Mesh("obj\\dragon.obj");
-
-    m_objects.resize(NUM_OF_CUBES);
-
-    for(int i = -NUM_OF_CUBES / 2;  i <= NUM_OF_CUBES / 2; ++i )
-    {
-        unsigned int index = i + NUM_OF_CUBES / 2;
-        m_objects[index] = new CObject();
-        m_shadowRenderer->AddShadowCaster(m_objects[index]);
-    }
-
-    float z = -3.f;
-    {
-
-        m_objects[0]->SetTexture(m_texture);
-        m_objects[0]->SetMaterialProperties(0.9f, 0.1f, 0.5f);
-        m_objects[0]->SetPosition(glm::vec3(-1.5f, -0.5f, z));
-        m_objects[0]->SetMesh(m_objectMesh);
-    }
-
-    {
-        m_objects[1]->SetMaterialProperties(0.45f, 1.0f, 0.5f);
-        m_objects[1]->SetTexture(m_texture);
-        m_objects[1]->SetScale(glm::vec3(1.0f));
-        m_objects[1]->SetPosition(glm::vec3(0.0f, -0.5f, z));
-        m_objects[1]->SetMesh(m_objectMesh);
-
-    }
-
-    {
-        m_objects[2]->SetMaterialProperties(1.0, 0.1f, 0.5f);
-        m_objects[2]->SetTexture(m_monkeyTexture);
-        m_objects[2]->SetScale(glm::vec3(0.1f));
-        m_objects[2]->SetPosition(glm::vec3(1.5f, -1.0f, z));
-        m_objects[2]->SetMesh(m_monkeyMesh);
-    }
-
-    SImageData planeImg;
-    Read2DTextureData(planeImg,std::string(TEXTDIR) +  "bricks2.png", isSrgb);
-    m_planeTexture = new CTexture(planeImg, true);
-    SImageData planeNormal;
-    Read2DTextureData(planeNormal,std::string(TEXTDIR) +  "bricks2_normal.png", false);
-    m_normalMap = new CTexture(planeNormal, true);
-    SImageData planeDepth;
-    Read2DTextureData(planeDepth,std::string(TEXTDIR) +  "bricks2_disp.png", false);
-    m_depthMap = new CTexture(planeDepth, true);
-
-    m_planeMesh = new Mesh("obj\\plane.obj");
-
-    //m_plane = new CObject();
-    m_plane = new CTerrain();
-    m_plane->SetTexture(m_planeTexture);
-    m_plane->SetPosition(glm::vec3(0.0f, -1.0f, -3.0f));
-    m_plane->SetScale(glm::vec3(10.0f, 1.0f, 10.0f));
-    m_plane->SetMaterialProperties(0.95f, 0.05f, 0.9f);
-    m_plane->SetNormalMap(m_normalMap);
-    m_plane->SetDepthMap(m_depthMap);
-    m_plane->SetMesh(m_planeMesh);
-    //m_objects.push_back(m_plane);
-
-    m_objectRenderer->SetObjects(m_objects);
-    m_objectRenderer->SetShadowMatrixPtr(&m_shadowRenderer->GetProjViewMatrix());
-
-    m_terrainRenderer->SetObjects(std::vector<CObject*>(1, m_plane));
-    m_terrainRenderer->SetShadowMatrixPtr(&m_shadowRenderer->GetProjViewMatrix());
 
     CRenderer::UpdateAll();
 
@@ -3964,12 +3388,7 @@ void CApplication::Render()
     RenderShadows();
     m_shadowResolveRenderer->UpdateShaderParams(m_shadowRenderer->GetProjViewMatrix());
 
-    m_objectRenderer->StartRenderPass();
-
     m_objectRenderer->Render();
-    m_terrainRenderer->Render();
-
-    m_objectRenderer->EndRenderPass();
 
     vk::CmdPipelineBarrier(vk::g_vulkanContext.m_mainCommandBuffer, 
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 
@@ -4220,16 +3639,6 @@ void CApplication::ProcMsg(UINT uMsg, WPARAM wParam,LPARAM lParam)
         if (wParam == 'S')
         {
             ms_camera.Translate(glm::vec3(0.0f, 0.0f, -1));
-        }
-        if (wParam == 'Z')
-        {
-            for(auto cube : m_objects)
-                cube->RotateX(-1.f);
-        }
-        if (wParam == 'X')
-        {
-            for(auto cube : m_objects)
-                cube->RotateY(1.f);
         }
 
         if (wParam == VK_F2)

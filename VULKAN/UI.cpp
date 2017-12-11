@@ -3,7 +3,6 @@
 #include "glm/gtc/constants.hpp"
 
 #include <iostream>
-#include <fstream>
 #include <cstdlib>
 #include <utility>
 #include <vector>
@@ -52,31 +51,6 @@ void CFontImporter::BuildFont()
     GetGlyphs(); //font should have the metadata set
 }
 
- void CFontImporter::ReadXmlFile(const std::string& xmlFile, char** fileContent)
- {
-     std::ifstream hXml (xmlFile, std::ifstream::in);
-     TRAP(hXml.is_open());
-
-     hXml.seekg(0, std::ios_base::end);
-     std::streamoff size = hXml.tellg();
-     hXml.seekg(0, std::ios_base::beg);
-     *fileContent = new char[size + 1];
-     char* line = new char[512];
-     uint64_t offset = 0;
-     while(true)
-     {
-         hXml.getline(line, 512);
-         if(hXml.eof())
-             break;
-
-         TRAP(!hXml.fail());
-         std::streamoff bytes = hXml.gcount();
-         memcpy(*fileContent + offset, line, bytes - 1); //exclude \0
-         offset += bytes - 1; //gcount count delim too
-     }
-     (*fileContent)[offset] = '\0';
-     hXml.close();
- }
 
 void CFontImporter::GatherMetadata()
 {

@@ -705,7 +705,6 @@ void CRenderer::Init()
     PopulatePoolInfo(poolSize, maxSets);
     CreateDescPool(poolSize, maxSets);
     CreateDescriptorSetLayout();
-    //UpdateResourceTable();
 }
 
 void CRenderer::CreateDescPool(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int maxSets)

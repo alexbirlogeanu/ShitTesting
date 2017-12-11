@@ -20,7 +20,7 @@ public:
 
     unsigned int GetId() const { return m_id; }
     virtual glm::mat4 GetModelMatrix()=0;
-    virtual BoundingBox GetBoundingBox()=0;
+    virtual BoundingBox GetBoundingBox() const =0;
     virtual void Render()=0;
     virtual void GetPickableDescription(std::vector<std::string>& texts)=0;
     virtual bool ChangePickableProperties(unsigned int key)=0;
@@ -125,8 +125,11 @@ private:
     static CPickManager*        ms_instance;
 
     bool                        m_editMode;
+    bool                        m_needRefresh;
 
     std::vector<CPickable*>     m_pickableObjects;
+    std::vector<CPickable*>     m_tempPickableObjects;
+
     unsigned int                m_selectedID;
     CPickable*                  m_pickedObject;
 

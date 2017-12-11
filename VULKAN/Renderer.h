@@ -212,8 +212,8 @@ public:
     void CreatePipelineLayout(VkDescriptorSetLayout layout);
     void CreatePipelineLayout(const std::vector<VkDescriptorSetLayout>& layouts);
 
-    VkPipeline Get() { return m_pipeline; }
-    VkPipelineLayout GetLayout() { return m_pipelineLayout; }
+    VkPipeline Get() const { return m_pipeline; }
+    VkPipelineLayout GetLayout() const { return m_pipelineLayout; }
 
     virtual VkPipelineBindPoint GetBindPoint() const = 0;
 protected:
@@ -275,6 +275,9 @@ public:
         return blendAttachs;
     }
 private:
+    CGraphicPipeline(const CGraphicPipeline& other) ;
+    CGraphicPipeline& operator=(const CGraphicPipeline& other);
+
     virtual void CleanInternal() override;
     virtual void CreatePipeline() override;
 
@@ -331,6 +334,9 @@ public:
 
     void SetComputeShaderFile(const std::string& file) { m_computeFilename = file; };
 protected:
+    CComputePipeline(const CComputePipeline& other);
+    CComputePipeline& operator=(const CComputePipeline& other);
+
     virtual void CreatePipeline() override;
     virtual void CleanInternal() override;
 private:
@@ -344,7 +350,7 @@ public:
     CRenderer(VkRenderPass renderPass, std::string renderPassMarker = std::string());
     virtual ~CRenderer();
 
-    virtual void Init();
+    virtual void Init(); //this is an anti pattern. Fix it
     virtual void Render() = 0;
 
     void StartRenderPass();
@@ -363,7 +369,7 @@ protected:
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)=0;
 
     virtual void UpdateResourceTable() {}
-    virtual void UpdateGraphicInterface() {} // = 0;
+    virtual void UpdateGraphicInterface() {} //= 0;
 
     void Reload();
     void CreateDescPool(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int maxSets);

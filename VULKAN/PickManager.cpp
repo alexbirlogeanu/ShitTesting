@@ -350,6 +350,7 @@ CPickManager::CPickManager()
     , m_renderPass(VK_NULL_HANDLE)
     , m_pickRenderer(nullptr)
     , m_editMode(false)
+    , m_needRefresh(true)
 {
 }
 
@@ -393,8 +394,19 @@ void CPickManager::Update()
     if (!m_editMode)
         return;
 
+    if (m_needRefresh)
+    {
+        for (auto pickObj : m_tempPickableObjects)
+        {
+            m_pickableObjects.push_back(pickObj);
+            m_pickRenderer->AddNode(pickObj);
+        }
+
+        m_tempPickableObjects.clear();
+        m_needRefresh = false;
+    }
+
     m_pickRenderer->Render();
-    
 
     if (m_selectedID != m_pickRenderer->GetSelectedID())
     {
@@ -514,9 +526,9 @@ void CPickManager::Register(CPickable* p)
     auto it = std::find(m_pickableObjects.begin(), m_pickableObjects.end(), p);
     if (it == m_pickableObjects.end())
     {
-        m_pickableObjects.push_back(p);
-        m_pickRenderer->AddNode(p);
+        m_tempPickableObjects.push_back(p);
     }
+    m_needRefresh = true;
 }
 
 void CPickManager::Unregister(CPickable* p)

@@ -59,5 +59,7 @@ void AddBufferBarier(VkBufferMemoryBarrier& outBarrier, VkBuffer& buffer, VkAcce
 
 VkPipelineShaderStageCreateInfo CreatePipelineStage(VkShaderModule modue, VkShaderStageFlagBits stage);
 
+void ReadXmlFile(const std::string& xml, char** fileContent);
+
 extern CCamera ms_camera;
 extern CDirectionalLight directionalLight;
