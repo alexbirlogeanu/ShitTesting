@@ -63,7 +63,6 @@ struct RTTShaderParams
 
 struct LightShaderParams
 {
-    glm::mat4       shadowProjView;
     glm::vec4       dirLight;
     glm::vec4       cameraPos;
     glm::vec4       lightIradiance;
@@ -343,118 +342,6 @@ public:
 };
 ScreenshotManager m_screenshotManager;
 
-class ShadowCaster
-{
-public:
-    ShadowCaster()
-    {
-        AllocBufferMemory(m_shadowParamBuffer, m_shadowParamMemory, sizeof(ShaderParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-        VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_shadowParamMemory, 0, sizeof(ShaderParams), 0, &m_shadowParamsData));
-    }
-
-    virtual glm::mat4 GetModelMatrix() = 0;
-    virtual void Render() = 0;
-
-    VkDescriptorSet& GetDescriptorSet() { return m_shadowDescriptor; }
-
-    void UpdateDescriptors()
-    {
-        VkDescriptorBufferInfo buffInfo;
-
-        buffInfo.offset = 0;
-        buffInfo.range = sizeof(ShaderParams);
-        buffInfo.buffer = m_shadowParamBuffer;
-        VkWriteDescriptorSet writes[1];
-
-        cleanStructure(writes[0]);
-        writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writes[0].pNext = nullptr;
-        writes[0].dstSet = m_shadowDescriptor;
-        writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        writes[0].dstBinding = 0;
-        writes[0].dstArrayElement  = 0;
-        writes[0].descriptorCount = 1;
-        writes[0].pBufferInfo = &buffInfo;
-
-        vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, 1, writes, 0, nullptr);
-
-    }
-    void UpdateShadowParams(glm::mat4 projView)
-    {
-
-        glm::mat4 model = GetModelMatrix();
-        glm::mat4 projViewMatrix = projView;
-        //ConvertToProjMatrix(projViewMatrix);
-       
-        ShaderParams newParams;
-        newParams.mvpMatrix =  projViewMatrix * model;
-        newParams.worldMatrix = model;
-        newParams.shadowMatrix = projViewMatrix;
-        newParams.materialProperties = glm::vec4(1.0f);
-
-        ShaderParams* params = (ShaderParams*)m_shadowParamsData;
-        memcpy(params, &newParams, sizeof(ShaderParams));
-    }
-
-private:
-    VkBuffer                m_shadowParamBuffer;
-    VkDeviceMemory          m_shadowParamMemory;
-    void*                   m_shadowParamsData;
-
-    VkDescriptorSet         m_shadowDescriptor;
-};
-
-//=======================Scene prototype=============================
-class CScene
-{
-public:
-    static void AddObject(Object* obj);
-
-    static BoundingBox GetBoundingBox() { return ms_sceneBoundingBox; };
-private:
-    static void UpdateBoundingBox();
-private:
-    static std::unordered_set<Object*>      ms_sceneObjects;
-    static BoundingBox                      ms_sceneBoundingBox;
-};
-
-std::unordered_set<Object*> CScene::ms_sceneObjects;
-BoundingBox CScene::ms_sceneBoundingBox;
-
-//======================= End: Scene prototype=============================
-void CScene::AddObject(Object* obj)
-{
-    auto result = ms_sceneObjects.insert(obj);
-    TRAP(result.second == true);
-
-    CScene::UpdateBoundingBox();
-}
-
-void CScene::UpdateBoundingBox()
-{
-    ms_sceneBoundingBox.Max = ms_sceneBoundingBox.Min = glm::vec3();
-    if (ms_sceneObjects.empty())
-        return;
-
-    glm::vec3 maxLimits (std::numeric_limits<float>::min());
-    glm::vec3 minLimits (std::numeric_limits<float>::max());
-
-    for(auto o = ms_sceneObjects.begin(); o != ms_sceneObjects.end(); ++o)
-    {
-        BoundingBox bb = (*o)->GetBoundingBox();
-        std::vector<glm::vec3> bbPoints;
-        bb.Transform((*o)->GetModelMatrix(), bbPoints);
-        for(unsigned int i = 0; i < bbPoints.size(); ++i)
-        {
-            maxLimits = glm::max(maxLimits, bbPoints[i]);
-            minLimits = glm::min(minLimits, bbPoints[i]);
-        }
-    }
-
-    ms_sceneBoundingBox.Max = maxLimits;
-    ms_sceneBoundingBox.Min = minLimits;
-}
-
 enum ELightSubpass
 {
     ELightSubpass_Directional = 0,
@@ -515,6 +402,8 @@ public:
 
     virtual void Render()
     {
+        UpdateShaderParams();
+
         VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
         StartRenderPass();
         vk::CmdBindPipeline(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.Get());
@@ -526,12 +415,11 @@ public:
         EndRenderPass();
     }
 
-    void UpdateShaderParams(glm::mat4 shadowViewProj)
+    void UpdateShaderParams()
     {
         LightShaderParams newParams;
         newParams.dirLight = directionalLight.GetDirection();
         newParams.cameraPos = glm::vec4(ms_camera.GetPos(), 1);
-        newParams.shadowProjView = shadowViewProj;
         newParams.lightIradiance = directionalLight.GetLightIradiance();
         newParams.lightIradiance[3] = directionalLight.GetLightIntensity();
 
@@ -1441,155 +1329,6 @@ private:
     VkSampler                   m_sampler;
 };
 
-class ShadowRenderer : public CRenderer
-{
-public:
-    ShadowRenderer(VkRenderPass renderPass)
-        : CRenderer(renderPass, "ShadowmapRenderPass")
-    {
-    }
-
-    virtual ~ShadowRenderer()
-    {
-    }
-
-    void AddShadowCaster(ShadowCaster* object)
-    {
-        m_shadowCaster.push_back(object);
-
-        AllocDescriptorSets(m_descriptorPool, m_descriptorSetLayout, &object->GetDescriptorSet());
-        object->UpdateDescriptors();
-    }
-
-    void Init() override
-    {
-        CRenderer::Init();
-
-        m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
-        m_pipeline.SetViewport(SHADOWW, SHADOWH);
-        m_pipeline.SetScissor(SHADOWW, SHADOWH);
-        m_pipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
-        m_pipeline.SetVertexShaderFile("shadow.vert");
-        //m_pipeline.SetFragmentShaderFile("shadowlineardepth.frag");
-        m_pipeline.SetStencilTest(true);
-        m_pipeline.SetStencilOp(VK_COMPARE_OP_ALWAYS);
-        m_pipeline.SetStencilOperations(VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_REPLACE);
-        m_pipeline.SetStencilValues(0x01, 0x01, 1);
-
-        m_pipeline.CreatePipelineLayout(m_descriptorSetLayout);
-        m_pipeline.Init(this, m_renderPass, 0);
-    }
-
-    void ComputeProjMatrix(glm::mat4& proj, const glm::mat4& view)
-    {
-        //const CFrustrum& frustrum = ms_camera.GetFrustrum();
-        CFrustrum frustrum (ms_camera.GetNear(), 5.0f);
-        frustrum.Update(ms_camera.GetPos(), ms_camera.GetFrontVector(), ms_camera.GetUpVector(), ms_camera.GetRightVector(), ms_camera.GetFOV());
-
-        glm::vec4 maxLimits = glm::vec4(std::numeric_limits<float>::min());
-        glm::vec4 minLimits = glm::vec4(std::numeric_limits<float>::max());
-        for(unsigned int i = 0; i < CFrustrum::FPCount; ++i)
-        {
-            glm::vec4 lightPos = view * glm::vec4(frustrum.GetPoint(i), 1.0f);
-            maxLimits = glm::max(maxLimits, lightPos);
-            minLimits = glm::min(minLimits, lightPos);
-        }
-        BoundingBox sceneBoundingbox = CScene::GetBoundingBox();
-
-        //float near1;
-        //float far1;
-        //{
-        //    BoundingBox bb = sceneBoundingbox;
-        //    //transform it in light space
-        //    bb.Max = glm::vec3(view * glm::vec4(bb.Max, 1.0f)); //LUL
-        //    bb.Min = glm::vec3(view * glm::vec4(bb.Min, 1.0f));
-        //    near1 = glm::min(bb.Max.z, bb.Min.z);
-        //    far1 = glm::max(bb.Max.z, bb.Min.z);
-        //}
-
-        float near2 = std::numeric_limits<float>::max();
-        float far2 = std::numeric_limits<float>::min();
-        //{
-            BoundingBox bb = sceneBoundingbox;
-            std::vector<glm::vec3> bbPoints;
-            bb.Transform(view, bbPoints);
-            for(unsigned int i = 0; i < bbPoints.size(); ++i)
-            {
-                near2 = glm::min(bbPoints[i].z, near2);
-                far2 = glm::max(bbPoints[i].z, far2);
-            }
-        //}
-        proj = glm::ortho(minLimits.x, maxLimits.x , minLimits.y, maxLimits.y, -far2, -near2);
-        ConvertToProjMatrix(proj);
-    }
-
-    void Render() override
-    {
-        VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
-
-        vk::CmdBindPipeline(cmd, m_pipeline.GetBindPoint(), m_pipeline.Get());
-
-        glm::vec3 lightDir (directionalLight.GetDirection());
-        glm::vec3 eye = ms_camera.GetPos() - 1.0f * lightDir;
-
-        glm::vec3 right = glm::cross(lightDir, glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 view = glm::lookAt(eye, ms_camera.GetPos(), glm::cross(lightDir, right));
-        glm::mat4 proj;
-        ComputeProjMatrix(proj, view);
-
-        //= glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.1f, 25.0f);
-        m_shadowViewProj = proj * view;
-
-        for(unsigned int i = 0; i < m_shadowCaster.size(); i++)
-        {
-            m_shadowCaster[i]->UpdateShadowParams(m_shadowViewProj);
-            vk::CmdBindDescriptorSets(cmd, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, (uint32_t)1, &m_shadowCaster[i]->GetDescriptorSet(), 0, nullptr); //try to bind just once
-
-            m_shadowCaster[i]->Render();
-        }
-    }
-
-
-    glm::mat4 GetProjViewMatrix() { return m_shadowViewProj; }
-
-    virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override
-    {
-        AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NUM_OF_CUBES);
-        maxSets = NUM_OF_CUBES;
-    }
-
-    VkImageView GetShadowMap() { return m_framebuffer->GetDepthImageView();}
-protected:
-
-    void UpdateResourceTable()
-    {
-        UpdateResourceTableForDepth(EResourceType_ShadowMapImage);
-    }
-
-    void CreateDescriptorSetLayout() override
-    {
-        std::vector<VkDescriptorSetLayoutBinding> descCnt;
-        descCnt.resize(1);
-        descCnt[0] = CreateDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-
-        VkDescriptorSetLayoutCreateInfo descSetLayoutCi;
-        cleanStructure(descSetLayoutCi);
-        descSetLayoutCi.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        descSetLayoutCi.pNext = nullptr;
-        descSetLayoutCi.bindingCount = (uint32_t)descCnt.size();
-        descSetLayoutCi.pBindings = descCnt.data();
-
-        VULKAN_ASSERT(vk::CreateDescriptorSetLayout(vk::g_vulkanContext.m_device, &descSetLayoutCi, nullptr, &m_descriptorSetLayout));
-    }
-
-private:
-    std::vector<ShadowCaster*>      m_shadowCaster;
-    glm::mat4                       m_shadowViewProj;
-
-    CGraphicPipeline                       m_pipeline;
-
-    VkDescriptorSetLayout           m_descriptorSetLayout;
-};
 
 struct PostProcessParam
 {
@@ -1742,8 +1481,8 @@ private:
     VkDeviceMemory  m_uniformMemory;
     void*           m_uniformPtr;
 
-    Mesh*           m_quadMesh;
-    CGraphicPipeline       m_pipeline;
+    Mesh*                   m_quadMesh;
+    CGraphicPipeline        m_pipeline;
 
     VkDescriptorSet m_descriptorSet;
     VkDescriptorSetLayout m_descriptorSetLayout;
@@ -1890,7 +1629,7 @@ private:
     CLightRenderer*             m_lightRenderer;
     CPointLightRenderer*        m_pointLightRenderer;
     CParticlesRenderer*         m_particlesRenderer;
-    ShadowRenderer*             m_shadowRenderer;
+    ShadowMapRenderer*             m_shadowRenderer;
     CShadowResolveRenderer*     m_shadowResolveRenderer;
     CSkyRenderer*               m_skyRenderer;
     CFogRenderer*               m_fogRenderer;
@@ -1968,7 +1707,7 @@ CApplication::CApplication()
     , m_normMouseDX(0.0f)
     , m_normMouseDY(0.0f)
     , m_needReset(false)
-    , m_enableFog(true)
+    , m_enableFog(false)
 {
     vk::Load();
     InitWindow();
@@ -2650,8 +2389,17 @@ void CApplication::SetupShadowMapRendering()
     fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "ShadowMap");
     fbDesc.End();
 
+    const std::vector<Object*>& objects = ObjectFactory::GetObjects();
+    std::vector<Object*> shadowCasters;
+
+    for (auto o : objects)
+    {
+        if (o->GetIsShadowCaster())
+            shadowCasters.push_back(o);
+    }
+
     CreateShadowRenderPass(fbDesc);
-    m_shadowRenderer = new ShadowRenderer(m_shadowRenderPass);
+    m_shadowRenderer = new ShadowMapRenderer(m_shadowRenderPass, shadowCasters);
     m_shadowRenderer->Init();
 
     m_shadowRenderer->CreateFramebuffer(fbDesc, SHADOWW, SHADOWH);
@@ -3386,7 +3134,6 @@ void CApplication::Render()
     QueryManager::GetInstance().Reset();
     QueryManager::GetInstance().StartStatistics();
     RenderShadows();
-    m_shadowResolveRenderer->UpdateShaderParams(m_shadowRenderer->GetProjViewMatrix());
 
     m_objectRenderer->Render();
 
@@ -3399,19 +3146,10 @@ void CApplication::Render()
     m_aoRenderer->Render();
     m_shadowResolveRenderer->Render();
 
-    //move TO RenderLight
-    m_lightRenderer->UpdateShaderParams(m_shadowRenderer->GetProjViewMatrix());
-    
-
     m_lightRenderer->Render();
-
-    //m_fogRenderer->Render();
-
     m_pointLightRenderer->Render();
     
-    
     m_sunRenderer->Render();
-
     m_skyRenderer->Render();
     //m_particlesRenderer->Render();
 

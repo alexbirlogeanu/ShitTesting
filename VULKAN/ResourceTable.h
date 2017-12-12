@@ -62,6 +62,7 @@ enum EResourceType
     EResourceType_AfterPostProcessImageView,
     EResourceType_VolumetricImage,
     EResourceType_VolumetricImageView,
+    EResourceType_ShadowProjViewMat,
     EResourceType_Count
 };
 

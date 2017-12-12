@@ -91,6 +91,7 @@ public:
         }
 
         obj->ValidateResources();
+        CScene::AddObject(obj);
         m_objects.push_back(obj);
     }
 private:
@@ -361,9 +362,7 @@ ObjectRenderer::ObjectRenderer(VkRenderPass renderPass, const std::vector<Object
     {
         unsigned int batchIndex = (unsigned int)objects[i]->GetType();
         std::vector<Node>& nodes = m_batches[batchIndex].nodes;
-        Node newNode;
-        newNode.obj = objects[i];
-        nodes.push_back(newNode);
+        nodes.push_back(Node(objects[i]));
     }
 
     m_batches[(unsigned int)ObjectType::Solid].debugMarker = "Solid";
@@ -546,4 +545,43 @@ void ObjectRenderer::UpdateShaderParams()
     }
 
     vk::UnmapMemory(vk::g_vulkanContext.m_device, m_instaceDataMemory);
+}
+
+//////////////////////////////////////////////////////////////////////////
+//CScene
+//////////////////////////////////////////////////////////////////////////
+std::unordered_set<Object*> CScene::ms_sceneObjects; //i got the objects in 2 places: here and in ObjectFactory. BUt fuck it. not important
+BoundingBox CScene::ms_sceneBoundingBox;
+
+void CScene::AddObject(Object* obj)
+{
+    auto result = ms_sceneObjects.insert(obj);
+    TRAP(result.second == true);
+
+    CScene::UpdateBoundingBox();
+}
+
+void CScene::UpdateBoundingBox()
+{
+    ms_sceneBoundingBox.Max = ms_sceneBoundingBox.Min = glm::vec3();
+    if (ms_sceneObjects.empty())
+        return;
+
+    glm::vec3 maxLimits (std::numeric_limits<float>::min());
+    glm::vec3 minLimits (std::numeric_limits<float>::max());
+
+    for(auto o = ms_sceneObjects.begin(); o != ms_sceneObjects.end(); ++o)
+    {
+        BoundingBox bb = (*o)->GetBoundingBox();
+        std::vector<glm::vec3> bbPoints;
+        bb.Transform((*o)->GetModelMatrix(), bbPoints);
+        for(unsigned int i = 0; i < bbPoints.size(); ++i)
+        {
+            maxLimits = glm::max(maxLimits, bbPoints[i]);
+            minLimits = glm::min(minLimits, bbPoints[i]);
+        }
+    }
+
+    ms_sceneBoundingBox.Max = maxLimits;
+    ms_sceneBoundingBox.Min = minLimits;
 }

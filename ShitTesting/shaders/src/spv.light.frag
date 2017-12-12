@@ -11,7 +11,6 @@ layout (set=0, binding=6) uniform sampler2D aoMap;
 
 layout (set=0, binding=4) uniform params
 {
-	mat4	shadowProjView;	
 	vec4 	dirLight;
 	vec4 	cameraPos;
 	vec4    lightIradiance;

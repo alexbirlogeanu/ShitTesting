@@ -2,9 +2,213 @@
 
 #include "glm/glm.hpp"
 #include "Texture.h"
+#include "ResourceTable.h"
+#include "Object.h"
 
 #include <random>
 
+//////////////////////////////////////////////////////////////////////////
+//ShadowMapRenderer
+//////////////////////////////////////////////////////////////////////////
+
+struct ShadowMapParams
+{
+    glm::mat4 MVP;
+};
+
+ShadowMapRenderer::ShadowMapRenderer(VkRenderPass renderPass, const std::vector<Object*>& shadowCasters)
+    : CRenderer(renderPass, "ShadowmapRenderPass")
+    , m_instanceBuffer(VK_NULL_HANDLE)
+    , m_instaceMemory(VK_NULL_HANDLE)
+{
+    m_nodes.reserve(shadowCasters.size());
+    for (auto caster : shadowCasters)
+    {
+        m_nodes.push_back(Node(caster));
+    }
+}
+
+ShadowMapRenderer::~ShadowMapRenderer()
+{
+    VkDevice dev = vk::g_vulkanContext.m_device;
+
+    vk::FreeMemory(dev, m_instaceMemory, nullptr);
+    vk::DestroyBuffer(dev, m_instanceBuffer, nullptr);
+}
+
+void ShadowMapRenderer::Init()
+{
+    CRenderer::Init();
+
+    m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
+    m_pipeline.SetViewport(SHADOWW, SHADOWH);
+    m_pipeline.SetScissor(SHADOWW, SHADOWH);
+    m_pipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
+    m_pipeline.SetVertexShaderFile("shadow.vert");
+    //m_pipeline.SetFragmentShaderFile("shadowlineardepth.frag");
+    m_pipeline.SetStencilTest(true);
+    m_pipeline.SetStencilOp(VK_COMPARE_OP_ALWAYS);
+    m_pipeline.SetStencilOperations(VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_REPLACE);
+    m_pipeline.SetStencilValues(0x01, 0x01, 1);
+
+    m_pipeline.CreatePipelineLayout(m_descriptorSetLayout);
+    m_pipeline.Init(this, m_renderPass, 0);
+
+    InitNodesDescriptorSet();
+    InitNodesMemory();
+}
+
+void ShadowMapRenderer::ComputeProjMatrix(glm::mat4& proj, const glm::mat4& view)
+{
+    //const CFrustrum& frustrum = ms_camera.GetFrustrum();
+    CFrustrum frustrum (ms_camera.GetNear(), 5.0f);
+    frustrum.Update(ms_camera.GetPos(), ms_camera.GetFrontVector(), ms_camera.GetUpVector(), ms_camera.GetRightVector(), ms_camera.GetFOV());
+
+    glm::vec4 maxLimits = glm::vec4(std::numeric_limits<float>::min());
+    glm::vec4 minLimits = glm::vec4(std::numeric_limits<float>::max());
+    for(unsigned int i = 0; i < CFrustrum::FPCount; ++i)
+    {
+        glm::vec4 lightPos = view * glm::vec4(frustrum.GetPoint(i), 1.0f);
+        maxLimits = glm::max(maxLimits, lightPos);
+        minLimits = glm::min(minLimits, lightPos);
+    }
+    BoundingBox sceneBoundingbox = CScene::GetBoundingBox();
+
+    //float near1;
+    //float far1;
+    //{
+    //    BoundingBox bb = sceneBoundingbox;
+    //    //transform it in light space
+    //    bb.Max = glm::vec3(view * glm::vec4(bb.Max, 1.0f)); //LUL
+    //    bb.Min = glm::vec3(view * glm::vec4(bb.Min, 1.0f));
+    //    near1 = glm::min(bb.Max.z, bb.Min.z);
+    //    far1 = glm::max(bb.Max.z, bb.Min.z);
+    //}
+
+    float near2 = std::numeric_limits<float>::max();
+    float far2 = std::numeric_limits<float>::min();
+    //{
+    BoundingBox bb = sceneBoundingbox;
+    std::vector<glm::vec3> bbPoints;
+    bb.Transform(view, bbPoints);
+    for(unsigned int i = 0; i < bbPoints.size(); ++i)
+    {
+        near2 = glm::min(bbPoints[i].z, near2);
+        far2 = glm::max(bbPoints[i].z, far2);
+    }
+    //}
+    proj = glm::ortho(minLimits.x, maxLimits.x , minLimits.y, maxLimits.y, -far2, -near2);
+    ConvertToProjMatrix(proj);
+}
+
+void ShadowMapRenderer::InitNodesDescriptorSet()
+{
+    std::vector<VkDescriptorSetLayout> layouts (m_nodes.size(), m_descriptorSetLayout);
+    std::vector<VkDescriptorSet> sets(m_nodes.size());
+
+    AllocDescriptorSets(m_descriptorPool, layouts, sets);
+
+    for (unsigned int i = 0; i < sets.size(); ++i)
+    {
+        m_nodes[i].descSet = sets[i];
+    }
+
+}
+
+void ShadowMapRenderer::InitNodesMemory()
+{
+    VkDeviceSize memOffset = vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment; 
+    TRAP(memOffset > sizeof(ShadowMapParams) && "Change mem offset");
+    AllocBufferMemory(m_instanceBuffer, m_instaceMemory,uint32_t( m_nodes.size() * memOffset), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+
+    for (unsigned int i = 0; i < m_nodes.size(); ++i)
+    {
+        m_nodes[i].offset = i * memOffset;
+    }
+}
+
+void ShadowMapRenderer::UpdateShaderParams()
+{
+    void* memPtr = nullptr;
+    VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_instaceMemory, 0, VK_WHOLE_SIZE, 0, &memPtr));
+
+    for (auto& node : m_nodes)
+    {
+        ShadowMapParams* params = (ShadowMapParams*)((char*)memPtr + node.offset);
+        params->MVP = m_shadowViewProj * node.obj->GetModelMatrix();
+    }
+
+    vk::UnmapMemory(vk::g_vulkanContext.m_device, m_instaceMemory);
+}
+
+void ShadowMapRenderer::UpdateGraphicInterface()
+{
+    //this section is to declare all the variables used for creating the update info in no particular order
+    std::vector<VkWriteDescriptorSet> wDesc;
+    //these have to be cached otherwise vk::UpdateDescriptorSets will crash, pointers will become invalid
+    std::vector<VkDescriptorBufferInfo> buffInfos;
+    buffInfos.reserve(m_nodes.size());
+
+    for (auto& node : m_nodes)
+    {
+        buffInfos.push_back(CreateDescriptorBufferInfo(m_instanceBuffer, node.offset, sizeof(ShadowMapParams)));
+        wDesc.push_back(InitUpdateDescriptor(node.descSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfos.back()));
+    }
+
+    vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
+}
+
+void ShadowMapRenderer::Render()
+{
+    VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
+
+    vk::CmdBindPipeline(cmd, m_pipeline.GetBindPoint(), m_pipeline.Get());
+
+    glm::vec3 lightDir (directionalLight.GetDirection());
+    glm::vec3 eye = ms_camera.GetPos() - 1.0f * lightDir;
+
+    glm::vec3 right = glm::cross(lightDir, glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 view = glm::lookAt(eye, ms_camera.GetPos(), glm::cross(lightDir, right));
+    glm::mat4 proj;
+    ComputeProjMatrix(proj, view);
+
+    //= glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.1f, 25.0f);
+    m_shadowViewProj = proj * view;
+    
+    UpdateShaderParams();
+
+    for (auto& node : m_nodes)
+    {
+        vk::CmdBindDescriptorSets(cmd, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, 1, &node.descSet, 0, nullptr); //try to bind just once
+        node.obj->Render();
+    }
+
+}
+
+void ShadowMapRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)
+{
+    AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, (uint32_t)m_nodes.size());
+    maxSets = (uint32_t)m_nodes.size();
+}
+
+void ShadowMapRenderer::UpdateResourceTable()
+{
+    UpdateResourceTableForDepth(EResourceType_ShadowMapImage);
+    g_commonResources.SetAs<glm::mat4>(&m_shadowViewProj, EResourceType_ShadowProjViewMat);
+}
+
+void ShadowMapRenderer::CreateDescriptorSetLayout()
+{
+    std::vector<VkDescriptorSetLayoutBinding> descCnt;
+    descCnt.resize(1);
+    descCnt[0] = CreateDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
+
+    NewDescriptorSetLayout(descCnt, &m_descriptorSetLayout);
+}
+
+//////////////////////////////////////////////////////////////////////////
+//CShadowResolveRenderer
+//////////////////////////////////////////////////////////////////////////
 struct ShadowResolveParameters
 {
     glm::vec4   LightDirection;
@@ -112,7 +316,7 @@ void CShadowResolveRenderer::Init()
 
 void CShadowResolveRenderer::Render()
 {
-    //UpdateShaderParams();
+    UpdateShaderParams();
     StartRenderPass();
     VkCommandBuffer cmdBuff = vk::g_vulkanContext.m_mainCommandBuffer;
     vk::CmdBindPipeline(cmdBuff, m_pipeline.GetBindPoint(), m_pipeline.Get());
@@ -135,8 +339,10 @@ void CShadowResolveRenderer::Render()
     EndRenderPass();
 }
 
-void CShadowResolveRenderer::UpdateShaderParams(glm::mat4 shadowProj)
+void CShadowResolveRenderer::UpdateShaderParams()
 {
+    glm::mat4 shadowProj = g_commonResources.GetAs<glm::mat4>(EResourceType_ShadowProjViewMat);
+
     ShadowResolveParameters* params = nullptr;
     VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_uniformMemory, 0, VK_WHOLE_SIZE,0, (void**)&params));
     params->ShadowProjMatrix = shadowProj;
@@ -251,7 +457,7 @@ CTexture* CreateDistTexture(glm::vec2* data, unsigned int samples)
     return new CTexture(textData, false);
 }
 
-void CShadowResolveRenderer::CreateDistributionTextures()
+void CShadowResolveRenderer::CreateDistributionTextures() //this textures are not used
 {
     const unsigned int blockSamples = 32;
     const unsigned int PCFSamples = 64;

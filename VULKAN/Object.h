@@ -156,6 +156,7 @@ protected:
     void UpdateResourceTable() override;
     void UpdateGraphicInterface() override;
 private:
+    //these 2 methods are duplicate code. See ShadowRenderer
     void InitDescriptorNodes();
     void InitMemoryOffsetNodes();
 
@@ -171,6 +172,12 @@ private:
 
         Node()
             : obj(nullptr)
+            , descriptorSet(VK_NULL_HANDLE)
+            , offset(0)
+        {}
+
+        Node(Object* o)
+            : obj(o)
             , descriptorSet(VK_NULL_HANDLE)
             , offset(0)
         {}
@@ -193,4 +200,17 @@ private:
     VkSampler                           m_sampler;
 
     std::array<Batch, (unsigned int)ObjectType::Count>  m_batches;
+};
+
+class CScene
+{
+public:
+    static void AddObject(Object* obj);
+
+    static BoundingBox GetBoundingBox() { return ms_sceneBoundingBox; };
+private:
+    static void UpdateBoundingBox();
+private:
+    static std::unordered_set<Object*>      ms_sceneObjects;
+    static BoundingBox                      ms_sceneBoundingBox;
 };

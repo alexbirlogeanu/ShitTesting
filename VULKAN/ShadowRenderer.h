@@ -5,10 +5,65 @@
 #include "defines.h"
 #include "VulkanLoader.h"
 
+#include <vector>
+
 //#define USE_SHADOW_BLUR
 
 class Mesh;
 class CTexture;
+class Object;
+
+class ShadowMapRenderer : public CRenderer
+{
+public:
+    ShadowMapRenderer(VkRenderPass renderPass, const std::vector<Object*>& shadowCasters);
+    virtual ~ShadowMapRenderer();
+
+    void Init() override;
+    void Render() override;
+protected:
+    void UpdateResourceTable() override;
+    void CreateDescriptorSetLayout() override;
+    virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override;
+
+    void ComputeProjMatrix(glm::mat4& proj, const glm::mat4& view);
+    //these 2 methods are duplicate code. See ObjectRenderer
+    void InitNodesDescriptorSet();
+    void InitNodesMemory();
+    void UpdateShaderParams();
+    void UpdateGraphicInterface() override;
+private:
+    //this paradigm is similar with the one in the objectRenderer. Maybe we can write it better
+    struct Node
+    {
+        Object*             obj;
+        VkDescriptorSet     descSet;
+        VkDeviceSize        offset;
+
+        Node()
+            : obj(nullptr)
+            , descSet(VK_NULL_HANDLE)
+            , offset(0)
+        {}
+
+        Node (Object* o)
+            : obj(o)
+            , descSet(VK_NULL_HANDLE)
+            , offset(0)
+        {}
+    };
+
+    glm::mat4                       m_shadowViewProj;
+
+    CGraphicPipeline                m_pipeline;
+    VkDescriptorSetLayout           m_descriptorSetLayout;
+
+    VkBuffer                        m_instanceBuffer;
+    VkDeviceMemory                  m_instaceMemory;
+    std::vector<Node>               m_nodes;
+};
+
+
 class CShadowResolveRenderer : public CRenderer
 {
 public:
@@ -18,7 +73,6 @@ public:
     virtual void Init() override;
     virtual void Render() override;
 
-    void UpdateShaderParams(glm::mat4 shadowProj);
 
 private:
     virtual void CreateDescriptorSetLayout() override;
@@ -30,7 +84,7 @@ private:
     void SetupBlurPipeline(CGraphicPipeline& pipeline, bool isVertical);
 #endif
     void CreateDistributionTextures();
-
+    void UpdateShaderParams();
 private:
     Mesh*                   m_quad;
 
