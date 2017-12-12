@@ -1,4 +1,5 @@
 #define _CRTDBG_MAP_ALLOC
+
 #include <iostream>
 #include <fstream>
 
@@ -25,6 +26,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <limits>
+#include <thread>
+#include "../VULKAN/include/glm/glm.hpp"
 
 #include "FU.h"
 #include "../vulkan/VulkanLoader.h"
@@ -331,7 +334,7 @@ protected:
                 
             }
             
-            Yield();
+            //Yield();
         }
 
         return true;
@@ -784,13 +787,20 @@ class State
 {
 public:
     State()
-    {}
+    {
+
+    }
     virtual ~State(){}
 
     virtual void Execute() = 0;
     virtual bool IsLeaf() = 0;
     virtual State* GetSelectedState() const = 0;
     virtual void Link(){};
+    virtual void SetLastParrent(State* pState) = 0;
+    virtual void Start(){};
+    virtual void Stop(){};
+protected:
+   
 };
 
 template<typename T>
@@ -800,6 +810,7 @@ public:
     StateImpl()
         //: m_outs(nullptr)
         : m_selectedState(nullptr)
+        , m_lastParrent(nullptr)
     {
     }
 
@@ -825,14 +836,20 @@ protected:
     void SelectOutState(T index)
     {
          BREAKPOINT(index < T::Count);
-         unsigned int uIndex = (unsigned int)index;
+         unsigned int uIndex = static_cast<unsigned int>(index);
          BREAKPOINT(m_outs[uIndex]);
          m_selectedState = m_outs[uIndex];
+         m_selectedState->SetLastParrent(this);
     }
 
+    void SetLastParrent(State* pState) final
+    {
+        m_lastParrent = pState;
+    }
 private:
     std::array<State*, (unsigned int)T::Count> m_outs;
     State*          m_selectedState;
+    State*          m_lastParrent;
 };
 
 enum class EBinary
@@ -846,74 +863,279 @@ enum class EEmpty
 {
     Count
 };
-class BinaryState : public StateImpl<EBinary>
+
+enum class ELoop
+{
+    Loop,
+    Out,
+    Count
+};
+
+class DoneEvent : public Event
 {
 public:
-    BinaryState(bool defaultValue)
-        : m_value(defaultValue)
-    {}
-
-    void Execute()
+    typedef Callback1<void, DoneEvent*> EventCallback;
+    void Send()
     {
-        std::cout << "Executing Binary State with value= " <<  ((m_value)? "True" : "False") << std::endl;
-        EBinary outIndex = EBinary::False;
-        if (m_value)
-            outIndex = EBinary::True;
-
-        SelectOutState(outIndex);
+        Channel<DoneEvent>::SendEvent(this);
     }
-    
+};
+
+class LoopState : public StateImpl<ELoop>
+{
+public:
+    LoopState()
+        : m_done(false)
+        , m_listener(DoneEvent::EventCallback(this, &LoopState::OnEvent))
+    {
+        Link(ELoop::Loop, this);
+        Channel<DoneEvent>::AddListener(&m_listener);
+    }
+
+    void Execute() override
+    {
+        if (m_done)
+        {
+            SelectOutState(ELoop::Out);
+        }
+        else
+        {
+            SelectOutState(ELoop::Loop);
+        }
+    }
+
+    void Start() override
+    {
+    }
+
+    void Stop() override
+    {
+    }
+
+    void OnEvent(DoneEvent* e)
+    {
+        m_done = true;
+    }
+
+protected:
+    Listener<DoneEvent>     m_listener;
+
 private:
-    bool        m_value;
+    bool    m_done;
 };
 
-class NoState : public StateImpl<EEmpty>
+class EndState : public StateImpl<EEmpty>
 {
 public:
     void Execute()
     {
-        std::cout << "Transitioning to No State" << std::endl;
+        std::cout << "It's about sending a message!" << std::endl;
+    }
+
+    void Stop() override
+    {
+        std::cout << "EndState: STOP" << std::endl;
+    }
+
+    void Start() override
+    {
+        std::cout << "EndState: START" << std::endl;
     }
 };
 
-class YesState : public StateImpl<EEmpty>
+class X
 {
 public:
-    void Execute()
+    explicit X (int a)
+        : m_value(a)
     {
-        std::cout << "Transitioning to Yes State" << std::endl;
+        cout << "Ctor X Class" << endl;
+    }
+
+    X& operator++()
+    {
+        ++m_value;
+        return *this;
+    }
+
+    X operator++(int dummy)
+    {
+        ++m_value;
+        return *this;
+    }
+
+    virtual ~X(){}
+private:
+    int     m_value;
+};
+
+class Y 
+{
+public:
+    explicit Y (float f)
+    {
+        cout << "Ctor Y class" << endl;
+    }
+    virtual ~Y() {}
+};
+
+class XY : public Y, public X
+{
+public:
+    XY(int a, float f)
+        : X(a)
+        , Y(f)
+    {
     }
 };
+
+int FibRec(int n)
+{
+    if (n <= 0)
+    {
+        return 0;
+    }
+    else if(n == 1)
+    {
+        return 1;
+    }
+    else
+    {
+        return FibRec(n - 1) + FibRec(n - 2);
+    }
+}
+
+unsigned long long FibIt(int n)
+{
+    unsigned long long f1 = 0;
+    unsigned long long f2 = 1;
+
+    if (n <= 0)
+    {
+        return f1;
+    }
+    else if(n == 1)
+    {
+        return f2;
+    }
+    else
+    {
+        unsigned long long fn;
+        for (int i = 2; i <= n; ++i)
+        {
+            fn = f1 + f2;
+            f1 = f2;
+            f2 = fn;
+        }
+
+        return fn;
+    }
+}
+
+template<typename T>
+int FibConst(int n)
+{
+    const T k = sqrt(T(5.0));
+    const T two = T(2.0);
+    const T one = T(1.0);
+    const T first = (one + k) / two;
+    const T second = (one - k) / two;
+
+    return int(glm::floor(one / k * (pow(first, n) - pow(second, n))));
+};
+#undef max
+
+void TestFib()
+{
+    unsigned long long prev = 1;
+    for (int i = 2; i < std::numeric_limits<int>::max(); ++i)
+    {
+        unsigned long long fn = FibIt(i);
+        std::cout << fn << endl;
+        BREAKPOINT(fn >= prev);
+        prev = fn;
+    }
+}
 
 int main (int argc, char** argv)
 {
-    /*std::cout << std::boolalpha;
-    std::cout << has_typedef_foobar<int>::value << std::endl;
-    std::cout << has_typedef_foobar<foo>::value << std::endl;*/
+    /*LoopState loopState;
+    EndState endState;
 
+    loopState.Link(ELoop::Out, &endState);
 
-    BinaryState trueState(true);
-    BinaryState falseState(false);
-    NoState noState;
-    YesState yesState;
+    auto threadFunction = [&] {
 
-    trueState.Link(EBinary::True, &falseState);
-    trueState.Link(EBinary::False, &noState);
+        State* currentState = &loopState;
+        State* prevState = nullptr;
 
-    falseState.Link(EBinary::True, &yesState);
-    falseState.Link(EBinary::False, &noState);
+        while (true)
+        {
+            if (currentState != prevState)
+            {
+                if (prevState)
+                    prevState->Stop();
 
-    State* currentState;
-    currentState = &trueState; //starting state
+                currentState->Start();
+            }
+            currentState->Execute();
 
-    while (!currentState->IsLeaf())
+            if (currentState->IsLeaf())
+            {
+                currentState->Stop();
+                break;
+            }
+            prevState = currentState;
+            currentState = currentState->GetSelectedState();
+        }
+    };
+
+    std::thread t (threadFunction);
+    std::thread::id tId = t.get_id();
+
+    SHORT isAPressed = false;
+    cout << "Press A to send a message" << endl;
+
+    while (!isAPressed)
     {
-        currentState->Execute();
-        currentState = currentState->GetSelectedState();
+        isAPressed = GetKeyState('A');
+        if (isAPressed)
+        {
+            DoneEvent e;
+            e.Send();
+        }
     }
 
-    if (currentState)
-        currentState->Execute();
+    t.join();*/
 
+    struct S 
+    {
+        int a;
+        float f;
+        S ()
+            : a(0)
+            , f(-1.0f)
+        {}
+    };
+
+    std::vector<S> v (10);
+    int i = 0;
+    for (auto& e : v)
+    {
+        e.a = i++;
+        e.f *= float(i);
+    }
+
+    void* memPtr = (void*)v.data();
+    unsigned int offset = 3 * sizeof(S);
+    S* e = (S*)((char*)memPtr + offset);
+    cout << e->a << e->f << endl;
+
+    //for (unsigned int z = 0; z < v.size(); ++z)
+    //{
+    //    S& e = v[z];
+    //    e.a = i++;
+    //    e.f *= float(i);
+    //}
     return 0;
 }
