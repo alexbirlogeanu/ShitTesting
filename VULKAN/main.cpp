@@ -36,30 +36,10 @@
 #include "ShadowRenderer.h"
 #include "Object.h"
 
-#define NUM_OF_CUBES 3
-
 
 #define OUT_FORMAT VK_FORMAT_R16G16B16A16_SFLOAT
 //#define OUT_FORMAT VK_FORMAT_B8G8R8A8_UNORM
 CCamera     ms_camera;
-
-struct ShaderParams
-{
-    glm::mat4 mvpMatrix;
-    glm::mat4 worldMatrix;
-    glm::mat4 shadowMatrix;
-    glm::vec4 materialProperties;
-    glm::vec4 viewPos;
-};
-
-struct RTTShaderParams
-{
-    float   width;
-    float   height;
-    float   samples;
-    int     blur;
-    int     fxaa;
-};
 
 struct LightShaderParams
 {
@@ -407,9 +387,8 @@ public:
         VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
         StartRenderPass();
         vk::CmdBindPipeline(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.Get());
-        //bind descriptors prob
+
         vk::CmdBindDescriptorSets(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, 1, &m_descriptorSet, 0, nullptr);
-        RenderSpecific(cmdBuffer);
 
         vk::CmdDraw(cmdBuffer, 4, 1, 0, 0);
         EndRenderPass();
@@ -454,11 +433,6 @@ public:
 
         m_pipeline.CreatePipelineLayout(m_descriptorSetLayout);
         m_pipeline.Init(this, m_renderPass, ELightSubpass_Directional);
-    }
-
-protected:
-    virtual void RenderSpecific(VkCommandBuffer cmdBuffer)
-    {
     }
 
 protected:
@@ -2789,7 +2763,7 @@ void CApplication::CreateSkyRenderPass(const FramebufferDescription& fbDesc)
 void CApplication::CreateParticlesRenderPass(const FramebufferDescription& fbDesc)
 {
     VkAttachmentDescription ad[2];
-    AddAttachementDesc(ad[0], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[0].format, VK_ATTACHMENT_LOAD_OP_LOAD);
+    AddAttachementDesc(ad[0], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[0].format, VK_ATTACHMENT_LOAD_OP_LOAD);
     AddAttachementDesc(ad[1], VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format, VK_ATTACHMENT_LOAD_OP_LOAD);
 
     VkAttachmentReference attachment_ref[2];
@@ -3069,7 +3043,9 @@ void CApplication::CreateResources()
 
     GetPickManager()->CreateDebug(m_uiManager);
     directionalLight.CreateDebug(m_uiManager);
-    //SetupParticles();
+    SetupParticles();
+    
+    //TODO FIX point lights
     //SetupPointLights();
 }
 
@@ -3151,7 +3127,7 @@ void CApplication::Render()
     
     m_sunRenderer->Render();
     m_skyRenderer->Render();
-    //m_particlesRenderer->Render();
+    m_particlesRenderer->Render();
 
     if (m_enableFog)
     {

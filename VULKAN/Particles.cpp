@@ -335,7 +335,7 @@ void CParticlesRenderer::Render()
     }
 
     TRAP(m_particleSystems.size() < 5 && "Increase the number of compute barriers"); //oricum crapa mai sus
-    vk::CmdPipelineBarrier(buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, (uint32_t)m_particleSystems.size(), computeDoneBarrier, 0, nullptr);
+    vk::CmdPipelineBarrier(buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 0, nullptr, (uint32_t)m_particleSystems.size(), computeDoneBarrier, 0, nullptr);
 
     if(!m_simPaused)
     {
