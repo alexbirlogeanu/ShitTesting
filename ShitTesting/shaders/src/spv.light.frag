@@ -86,7 +86,7 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
 
 vec3 FresnelSchilick(vec3 N, vec3 H, vec3 F0)
 {
-	float NdotH = max(dot(N, H), 0.0f);
+	float NdotH = clamp(dot(N, H), 0.0f, 0.99f);
 	return F0 + (vec3(1.0f) - F0) * pow((1 - NdotH), 5.0f);
 }
 
@@ -104,6 +104,7 @@ vec3 ComputeLightColor(vec3 N, vec3 L, vec3 V, vec3 albedo, vec3 lightIradiance,
 	vec3 kS = F;
 	vec3 kD = vec3(1.0f) - kS;
 	kD *= 1.0f - metalness;
+	kD = max(kD, vec3(0.0f));
 	
 	float NdotL = max(dot(N, L), 0.01f);
 	float NdotV = max(dot(N, V), 0.01f);

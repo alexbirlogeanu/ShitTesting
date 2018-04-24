@@ -33,7 +33,9 @@
 #include "../vulkan/VulkanLoader.h"
 
 #include "rapidxml/rapidxml.hpp"
+#include "rapidxml/rapidxml_print.hpp"
 #include "Callback.h"
+#include <sstream>
 
 using namespace std;
 
@@ -47,77 +49,6 @@ using namespace std;
 } while(0);
 
 typedef void (*FuncPtr)();
-
-class Sparam 
-{
-public:
-    unsigned int id;
-    unsigned int value;
-    void* address;
-    FuncPtr f;
-
-    Sparam()
-    {
-        address = nullptr;
-        value = 0;
-    }
-
-    Sparam(unsigned int i) : id(i)
-    {
-        address = nullptr;
-        value = 0;
-    }
-
-    virtual void DoSomething()
-    {
-    }
-};
-template<typename T,
-         typename FUNC>
-class SpecificParam1 : public Sparam
-{
-public:
-    SpecificParam1(unsigned int i, FUNC f) : Sparam(i)
-    {
-        this->f = (FuncPtr)f;
-    }
-
-    virtual void DoSomething() override
-    {
-        ((FUNC)f)(id);
-    }
-private:
-    //FUNC f;
-};
-
-
-
-template<typename T,
-    typename FUNC>
-class SpecificParam2 : public Sparam
-{
-public:
-    SpecificParam2(unsigned int i, FUNC f) : Sparam(i)
-    {
-        address = &id;
-        this->f = (FuncPtr)f;
-    }
-
-    virtual void DoSomething() override
-    {
-        value = ((FUNC)f)((T*)address);
-    }
-private:
-    //FUNC f;
-};
-#define ELEMS 200
-
-typedef void (*func1)(unsigned int);
-typedef unsigned int (*func2)(int*);
-
-
-typedef SpecificParam1<int, func1> IntParam; 
-typedef SpecificParam2<int, func2> PtrParam;
 
 void intFunc(unsigned int i)
 {
@@ -165,255 +96,6 @@ int power(int b, int x)
     }
     return result;
 }
-
-class V
-{
-public:
-    const int* p;
-    V(const vector<int>& v)
-    {
-        p = v.data();
-    }
-};
-
-class CThread
-{
-public:
-    CThread()
-        : m_handle(NULL)
-        , m_threadId(~0)
-    {
-    };
-
-    void SetParams(void* data) { m_threadParams.params = data; };
-
-    void Create()
-    {
-        m_threadParams.threadToStart = this;
-        SECURITY_ATTRIBUTES sa;
-        ZeroMemory(&sa, sizeof(SECURITY_ATTRIBUTES));
-        sa.nLength = sizeof(SECURITY_ATTRIBUTES);
-        m_handle = CreateThread(&sa,
-            0,
-            CThread::StartThreadProc,
-            (LPVOID)&m_threadParams,
-            CREATE_SUSPENDED,
-            &m_threadId);
-    }
-
-    void Create(void* params)
-    {
-        m_threadParams.params = params;
-        Create();
-    }
-    void Start()
-    {
-        if(m_handle)
-        {
-            ResumeThread(m_handle);
-        }
-        else
-        {
-            std::cout << "Handle is invalid" << std::endl;
-        }
-
-    };
-
-    void Wait()
-    {
-        if(m_handle)
-        {
-            WaitForSingleObject(m_handle, INFINITE);
-        }
-    };
-
-    virtual ~CThread()
-    {
-        CloseHandle(m_handle);
-    };
-protected:
-    virtual bool DoWork(void* params) = 0;
-private:
-    struct SStartThreadParams
-    {
-        CThread*        threadToStart;
-        void*           params;
-
-        SStartThreadParams() 
-            : threadToStart(nullptr)
-            , params(nullptr)
-        {
-        }
-    };
-    static DWORD WINAPI StartThreadProc(LPVOID params)
-    {
-        SStartThreadParams casted_params = *(SStartThreadParams*)params;
-        return casted_params.threadToStart->DoWork(casted_params.params);
-    }
-    std::function<DWORD(LPVOID)>    m_threadProcPtr;
-    HANDLE                          m_handle;
-    DWORD                           m_threadId;
-    SStartThreadParams              m_threadParams;
-};
-
-struct SProcessInfo
-{
-    std::string vert;
-    std::string frag;
-    std::string out;
-};
-
-class CCreateProcessThread : public CThread
-{
-public:
-    CCreateProcessThread()
-        : m_dataMutex(NULL)
-        , m_logHandle(NULL)
-        , m_isQuiting(false)
-    {
-        m_dataMutex = CreateMutex(NULL,
-            FALSE,
-            NULL);
-
-        assert(m_dataMutex);
-        ZeroMemory(&m_processInfo, sizeof(PROCESS_INFORMATION));
-    }
-
-     ~CCreateProcessThread()
-     {
-         CloseHandle(m_dataMutex);
-         CloseHandle(m_logHandle);
-         CloseProcces();
-     }
-
-     void Quit() { m_isQuiting = true; }
-
-     void PushRequest(SProcessInfo& info)
-     {
-         WaitForSingleObject(m_dataMutex, INFINITE);
-         m_pendingRequest.push(info);
-         assert(ReleaseMutex(m_dataMutex));
-     }
-
-protected:
-    bool DoWork(void* params) override
-    {
-        OpenLog();
-        DWORD waitResult;
-
-        while(true)
-        {
-            bool closeProcess;
-            if(IsProcessFinished(closeProcess))
-            {
-                if(closeProcess)
-                {
-                    CloseProcces();
-                }
-
-                waitResult = WaitForSingleObject(m_dataMutex, 0);
-                if(waitResult == WAIT_OBJECT_0)
-                {
-                    if(m_pendingRequest.empty())
-                    {
-                        if(m_isQuiting)
-                        {
-                            assert(ReleaseMutex(m_dataMutex));
-                            return true;
-                        }
-                    }
-                    else
-                    {
-                        SProcessInfo& info = m_pendingRequest.front();
-                        StartProcess(info.vert, info.frag, info.out);
-                        m_pendingRequest.pop();
-
-                    }
-                    assert(ReleaseMutex(m_dataMutex));
-                }
-                
-            }
-            
-            //Yield();
-        }
-
-        return true;
-    }
-private:
-    void OpenLog()
-    {
-        SECURITY_ATTRIBUTES sa;
-        sa.nLength = sizeof(sa);
-        sa.lpSecurityDescriptor = NULL;
-        sa.bInheritHandle = TRUE;
-
-        m_logHandle = CreateFile("log.txt",
-            GENERIC_WRITE | GENERIC_READ,
-            FILE_SHARE_READ,
-            &sa,
-            CREATE_ALWAYS,
-            FILE_ATTRIBUTE_NORMAL,
-            NULL);
-
-        assert(m_logHandle);
-    }
-
-    void StartProcess(const std::string& vert, const std::string& frag, const std::string& out)
-    {
-        char cmdLine[128]; //= "glslangValidator.exe -V spv.test.vert spv.test.frag -o test.spv";
-        std::string cmdStr = "glslangValidator.exe -V " + vert + " " + frag + " -o " + out;
-        memcpy(cmdLine, cmdStr.data(), cmdStr.size());
-        cmdLine[cmdStr.size()] = '\0';
-
-        DWORD creationFlags = 0; // = CREATE_NEW_CONSOLE;
-        STARTUPINFO startInfo;
-        memset(&startInfo, 0, sizeof(STARTUPINFO));
-        startInfo.cb = sizeof(STARTUPINFO);
-
-        startInfo.dwFlags = STARTF_USESTDHANDLES;
-        startInfo.hStdError = m_logHandle;
-        startInfo.hStdOutput = m_logHandle;
-
-        ZeroMemory(&m_processInfo, sizeof(PROCESS_INFORMATION));
-
-        BOOL res = CreateProcess(NULL,
-            cmdLine,
-            NULL,
-            NULL,
-            TRUE,
-            creationFlags,
-            NULL,
-            NULL,
-            &startInfo,
-            &m_processInfo
-            );
-    }
-
-    bool IsProcessFinished(bool& needCloseProcess)
-    {
-        needCloseProcess = false;
-        if(m_processInfo.hProcess)
-        {
-            DWORD result = WaitForSingleObject(m_processInfo.hProcess, 0l);
-            needCloseProcess = (result == WAIT_OBJECT_0);
-            return !(result == WAIT_TIMEOUT);
-        }
-        return true;
-    }
-
-    void CloseProcces()
-    {
-        CloseHandle(m_processInfo.hProcess);
-        CloseHandle(m_processInfo.hThread);
-        ZeroMemory(&m_processInfo, sizeof(PROCESS_INFORMATION));
-    }
-
-    bool                        m_isQuiting;
-    std::queue<SProcessInfo>   m_pendingRequest;
-    HANDLE m_dataMutex;
-    HANDLE m_logHandle;
-    PROCESS_INFORMATION m_processInfo;
-};
 
 class CSafeBool
 {
@@ -653,102 +335,6 @@ struct P
 };
 
 
-class A
-{
-public:
-    A() 
-        : result(5)
-    {}
-
-    virtual ~A()
-    {
-    }
-
-    void f()
-    {
-        cout << "A::f" << endl;
-    }
-
-    int GetResult() const
-    {
-        return result;
-    }
-
-    virtual void PrintResult()
-    {
-        cout << "A::Result: " << GetResult() << endl;
-    }
-
-    virtual int g(int r)
-    {
-        cout << "A::g: " << r << endl;
-        return ++r;
-    }
-
-    virtual int Compute(P p)
-    {
-        cout << "A::Compute" << endl;
-        result = p.a + p.b;
-        return result;
-    }
-
-    int Compute2(P& p)
-    {
-        cout << "A::Compute2" << endl;
-        p.a *= 2;
-        result = p.a + p.b;
-        return result;
-    }
-protected:
-    int result;
-};
-
-class B : public A 
-{
-public:
-    virtual ~B()
-    {
-    }
-
-    void NotOk()
-    {
-        cout << "Not Ok" << endl;
-    }
-
-    virtual void PrintResult()
-    {
-        cout << "B::Result: " << GetResult() << endl;
-    }
-
-    void f()
-    {
-        cout << "B::f" << endl;
-    }
-
-    virtual int Compute(P p)
-    {
-        cout << "B::Compute" << endl;
-        result = p.a * p.b;
-        return result;
-    }
-};
-
-class C : public B
-{
-public:
-    int Compute(P p)
-    {
-        cout << "C::Compute" << endl;
-        result = p.a - p.b;
-        return result;
-    }
-
-    virtual void PrintResult()
-    {
-        cout << "C::Result: " << GetResult() << endl;
-    }
-};
-
 class Wait
 {
 public:
@@ -760,28 +346,6 @@ public:
 };
 
 static Wait w;
-
-template <typename T>
-struct has_typedef_foobar {
-    // Types "yes" and "no" are guaranteed to have different sizes,
-    // specifically sizeof(yes) == 1 and sizeof(no) == 2.
-    typedef char yes[1];
-    typedef char no[2];
-
-    template <typename C>
-    static yes& test(typename C::foobar*);
-
-    template <typename>
-    static no& test(...);
-
-    // If the "sizeof" of the result of calling test<T>(0) would be equal to sizeof(yes),
-    // the first overload worked and T has a nested type named foobar.
-    static const bool value = sizeof(test<T>(0)) == sizeof(yes);
-};
-
-struct foo {    
-    typedef float foobar;
-};
 
 class State
 {
@@ -943,199 +507,485 @@ public:
     }
 };
 
-class X
+
+class Serializer;
+class ISeriable;
+class PropertyGeneric
 {
 public:
-    explicit X (int a)
-        : m_value(a)
-    {
-        cout << "Ctor X Class" << endl;
-    }
+	virtual void Save(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj) = 0;
+	virtual void Load(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj) = 0;
+};
 
-    X& operator++()
-    {
-        ++m_value;
-        return *this;
-    }
+class ISeriable
+{
+public:
+	ISeriable(const std::string& nodeName)
+		: m_name(nodeName)
+	{}
 
-    X operator++(int dummy)
-    {
-        ++m_value;
-        return *this;
-    }
+	virtual void Serialize(Serializer* serializer) = 0;
 
-    virtual ~X(){}
+	const std::string& GetName() const { return m_name; }
+	void SetName(const std::string& name) { m_name = name; }
+
 private:
-    int     m_value;
+	std::string m_name;
 };
 
-class Y 
+
+class Serializer
 {
 public:
-    explicit Y (float f)
-    {
-        cout << "Ctor Y class" << endl;
-    }
-    virtual ~Y() {}
+	Serializer()
+		: m_isSaving(true)
+		, m_currentNode(nullptr)
+	{
+		auto root = GetNewNode(GetNewString("objects"));
+		m_document.append_node(root);
+	}
+
+	void SerializeProperty(PropertyGeneric* prop, ISeriable* obj)
+	{
+		if (m_isSaving)
+			prop->Save(m_currentNode, this, obj);
+		else
+			prop->Load(m_currentNode, this, obj);
+
+	}
+
+	void BeginSerializing(ISeriable* obj)
+	{
+		if (m_isSaving)
+		{
+			auto newNode = GetNewNode(obj->GetName().c_str());
+			m_nodeStack.push_back(newNode);
+			m_currentNode = newNode;
+		}
+		else //loading step
+		{
+			if (!m_currentNode)
+			{
+				auto root = m_document.first_node();
+				m_currentNode = root->first_node();
+			}
+			else
+			{
+				if (m_nodeStack.empty())
+					m_currentNode = m_currentNode->next_sibling(obj->GetName().c_str());
+				else
+					m_currentNode = m_currentNode->first_node(obj->GetName().c_str());
+			}
+			BREAKPOINT(m_currentNode); //no node has been found.
+			m_nodeStack.push_back(m_currentNode);
+		}
+	}
+
+	void EndSerializing(ISeriable* obj)
+	{
+		BREAKPOINT(!m_nodeStack.empty());
+		auto last = m_nodeStack.back();
+		BREAKPOINT(last == m_currentNode); //sanity check
+		m_nodeStack.pop_back();
+		auto newCurrentNode = m_currentNode;
+
+		if (m_isSaving)
+		{
+			auto parrentNode = (m_nodeStack.empty()) ? m_document.first_node() : m_nodeStack.back();
+			parrentNode->append_node(m_currentNode);
+			newCurrentNode = (m_nodeStack.empty()) ? nullptr : m_nodeStack.back();
+		}
+		else
+		{
+			newCurrentNode = (m_nodeStack.empty()) ? m_currentNode : m_nodeStack.back();
+		}
+		m_currentNode = newCurrentNode;
+
+	}
+
+
+	rapidxml::xml_attribute<char>*	GetNewAttribute(const char* name = "", const char* val = "")
+	{
+		return m_document.allocate_attribute(name, val);
+	}
+
+	rapidxml::xml_node<char>* GetNewNode(const char* name = "")
+	{
+		return m_document.allocate_node(rapidxml::node_type::node_element, name);
+	}
+
+	char* GetNewString(const std::string& str)
+	{
+		return m_document.allocate_string(str.c_str());
+	}
+
+	void PrintContent()
+	{
+		std::stringstream ss;
+		std::fstream f("objects.xml", std::ios_base::out);
+
+		f << *m_document.first_node() << std::endl;
+		//std::string content = ss.str();
+		//std::cout << content;
+		f.close();
+	}
+
+	void ToggleIsSaving() { m_isSaving = false; m_currentNode = nullptr; } //this one is debug
+private:
+	rapidxml::xml_node<char>*				m_currentNode;
+	std::vector<rapidxml::xml_node<char>*>	m_nodeStack;
+
+	rapidxml::xml_document<char>	m_document;
+	bool							m_isSaving;
+
 };
 
-class XY : public Y, public X
+template<class T>
+class SeriableImpl : public ISeriable
 {
 public:
-    XY(int a, float f)
-        : X(a)
-        , Y(f)
-    {
-    }
+	SeriableImpl(const std::string& nodeName)
+		: ISeriable(nodeName)
+	{}
+
+	virtual void Serialize(Serializer* serializer) override
+	{
+		serializer->BeginSerializing(this);
+		for (auto prop : T::PropertiesMap)
+			serializer->SerializeProperty(prop, this);
+
+		serializer->EndSerializing(this);
+	}
+
+
+protected:
+	static std::vector<PropertyGeneric*> PropertiesMap;
 };
 
-int FibRec(int n)
+
+#define BEGIN_PROPERTY_MAP(CLASSTYPE) std::vector<PropertyGeneric*> SeriableImpl<CLASSTYPE>::PropertiesMap = {
+
+#define END_PROPERTY_MAP(CLASSTYPE) };
+
+#define IMPLEMENT_PROPERTY(PTYPE, PNAME, PLABEL, CLASSTYPE) new Property<PTYPE, CLASSTYPE>(CLASSTYPE::Get##PNAME(), PLABEL)
+
+#define DECLARE_PROPERTY(PTYPE, PNAME, CLASSTYPE)  protected: PTYPE PNAME; \
+													public: static PTYPE CLASSTYPE::* Get##PNAME() { return &CLASSTYPE::PNAME; }
+
+template<typename T, typename BASE> //default int
+class Property : public PropertyGeneric
 {
-    if (n <= 0)
-    {
-        return 0;
-    }
-    else if(n == 1)
-    {
-        return 1;
-    }
-    else
-    {
-        return FibRec(n - 1) + FibRec(n - 2);
-    }
-}
+public:
+	typedef T BASE::* PtmType;
+	Property()
+	{}
+	Property(PtmType offset, const std::string& label)
+		: m_ptm(offset)
+		, m_label(label)
+	{}
 
-unsigned long long FibIt(int n)
-{
-    unsigned long long f1 = 0;
-    unsigned long long f2 = 1;
+	virtual void Save(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		BREAKPOINT(cobj);
 
-    if (n <= 0)
-    {
-        return f1;
-    }
-    else if(n == 1)
-    {
-        return f2;
-    }
-    else
-    {
-        unsigned long long fn;
-        for (int i = 2; i <= n; ++i)
-        {
-            fn = f1 + f2;
-            f1 = f2;
-            f2 = fn;
-        }
+		auto prop = serializer->GetNewAttribute(m_label.c_str(), serializer->GetNewString(to_string(cobj->*m_ptm)));
+		objNode->append_attribute(prop);
+	};
 
-        return fn;
-    }
-}
+	virtual void Load(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		auto prop = objNode->first_attribute(m_label.c_str(), 0, false);
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		BREAKPOINT(cobj);
 
-template<typename T>
-int FibConst(int n)
-{
-    const T k = sqrt(T(5.0));
-    const T two = T(2.0);
-    const T one = T(1.0);
-    const T first = (one + k) / two;
-    const T second = (one - k) / two;
+		cobj->*m_ptm = std::stoi(prop->value());
 
-    return int(glm::floor(one / k * (pow(first, n) - pow(second, n))));
+	};
+private:
+	PtmType						m_ptm;
+	std::string					m_label;
 };
-#undef max
 
-void TestFib()
+
+template<typename BASE>
+class Property<float, BASE> : public PropertyGeneric
 {
-    unsigned long long prev = 1;
-    for (int i = 2; i < std::numeric_limits<int>::max(); ++i)
-    {
-        unsigned long long fn = FibIt(i);
-        std::cout << fn << endl;
-        BREAKPOINT(fn >= prev);
-        prev = fn;
-    }
+public:
+	typedef float BASE::* PtmType;
+	Property()
+	{}
+	Property(PtmType offset, const std::string& label)
+		: m_ptm(offset)
+		, m_label(label)
+	{}
+
+	virtual void Save(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		BREAKPOINT(cobj);
+
+		auto prop = serializer->GetNewAttribute(m_label.c_str(), serializer->GetNewString(to_string(cobj->*m_ptm)));
+		objNode->append_attribute(prop);
+	};
+
+	virtual void Load(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		auto prop = objNode->first_attribute(m_label.c_str(), 0, false);
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		BREAKPOINT(cobj);
+		cobj->*m_ptm = std::stof(prop->value());
+
+	};
+private:
+	PtmType						m_ptm;
+	std::string					m_label;
+};
+
+template<typename BASE>
+class Property<glm::vec3, BASE> : public PropertyGeneric
+{
+public:
+	typedef glm::vec3 BASE::* PtmType;
+	Property()
+	{}
+	Property(PtmType offset, const std::string& label)
+		: m_ptm(offset)
+		, m_label(label)
+	{}
+
+	virtual void Save(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		BREAKPOINT(cobj);
+
+		auto node = serializer->GetNewNode(m_label.c_str());
+
+		node->append_attribute(serializer->GetNewAttribute("x", serializer->GetNewString(to_string((cobj->*m_ptm)[0]))));
+		node->append_attribute(serializer->GetNewAttribute("y", serializer->GetNewString(to_string((cobj->*m_ptm)[1]))));
+		node->append_attribute(serializer->GetNewAttribute("z", serializer->GetNewString(to_string((cobj->*m_ptm)[2]))));
+
+		objNode->append_node(node);
+	};
+
+	virtual void Load(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		auto node = objNode->first_node(m_label.c_str(), 0, false);
+		BREAKPOINT(node);
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		BREAKPOINT(cobj);
+
+		(cobj->*m_ptm)[0] = std::stof(node->first_attribute("x")->value()); //need some checks for null
+		(cobj->*m_ptm)[1] = std::stof(node->first_attribute("y")->value());
+		(cobj->*m_ptm)[2] = std::stof(node->first_attribute("z")->value());
+	};
+private:
+	PtmType						m_ptm;
+	std::string					m_label;
+};
+
+template<typename BASE>
+class Property<std::string, BASE> : public PropertyGeneric
+{
+public:
+	typedef std::string BASE::* PtmType;
+	Property()
+	{}
+	Property(PtmType offset, const std::string& label)
+		: m_ptm(offset)
+		, m_label(label)
+	{}
+
+	virtual void Save(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		BREAKPOINT(cobj);
+
+		auto prop = serializer->GetNewAttribute(m_label.c_str(), serializer->GetNewString(cobj->*m_ptm));
+		objNode->append_attribute(prop);
+	};
+
+	virtual void Load(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		auto prop = objNode->first_attribute(m_label.c_str(), 0, false);
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		BREAKPOINT(cobj);
+		cobj->*m_ptm = std::string(prop->value());
+	};
+private:
+	PtmType						m_ptm;
+	std::string					m_label;
+};
+
+
+
+
+class TestSer : public SeriableImpl<TestSer>
+{
+public:
+
+	TestSer() : SeriableImpl<TestSer>("testSer") 
+	{};
+
+	TestSer(float dick, int women, int men)
+		: SeriableImpl<TestSer>("testSer")
+		, dickLength(dick)
+		, womenFucked(women)
+		, menFucked(men)
+	{
+		mesaj = "muie cu cacat pe o pula de : " + to_string(dickLength);
+	}
+
+protected:
+	DECLARE_PROPERTY(float, dickLength, TestSer);
+	DECLARE_PROPERTY(int, womenFucked, TestSer);
+	DECLARE_PROPERTY(int, menFucked, TestSer);
+	DECLARE_PROPERTY(std::string, mesaj, TestSer);
+};
+
+BEGIN_PROPERTY_MAP(TestSer)
+	IMPLEMENT_PROPERTY(float, dickLength, "dickLength", TestSer),
+	IMPLEMENT_PROPERTY(int, womenFucked, "WomenFucked", TestSer),
+	IMPLEMENT_PROPERTY(int, menFucked, "MenFucked", TestSer),
+	IMPLEMENT_PROPERTY(std::string, mesaj, "Mesaj", TestSer)
+END_PROPERTY_MAP(TestSer)
+
+template<typename BASE>
+class Property<TestSer, BASE> : public PropertyGeneric
+{
+public:
+	typedef TestSer BASE::* PtmType;
+	Property()
+	{}
+	Property(PtmType offset, const std::string& label)
+		: m_ptm(offset)
+		, m_label(label)
+	{}
+
+	virtual void Save(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		BREAKPOINT(cobj);
+		(cobj->*m_ptm).SetName(m_label);
+		(cobj->*m_ptm).Serialize(serializer);
+	};
+
+	virtual void Load(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		BREAKPOINT(cobj);
+		(cobj->*m_ptm).SetName(m_label);
+		(cobj->*m_ptm).Serialize(serializer);
+	};
+
+private:
+	PtmType						m_ptm;
+	std::string					m_label;
+};
+
+class ComplexTestSer : public SeriableImpl<ComplexTestSer>
+{
+public:
+
+	ComplexTestSer()
+		: SeriableImpl<ComplexTestSer>("complex")
+		, testFloat(69.0f)
+		, ser(2 * 21.6f, 3 * 10, 20)
+		, position(1, 2, 3)
+	{}
+
+private:
+	DECLARE_PROPERTY(float, testFloat, ComplexTestSer);
+	DECLARE_PROPERTY( TestSer, ser, ComplexTestSer);
+	DECLARE_PROPERTY(glm::vec3, position, ComplexTestSer);
+};
+
+BEGIN_PROPERTY_MAP(ComplexTestSer)
+	IMPLEMENT_PROPERTY(float, testFloat, "test", ComplexTestSer),
+	IMPLEMENT_PROPERTY(TestSer, ser, "testSerializer", ComplexTestSer),
+	IMPLEMENT_PROPERTY(glm::vec3, position, "PoSItion", ComplexTestSer)
+END_PROPERTY_MAP(ComplexTestSer)
+
+int Sum(int a, int b)
+{
+	return a + b;
+}
+
+
+class Foo
+{
+public:
+	Foo()
+	{
+		cout << "Ctor" << endl;
+	}
+
+	Foo(const Foo& other)
+	{
+		cout << "Copy ctor" << endl;
+	}
+
+	Foo(Foo&& other)
+	{
+		cout << "Move ctor" << endl;
+	}
+
+	Foo& operator=(const Foo& other)
+	{
+		cout << "Copy operator" << endl;
+	}
+
+	Foo& operator=(Foo&& other)
+	{
+		cout << "Move operator" << endl;
+	}
+
+	~Foo()
+	{
+		cout << "Dtor" << endl;
+	}
+private:
+	int p;
+};
+
+Foo Func(Foo o)
+{
+	return o;
+}
+
+Foo Func()
+{
+	return Foo();
+}
+
+static std::vector<int> map = { 2 };
+
+int GetInt()
+{
+	int a = 6;
+	return a;
 }
 
 int main (int argc, char** argv)
 {
-    /*LoopState loopState;
-    EndState endState;
+	/*TestSer t(21.6f, 10, 20);
+	TestSer t2(13.0f, 2, 0);
+	ComplexTestSer ct;
 
-    loopState.Link(ELoop::Out, &endState);
+	Serializer serializer;
+	t.Serialize(&serializer);
+	t2.Serialize(&serializer);
+	ct.Serialize(&serializer);
 
-    auto threadFunction = [&] {
+	serializer.PrintContent();
 
-        State* currentState = &loopState;
-        State* prevState = nullptr;
+	serializer.ToggleIsSaving();
+	TestSer tloads[2];
+	tloads[0].Serialize(&serializer);
+	tloads[1].Serialize(&serializer);
+	ComplexTestSer ctload;
+	ctload.Serialize(&serializer);
+*/
 
-        while (true)
-        {
-            if (currentState != prevState)
-            {
-                if (prevState)
-                    prevState->Stop();
-
-                currentState->Start();
-            }
-            currentState->Execute();
-
-            if (currentState->IsLeaf())
-            {
-                currentState->Stop();
-                break;
-            }
-            prevState = currentState;
-            currentState = currentState->GetSelectedState();
-        }
-    };
-
-    std::thread t (threadFunction);
-    std::thread::id tId = t.get_id();
-
-    SHORT isAPressed = false;
-    cout << "Press A to send a message" << endl;
-
-    while (!isAPressed)
-    {
-        isAPressed = GetKeyState('A');
-        if (isAPressed)
-        {
-            DoneEvent e;
-            e.Send();
-        }
-    }
-
-    t.join();*/
-
-    struct S 
-    {
-        int a;
-        float f;
-        S ()
-            : a(0)
-            , f(-1.0f)
-        {}
-    };
-
-    std::vector<S> v (10);
-    int i = 0;
-    for (auto& e : v)
-    {
-        e.a = i++;
-        e.f *= float(i);
-    }
-
-    void* memPtr = (void*)v.data();
-    unsigned int offset = 3 * sizeof(S);
-    S* e = (S*)((char*)memPtr + offset);
-    cout << e->a << e->f << endl;
-
-    //for (unsigned int z = 0; z < v.size(); ++z)
-    //{
-    //    S& e = v[z];
-    //    e.a = i++;
-    //    e.f *= float(i);
-    //}
     return 0;
 }

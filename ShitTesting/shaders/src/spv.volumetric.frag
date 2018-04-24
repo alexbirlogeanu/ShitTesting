@@ -32,7 +32,8 @@ void main()
 	//vec3 start = texture(BackTexture, uv).xyz;
 	//vec3 stop =  texture(FrontTexture, uv).xyz;
 	
-	float steps = 128.0;
+
+	float steps = 80.0;
 	vec3 dir = stop - start;
 	float len = length(dir);
 	
@@ -52,13 +53,13 @@ void main()
 		vec4 color = texture(VolumeTexture, coords);
 		
 		color.rgb *= color.a;
-		color.a *= 0.1f;
+		color.a *= 0.01f;
 		
 		acumColor += (1.0f - acumColor.a) * color;
 		Debug = vec4(acumColor.rgb, 1.0);
 		Debug.w = len;
 		
-		if (acumColor.a > 0.45) //this should be parametrize
+		if (acumColor.a > 0.15) //this should be a parameter
 			break;
 			
 	}

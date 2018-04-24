@@ -12,6 +12,7 @@ layout (set=0, binding=5) uniform Common
 
 layout(set=1, binding=0) uniform Specifics
 {
+	vec4 Attenuation;
 	mat4 ModelMatrix;
     vec4 LightRadiance;
 };

@@ -701,7 +701,7 @@ void CUIRenderer::Init()
     m_vectorElemPipeline.SetFragmentShaderFile("uivector3d.frag");
     m_vectorElemPipeline.SetVertexInputState(Mesh::GetVertexDesc());
     m_vectorElemPipeline.SetDepthTest(true);
-    m_vectorElemPipeline.SetDepthWrite(true);
+    m_vectorElemPipeline.SetDepthWrite(false);
     m_vectorElemPipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_LINE_STRIP);
     m_vectorElemPipeline.SetLineWidth(1.5f);
     m_vectorElemPipeline.AddBlendState(blendState);

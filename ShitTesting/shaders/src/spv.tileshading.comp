@@ -1,0 +1,236 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shading_language_420pack : enable
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+struct Light
+{
+	vec4 ViewSpacePosition;
+	vec4 Iradiance; //xyz iradiance, w - radius
+	vec4 Properties; //xyz - attenuation constants, w - attenuation denominator
+};
+
+struct GlobalParams
+{
+	mat4 InvProjectionMatrix;
+	mat4 ViewMatrix;
+	vec4 CameraPosition;
+	ivec4 Count;
+};
+
+layout(set=0, binding=0, rgba16f) writeonly uniform  image2D LightImage;
+
+layout(set=0, binding = 1 ) buffer LightsBuffer
+{
+	GlobalParams params;
+	Light Lights[];
+};
+layout(set = 0, binding = 2, rgba16f) writeonly uniform  image2D DebugImage;
+layout(set = 0, binding = 3) uniform sampler2D AlbedoText;
+layout(set = 0, binding = 4) uniform sampler2D SpecularText;
+layout(set = 0, binding = 5) uniform sampler2D NormalText;
+layout(set = 0, binding = 6) uniform sampler2D WorldPosText;
+layout(set = 0, binding = 7) uniform sampler2D DepthText;
+
+shared vec4 planes[6];
+shared int NumOfLights;
+shared int LightIndexes[64]; //64 is the max number of lights per group
+shared int zMin;
+shared int zMax;
+
+vec4 GetPlaneFrom(vec4 p1, vec4 p2, vec4 p3)
+{
+	vec3 normal = cross(vec3(p2 - p1), vec3(p3 - p1));
+	normal = normalize(normal);
+	float d = -dot(normal, vec3(p1));
+	return vec4(normal, d);
+}
+
+float InverseDepthTransform(float z)
+{
+	float near = 0.1f;
+	float far = 75.0f;
+	float range = (far - near);
+	return (far + near) / range - 2 * near / (z * range);
+	
+}
+
+const float PI = 3.1415926535897932384626433832795f;
+
+//normal distribution function TrowbridgeReitzGGX
+float NormalDistribution(float roughness, vec3 N, vec3 H)
+{
+	float rough2 = roughness * roughness;
+	rough2 *= rough2;
+	float NdotH = max(dot(N, H), 0.0f);
+	float denom = (NdotH * NdotH) * (rough2 - 1) + 1;
+	denom = PI * denom * denom;
+	
+	return rough2 / denom;
+}
+
+float GeometryShlick(float NdotV, float k)
+{
+	float nom = NdotV;
+	float denom = NdotV * (1 - k) + k;
+	
+	return nom / denom;
+}
+
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
+{
+	float k = roughness + 1;
+	k = k * k / 8.0f;
+	float NdotV = max(dot(N, V), 0.0f);
+	float NdotL = max(dot(N, L), 0.0f);
+	return GeometryShlick(NdotV, k) * GeometryShlick(NdotL, k);
+}
+
+vec3 FresnelSchilick(vec3 N, vec3 H, vec3 F0)
+{
+	float NdotH = clamp(dot(N, H), 0.00f, 0.99f);
+	return F0 + (vec3(1.0f) - F0) * pow((1.0f - NdotH), 5.0f);
+}
+
+vec3 ComputeLightColor(vec3 N, vec3 L, vec3 V, vec3 albedo, vec3 lightIradiance, float attenuation, float roughness, float metalness)
+{
+	vec3 color = vec3 (0.0f);
+	vec3 H = normalize(V + L);
+	vec3 F0 = vec3(0.04f);
+	F0 = mix(F0, albedo, metalness);
+	
+	float NDF = NormalDistribution(roughness, N, H);
+	float G = GeometrySmith(N, V, L, roughness);
+	vec3 F = FresnelSchilick(H, V, F0);
+	
+	vec3 kS = F;
+	vec3 kD = vec3(1.0f) - kS;
+	kD *= 1.0f - metalness;
+	kD = max(kD, vec3(0.0f));
+	
+	float NdotL = max(dot(N, L), 0.01f);
+	float NdotV = max(dot(N, V), 0.01f);
+	
+	vec3 nom = NDF * F * G;
+	float denom = 4 * NdotL * NdotV;
+	vec3 specular = nom / denom;
+
+	vec3 radiance = lightIradiance * NdotL * attenuation;
+	color = (kD * albedo / PI + specular) * radiance;
+	
+	return color;
+}
+
+void main()
+{
+	ivec2 uv = ivec2(gl_GlobalInvocationID.xy); //for clarity
+	float depth = texelFetch(DepthText, uv, 0).x;
+	depth = InverseDepthTransform(depth);
+	
+	if (gl_LocalInvocationID.xy == vec2(0.f))
+	{
+		zMax = 0;
+		zMin = 0x7F7FFFFF;
+		NumOfLights = 0;
+	}
+	
+	barrier();
+	
+	atomicMin(zMin, floatBitsToInt(depth));
+	atomicMax(zMax, floatBitsToInt(depth));
+	
+	barrier();
+	
+	if (gl_LocalInvocationID.xy == vec2(0.f))
+	{		
+		float x = gl_WorkGroupID.x;
+		float y = gl_WorkGroupID.y;
+		
+		vec2 scale = vec2(2.0f / gl_NumWorkGroups.x, 2.0f / gl_NumWorkGroups.y);		
+		vec2 ndcRef = vec2(-1.0, -1.0f);
+		
+		float gridZMin = intBitsToFloat(zMin);
+		float gridZMax = intBitsToFloat(zMax);
+		
+		vec4 ndcPoints[] = {
+							vec4(ndcRef + vec2(x, y) * scale, gridZMin, 1.0f),
+							vec4(ndcRef + vec2(x + 1.0f, y) * scale, gridZMin, 1.0f),
+							vec4(ndcRef + vec2(x + 1.0f, y + 1.0f) * scale, gridZMin, 1.0f),
+							vec4(ndcRef + vec2(x, y + 1.0f) * scale, gridZMin, 1.0f),
+							vec4(ndcRef + vec2(x, y) * scale, gridZMax, 1.0f),
+							vec4(ndcRef + vec2(x + 1.0f, y) * scale, gridZMax, 1.0f),
+							vec4(ndcRef + vec2(x + 1.0f, y + 1.0f) * scale, gridZMax, 1.0f),
+							vec4(ndcRef + vec2(x, y + 1.0f) * scale, gridZMax, 1.0f)
+		};
+		
+									
+		vec4 viewSpacePoints[8];
+		for (int i = 0; i < 8; ++i)
+		{
+			viewSpacePoints[i] = params.InvProjectionMatrix * ndcPoints[i];
+			viewSpacePoints[i] /= viewSpacePoints[i].w;
+		}
+		
+		//near
+		planes[0] = GetPlaneFrom(viewSpacePoints[2], viewSpacePoints[0], viewSpacePoints[1]);
+		//far
+		planes[1] = GetPlaneFrom(viewSpacePoints[6], viewSpacePoints[5], viewSpacePoints[4]);
+		//left
+		planes[2] = GetPlaneFrom(viewSpacePoints[3], viewSpacePoints[7], viewSpacePoints[4]);
+		//right
+		planes[3] = GetPlaneFrom(viewSpacePoints[5], viewSpacePoints[6], viewSpacePoints[2]);
+		//top
+		planes[4] = GetPlaneFrom(viewSpacePoints[5], viewSpacePoints[1], viewSpacePoints[0]);
+		//bot
+		planes[5] = GetPlaneFrom(viewSpacePoints[3], viewSpacePoints[2], viewSpacePoints[6]);
+			
+	}
+	barrier();
+
+	int gridCellSize = int(gl_WorkGroupSize.x * gl_WorkGroupSize.y);
+	for (int lightIndex = int(gl_LocalInvocationIndex); lightIndex < params.Count.x; lightIndex += gridCellSize)
+	{
+		Light light = Lights[lightIndex];
+		bool inFrustrum = true;
+		
+		for (int i = 0; i < 6; ++i)
+		{
+			float d = dot(light.ViewSpacePosition, planes[i]);
+			inFrustrum = inFrustrum && (d >= -light.Iradiance.w); //change it back
+		}
+		
+		if (inFrustrum)
+		{
+			int lightsCount = atomicAdd(NumOfLights, 1);
+			LightIndexes[lightsCount] = lightIndex;
+		}
+	}
+	barrier();
+	
+	imageStore(DebugImage, uv, vec4(float(NumOfLights)));
+	
+	vec4 materialProp = texelFetch(SpecularText, uv, 0);
+	vec3 albedo = texelFetch(AlbedoText, uv, 0).rgb;
+	vec3 normal = texelFetch(NormalText, uv, 0).xyz;
+	vec3 worldPos = texelFetch(WorldPosText, uv, 0).xyz;
+	float roughness = materialProp.x;
+	float metalness = materialProp.y;
+	
+	vec3 V = normalize(params.CameraPosition.xyz - worldPos);
+	vec3 lightColor = vec3(0.f, 0.f, 0.f);
+	for (int i = 0; i < NumOfLights; ++i)
+	{
+		Light light = Lights[LightIndexes[i]];
+		
+		vec3 L = vec3(inverse(params.ViewMatrix) * light.ViewSpacePosition) - worldPos;
+		float distToLight = length(L);
+		L /= distToLight;
+		vec4 lightAtt = light.Properties;
+		float attenuation = clamp(1.0f - (lightAtt.x + lightAtt.y * distToLight + lightAtt.z * pow(distToLight, 2)) / lightAtt.w, 0.0f, 1.0f);
+		//float attenuation = clamp(1.0f - distToLight / light.Iradiance.w, 0.0f, 1.0f);
+		lightColor += ComputeLightColor(normal, L, V, albedo, light.Iradiance.rgb, attenuation, roughness, metalness);
+	}
+	
+	imageStore(LightImage, uv, vec4(lightColor, 1.0f));
+}

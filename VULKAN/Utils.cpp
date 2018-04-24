@@ -43,8 +43,8 @@ unsigned int GetBytesFromFormat(VkFormat format)
 void PerspectiveMatrix(glm::mat4& projMat)
 {
     projMat = glm::perspective(ms_camera.GetFOV(),
-        static_cast<float>(WIDTH) /
-        static_cast<float>(HEIGHT), ms_camera.GetNear(), ms_camera.GetFar());
+        static_cast<float>(WIDTH) / static_cast<float>(HEIGHT), 
+		ms_camera.GetNear(), ms_camera.GetFar());
 }
 
 float CreateRandFloat(float min, float max)
@@ -353,7 +353,7 @@ Mesh* CreateUnitCube()
 {
     static Mesh* cube = nullptr;
     if (!cube)
-        cube = new Mesh("obj\\cube.obj");
+        cube = new Mesh("obj\\cube.mb");
 
     return cube;
 }
@@ -485,7 +485,7 @@ void AllocImageMemory(const VkImageCreateInfo& imgInfo, VkImage& outImage, VkDev
     cleanStructure(memAllocInfo);
     memAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memAllocInfo.pNext = nullptr;
-    memAllocInfo.memoryTypeIndex = vk::SVUlkanContext::GetMemTypeIndex(memReq.memoryTypeBits, 0);
+    memAllocInfo.memoryTypeIndex = vk::SVUlkanContext::GetMemTypeIndex(memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     memAllocInfo.allocationSize = memReq.size;
 
     VULKAN_ASSERT(vk::AllocateMemory(dev, &memAllocInfo, nullptr, &outMemory));

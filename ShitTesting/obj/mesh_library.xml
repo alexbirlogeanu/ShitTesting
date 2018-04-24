@@ -1,0 +1,9 @@
+<meshes>
+	<mesh file="obj\\plane.obj"/>
+	<mesh file="obj\\plane2.obj"/>
+	<mesh file="obj\\sphere.obj"/>
+	<mesh file="obj\\pointlight.obj"/>
+	<mesh file="obj\\cube.obj"/>
+	<mesh file="obj\\dragon.obj"/>
+	<mesh file="obj\\sphere.obj"/>
+</meshes>

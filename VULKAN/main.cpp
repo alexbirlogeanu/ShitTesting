@@ -35,7 +35,7 @@
 #include "3DTexture.h"
 #include "ShadowRenderer.h"
 #include "Object.h"
-
+#include "PointLightRenderer2.h"
 
 #define OUT_FORMAT VK_FORMAT_R16G16B16A16_SFLOAT
 //#define OUT_FORMAT VK_FORMAT_B8G8R8A8_UNORM
@@ -327,17 +327,25 @@ enum ELightSubpass
     ELightSubpass_Directional = 0,
     ELightSubpass_DirCount,
     ELightSubpass_PrePoint = 0,
-    ELightSubpass_Point,
+    ELightSubpass_PointAccum,
+	ELightSubpass_Blend,
     ELightSubpass_PointCount
 };
 
-enum ELightPassBuffers
+enum EDirLightBuffers
 {
-    ELightBuffer_Final = 0,
-    ELightBuffer_DebugDirLight,
-    ELightBUffer_DebugPointLight,
-    ELightBuffer_Depth,
-    ELightBuffer_Count
+	EDirLightBuffers_Final = 0,
+	EDirLightBuffers_Debug,
+	EDirLightBuffers_Count
+};
+
+enum EPointLightPassBuffers
+{
+    EPointLightBuffer_Final = 0,
+	EPointLightBuffer_Accum,
+	EPointLightBuffer_Debug,
+	EPointLightBuffer_Depth,
+	EPointLightBuffer_Count
 };
 
 class CLightRenderer : public CRenderer
@@ -589,10 +597,11 @@ private:
 
     void Update()
     {
-        static const float  k = 0.4f;
+        static const float  k = 0.1f;
         glm::vec3 totalRadiance = m_radiance * m_intensity;
         float IMax = glm::compMax(totalRadiance);
-        m_radius = glm::sqrt(IMax / k + 1);
+		//m_radius = glm::sqrt(IMax / k + 1);
+		m_radius = m_intensity;
 
         TRAP(! (m_radius != m_radius)); //nan or inf
 
@@ -620,6 +629,7 @@ struct SPointLightCommon
 
 struct SPointLightSpecifics
 {
+	glm::vec4 Attenuation;
     glm::mat4 ModelMatrix;
     glm::vec4 LightRadiance;
 };
@@ -627,16 +637,18 @@ struct SPointLightSpecifics
 class CPointLightRenderer : public CRenderer
 {
 public:
-    CPointLightRenderer(VkRenderPass renderPass)
-        : CRenderer(renderPass, "PointLightsRenderPass")
-        , m_pointLightMesh(nullptr)
-        , m_pointLightsCommonBuffer(VK_NULL_HANDLE)
-        , m_pointLightsCommonMemory(VK_NULL_HANDLE)
-        , m_pointLightsSpecificsMemory(VK_NULL_HANDLE)
-        , m_pointLightsSpecificsBuffer(VK_NULL_HANDLE)
-        , m_commonDescSet(VK_NULL_HANDLE)
-        , m_commonDescSetLayout(VK_NULL_HANDLE)
-        , m_specificDescSetLyout(VK_NULL_HANDLE)
+	CPointLightRenderer(VkRenderPass renderPass)
+		: CRenderer(renderPass, "PointLightsRenderPass")
+		, m_pointLightMesh(nullptr)
+		, m_pointLightsCommonBuffer(VK_NULL_HANDLE)
+		, m_pointLightsCommonMemory(VK_NULL_HANDLE)
+		, m_pointLightsSpecificsMemory(VK_NULL_HANDLE)
+		, m_pointLightsSpecificsBuffer(VK_NULL_HANDLE)
+		, m_commonDescSet(VK_NULL_HANDLE)
+		, m_commonDescSetLayout(VK_NULL_HANDLE)
+		, m_specificDescSetLyout(VK_NULL_HANDLE)
+		, m_blendDescSetLayout(VK_NULL_HANDLE)
+		, m_blendDescSet(VK_NULL_HANDLE)
         , m_selectedIndex(-1)
         , m_selectedLightInfo(nullptr)
         , m_selectedLightPosition(nullptr)
@@ -654,6 +666,7 @@ public:
 
         vk::DestroyDescriptorSetLayout(dev, m_specificDescSetLyout, nullptr);
         vk::DestroyDescriptorSetLayout(dev, m_commonDescSetLayout, nullptr);
+		vk::DestroyDescriptorSetLayout(dev, m_blendDescSetLayout, nullptr);
     }
 
     CPointLight* AddLight(glm::vec3 pos, glm::vec3 radiance, float intensity)
@@ -671,7 +684,8 @@ public:
 
     virtual void AllocDescriptors(VkDescriptorPool descPool)
     {
-        AllocDescriptorSets(descPool, m_commonDescSetLayout, &m_commonDescSet); 
+        AllocDescriptorSets(descPool, m_commonDescSetLayout, &m_commonDescSet);
+		AllocDescriptorSets(descPool, m_blendDescSetLayout, &m_blendDescSet);
         {
             std::vector<VkDescriptorSetLayout> layouts(ms_plCnt, m_specificDescSetLyout);
             m_specificDescSets.resize(ms_plCnt);
@@ -745,18 +759,25 @@ public:
 
         BeginMarkerSection("RenderLightVolumes");
         vk::CmdNextSubpass(cmdBuffer, VK_SUBPASS_CONTENTS_INLINE);
-        vk::CmdBindPipeline(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.Get());
-        vk::CmdBindDescriptorSets(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, 1, &m_commonDescSet, 0, nullptr);
+        vk::CmdBindPipeline(cmdBuffer, m_lightAccumPipeline.GetBindPoint(), m_lightAccumPipeline.Get());
+        vk::CmdBindDescriptorSets(cmdBuffer, m_lightAccumPipeline.GetBindPoint(), m_lightAccumPipeline.GetLayout(), 0, 1, &m_commonDescSet, 0, nullptr);
 
         for(unsigned int i = 0; i < renderNodes.size(); ++i)
         {
             if(renderNodes[i]->Light->Emits())
             {
-                vk::CmdBindDescriptorSets(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 1, 1, &renderNodes[i]->Set, 0, nullptr);
+                vk::CmdBindDescriptorSets(cmdBuffer, m_lightAccumPipeline.GetBindPoint(), m_lightAccumPipeline.GetLayout(), 1, 1, &renderNodes[i]->Set, 0, nullptr);
                 m_pointLightMesh->Render();
             }
         }
         EndMarkerSection();
+
+		vk::CmdNextSubpass(cmdBuffer, VK_SUBPASS_CONTENTS_INLINE);
+		vk::CmdBindPipeline(cmdBuffer, m_finalLightPipeline.GetBindPoint(), m_finalLightPipeline.Get());
+		vk::CmdBindDescriptorSets(cmdBuffer, m_finalLightPipeline.GetBindPoint(), m_finalLightPipeline.GetLayout(), 0, 1, &m_blendDescSet, 0, nullptr);
+
+		Mesh* quad = CreateFullscreenQuad();
+		quad->Render();
 
         EndRenderPass();
     }
@@ -795,10 +816,10 @@ public:
     
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override
     {
-        AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4);
+        AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 + 1); //+ 1 from blend 
         AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, ms_plCnt + 1);
 
-        maxSets = ms_plCnt + 1;
+        maxSets = ms_plCnt + 1 + 1; //+ 1 from blend pass
     }
 
     virtual void Init() override
@@ -811,7 +832,7 @@ public:
 
         CreateNearestSampler(m_sampler);
 
-        m_pointLightMesh = new Mesh ("obj\\pointlight.obj");
+        m_pointLightMesh = new Mesh ("obj\\pointlight.mb");
 
         AllocBufferMemory(m_pointLightsCommonBuffer, m_pointLightsCommonMemory, sizeof(SPointLightCommon), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
@@ -858,23 +879,35 @@ public:
         debugState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
         debugState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
 
-        m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
-        m_pipeline.SetVertexShaderFile("pointlight.vert");
-        m_pipeline.SetFragmentShaderFile("pointlight.frag");
-        m_pipeline.SetCullMode(VK_CULL_MODE_FRONT_BIT);
-        m_pipeline.SetDepthTest(true);
-        m_pipeline.SetDepthOp(VK_COMPARE_OP_GREATER_OR_EQUAL);
-        m_pipeline.SetDepthWrite(false);
-        m_pipeline.SetStencilTest(true);
-        m_pipeline.SetStencilOp(VK_COMPARE_OP_EQUAL);
-        m_pipeline.SetStencilOperations(VK_STENCIL_OP_ZERO, VK_STENCIL_OP_ZERO, VK_STENCIL_OP_ZERO);
-        m_pipeline.SetStencilValues(0x01, 0x01, 0);
+        m_lightAccumPipeline.SetVertexInputState(Mesh::GetVertexDesc());
+        m_lightAccumPipeline.SetVertexShaderFile("pointlight.vert");
+        m_lightAccumPipeline.SetFragmentShaderFile("pointlight.frag");
+        m_lightAccumPipeline.SetCullMode(VK_CULL_MODE_FRONT_BIT);
+        m_lightAccumPipeline.SetDepthTest(true);
+        m_lightAccumPipeline.SetDepthOp(VK_COMPARE_OP_GREATER_OR_EQUAL);
+        m_lightAccumPipeline.SetDepthWrite(false);
+        m_lightAccumPipeline.SetStencilTest(true);
+        m_lightAccumPipeline.SetStencilOp(VK_COMPARE_OP_EQUAL);
+        m_lightAccumPipeline.SetStencilOperations(VK_STENCIL_OP_ZERO, VK_STENCIL_OP_ZERO, VK_STENCIL_OP_ZERO);
+        m_lightAccumPipeline.SetStencilValues(0x01, 0x01, 0);
         
-        m_pipeline.AddBlendState(plState);
-        m_pipeline.AddBlendState(debugState);
+        m_lightAccumPipeline.AddBlendState(plState);
+        m_lightAccumPipeline.AddBlendState(debugState);
 
-        m_pipeline.CreatePipelineLayout(layouts);
-        m_pipeline.Init(this, m_renderPass, ELightSubpass_Point);
+        m_lightAccumPipeline.CreatePipelineLayout(layouts);
+        m_lightAccumPipeline.Init(this, m_renderPass, ELightSubpass_PointAccum);
+
+		m_finalLightPipeline.SetVertexInputState(Mesh::GetVertexDesc());
+		m_finalLightPipeline.SetVertexShaderFile("screenquad.vert");
+		m_finalLightPipeline.SetFragmentShaderFile("passtrough.frag");
+		m_finalLightPipeline.SetDepthTest(false);
+		m_finalLightPipeline.SetDepthWrite(false);
+		m_finalLightPipeline.SetStencilTest(false);
+
+		m_finalLightPipeline.AddBlendState(plState); //WARNING! WIHT THIS BLEND
+
+		m_finalLightPipeline.CreatePipelineLayout(m_blendDescSetLayout);
+		m_finalLightPipeline.Init(this, m_renderPass, ELightSubpass_Blend);
     }
 
 protected:
@@ -885,7 +918,7 @@ protected:
         VkDescriptorImageInfo imgInfo[descSize];
         imgInfo[GBuffer_Albedo].sampler = m_sampler;
         imgInfo[GBuffer_Albedo].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
-        imgInfo[GBuffer_Albedo].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imgInfo[GBuffer_Albedo].imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
         imgInfo[GBuffer_Normals].sampler = m_sampler;
         imgInfo[GBuffer_Normals].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_NormalsImageView);
@@ -917,6 +950,9 @@ protected:
         buffInfo.range = sizeof(SPointLightCommon);
 
         writeSets[1] = InitUpdateDescriptor(m_commonDescSet, GBuffer_Final + 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfo);
+
+		VkDescriptorImageInfo blendImgInfo = CreateDescriptorImageInfo(m_sampler, m_framebuffer->GetColorImageView(EPointLightBuffer_Accum), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		writeSets.push_back(InitUpdateDescriptor(m_blendDescSet, 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &blendImgInfo));
 
         vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)writeSets.size(), writeSets.data(), 0, nullptr);
     }
@@ -984,9 +1020,12 @@ protected:
             CPointLight* light = m_nodes[i].Light;
             if(light && light->GetDirty())
             {
+				
                 light->Update();
+				float att = 1.f + 5.f * light->m_radius + 2.f * light->m_radius * light->m_radius;
                 SPointLightSpecifics* params = nullptr;
                 VULKAN_ASSERT(vk::MapMemory(dev, m_pointLightsSpecificsMemory, m_nodes[i].Offset, sizeof(SPointLightSpecifics), 0, (void**)&params));
+				params->Attenuation = glm::vec4(1.f, 5.f, 2.f, att);
                 params->ModelMatrix = light->GetModelMatrix();
                 params->LightRadiance = glm::vec4(light->GetRadiance() * light->GetIntensity(), 1.0f);
                 vk::UnmapMemory(dev, m_pointLightsSpecificsMemory);
@@ -1024,6 +1063,9 @@ protected:
         descSetLayout.pBindings = descCnt.data();
         
         VULKAN_ASSERT(vk::CreateDescriptorSetLayout(vk::g_vulkanContext.m_device, &descSetLayout, nullptr, &m_commonDescSetLayout));
+
+		VkDescriptorSetLayoutBinding blendDescBind = CreateDescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+		NewDescriptorSetLayout(std::vector<VkDescriptorSetLayoutBinding>(1, blendDescBind), &m_blendDescSetLayout);
     }
     
     void CreateDescriptorLayoutSpecifics()
@@ -1069,8 +1111,9 @@ private:
     Mesh*           m_pointLightMesh;
     glm::mat4       m_projPtr;
 
-    CGraphicPipeline       m_stencilCullingPipeline;
-    CGraphicPipeline       m_pipeline;
+    CGraphicPipeline		m_stencilCullingPipeline;
+    CGraphicPipeline		m_lightAccumPipeline;
+	CGraphicPipeline		m_finalLightPipeline;
 
     VkSampler       m_sampler;
 
@@ -1084,6 +1127,9 @@ private:
     VkDescriptorSet         m_commonDescSet;
     VkDescriptorSetLayout   m_specificDescSetLyout;
     std::vector<VkDescriptorSet>         m_specificDescSets;
+	
+	VkDescriptorSetLayout	m_blendDescSetLayout;
+	VkDescriptorSet			m_blendDescSet;
 
     //for edit mode
     bool            m_editModeEnabled;
@@ -1489,7 +1535,9 @@ private:
 
     void SetupDeferredRendering();
     void SetupAORendering();
-    void SetupLightingRendering();
+    void SetupDirectionalLightingRendering();
+	void SetupPointLightingRendering();
+	void SetupDeferredTileShading();
     void SetupShadowMapRendering();
     void SetupShadowResolveRendering();
     void SetupPostProcessRendering();
@@ -1505,6 +1553,7 @@ private:
     void CreateAORenderPass(const FramebufferDescription& fbDesc);
     void CreateDirLightingRenderPass(const FramebufferDescription& fbDesc);
     void CreatePointLightingRenderPass(const FramebufferDescription& fbDesc);
+	void CreateDeferredTileShadingRenderPass(const FramebufferDescription& fDesc);
     void CreateShadowRenderPass(const FramebufferDescription& fbDesc);
     void CreateShadowResolveRenderPass(const FramebufferDescription& fbDesc);
     void CreatePostProcessRenderPass(const FramebufferDescription& fbDesc);
@@ -1536,6 +1585,9 @@ private:
     void SetupParticles();
     void SetupPointLights();
 
+	//TESTING
+	void RenderCameraFrustrum();
+
     void CreateResources();
     void UpdateCamera();
     static LRESULT CALLBACK WindowProc(
@@ -1561,6 +1613,7 @@ private:
     VkRenderPass                m_aoRenderPass;
     VkRenderPass                m_dirLightRenderPass;
     VkRenderPass                m_pointLightRenderPass;
+	VkRenderPass				m_deferredTileShadingRenderPass;
     VkRenderPass                m_shadowRenderPass;
     VkRenderPass                m_shadowResolveRenderPass;
     VkRenderPass                m_postProcessPass;
@@ -1602,6 +1655,7 @@ private:
     CAORenderer*                m_aoRenderer;
     CLightRenderer*             m_lightRenderer;
     CPointLightRenderer*        m_pointLightRenderer;
+	PointLightRenderer2*		m_pointLightRenderer2;
     CParticlesRenderer*         m_particlesRenderer;
     ShadowMapRenderer*             m_shadowRenderer;
     CShadowResolveRenderer*     m_shadowResolveRenderer;
@@ -1638,6 +1692,7 @@ CApplication::CApplication()
     , m_aoRenderPass(VK_NULL_HANDLE)
     , m_dirLightRenderPass(VK_NULL_HANDLE)
     , m_pointLightRenderPass(VK_NULL_HANDLE)
+	, m_deferredTileShadingRenderPass(VK_NULL_HANDLE)
     , m_shadowRenderPass(VK_NULL_HANDLE)
     , m_shadowResolveRenderPass(VK_NULL_HANDLE)
     , m_postProcessPass(VK_NULL_HANDLE)
@@ -1661,6 +1716,7 @@ CApplication::CApplication()
     , m_smokeTexture(nullptr)
     , m_lightRenderer(nullptr)
     , m_pointLightRenderer(nullptr)
+	, m_pointLightRenderer2(nullptr)
     , m_particlesRenderer(nullptr)
     , m_objectRenderer(nullptr)
     , m_aoRenderer(nullptr)
@@ -1698,7 +1754,9 @@ CApplication::CApplication()
 
     SetupDeferredRendering();
     SetupAORendering();
-    SetupLightingRendering();
+	SetupDirectionalLightingRendering();
+	SetupPointLightingRendering();
+	SetupDeferredTileShading();
     SetupShadowMapRendering();
     SetupShadowResolveRendering();
     SetupPostProcessRendering();
@@ -1731,6 +1789,7 @@ CApplication::~CApplication()
     delete m_aoRenderer;
     delete m_lightRenderer;
     delete m_pointLightRenderer;
+	delete m_pointLightRenderer2;
     delete m_particlesRenderer;
     delete m_uiRenderer;
     delete m_postProcessRenderer;
@@ -1752,6 +1811,7 @@ CApplication::~CApplication()
     vk::DestroyRenderPass(dev, m_aoRenderPass, nullptr);
     vk::DestroyRenderPass(dev, m_dirLightRenderPass, nullptr);
     vk::DestroyRenderPass(dev, m_pointLightRenderPass, nullptr);
+	vk::DestroyRenderPass(dev, m_deferredTileShadingRenderPass, nullptr);
     vk::DestroyRenderPass(dev, m_shadowRenderPass, nullptr);
     vk::DestroyRenderPass(dev, m_shadowResolveRenderPass, nullptr);
     vk::DestroyRenderPass(dev, m_postProcessPass, nullptr);
@@ -1776,6 +1836,7 @@ void CApplication::Run()
     bool isRunning = true;
     CreateResources();
     CreateQueryPools();
+	//RenderCameraFrustrum();
 
     DWORD start;
     DWORD stop;
@@ -2131,34 +2192,63 @@ void CApplication::SetupAORendering()
     m_aoRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
 }
 
-void CApplication::SetupLightingRendering()
+void CApplication::SetupDirectionalLightingRendering()
+{
+	FramebufferDescription fbDesc;
+	fbDesc.Begin(EDirLightBuffers_Count);
+	VkImage outImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
+	VkImageView outImgView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
+
+	fbDesc.AddColorAttachmentDesc(EDirLightBuffers_Final, OUT_FORMAT, outImg, outImgView);
+	fbDesc.AddColorAttachmentDesc(EDirLightBuffers_Debug, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "DirLightDebug");
+	fbDesc.End();
+
+	CreateDirLightingRenderPass(fbDesc);
+
+	// Lighting passes
+	m_lightRenderer = new CLightRenderer(m_dirLightRenderPass);
+	m_lightRenderer->Init();
+	m_lightRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
+};
+
+void CApplication::SetupPointLightingRendering()
 {
     FramebufferDescription fbDesc;
-    fbDesc.Begin(ELightBuffer_Count - 1); //without depth
+    fbDesc.Begin(EPointLightBuffer_Count - 1); //without depth
     VkImage outImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
     VkImageView outImgView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
     VkImage depthImg = g_commonResources.GetAs<VkImage>(EResourceType_DepthBufferImage);
     VkImageView depthImgView = g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView);
 
-    fbDesc.AddColorAttachmentDesc(ELightBuffer_Final, OUT_FORMAT, outImg, outImgView);
-    fbDesc.AddColorAttachmentDesc(ELightBuffer_DebugDirLight, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "DirLightDebug");
-    fbDesc.AddColorAttachmentDesc(ELightBUffer_DebugPointLight, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "PointLightDebug");
+    fbDesc.AddColorAttachmentDesc(EPointLightBuffer_Final, OUT_FORMAT, outImg, outImgView);
+    fbDesc.AddColorAttachmentDesc(EPointLightBuffer_Debug, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "PointLightDebug");
+    fbDesc.AddColorAttachmentDesc(EPointLightBuffer_Accum, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "PointLightAccum");
     fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, depthImg, depthImgView);
     fbDesc.End();
-
-    CreateDirLightingRenderPass(fbDesc);
-
-    // Lighting passes
-    m_lightRenderer = new CLightRenderer(m_dirLightRenderPass);
-    m_lightRenderer->Init();
-    m_lightRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
 
     CreatePointLightingRenderPass(fbDesc);
 
     m_pointLightRenderer = new CPointLightRenderer(m_pointLightRenderPass);
     m_pointLightRenderer->Init();
     m_pointLightRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
+}
 
+void CApplication::SetupDeferredTileShading()
+{
+	FramebufferDescription fbDesc;
+	fbDesc.Begin(1);
+	VkImage finalImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
+	VkImageView finalImgView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
+
+	fbDesc.AddColorAttachmentDesc(0, OUT_FORMAT, finalImg, finalImgView);
+	fbDesc.End();
+
+	CreateDeferredTileShadingRenderPass(fbDesc);
+
+	m_pointLightRenderer2 = new PointLightRenderer2(m_deferredTileShadingRenderPass);
+	m_pointLightRenderer2->Init();
+	m_pointLightRenderer2->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
+	m_pointLightRenderer2->InitializeLightGrid();
 }
 
 void CApplication::CreateDeferredRenderPass(const FramebufferDescription& fbDesc)
@@ -2263,25 +2353,21 @@ void CApplication::CreateAORenderPass(const FramebufferDescription& fbDesc)
 void CApplication::CreateDirLightingRenderPass(const FramebufferDescription& fbDesc)
 {
     std::vector<VkAttachmentDescription> ad;
-    ad.resize(ELightBuffer_Count);
+    ad.resize(EDirLightBuffers_Count);
 
-    AddAttachementDesc(ad[ELightBuffer_Final], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[ELightBuffer_Final].format, VK_ATTACHMENT_LOAD_OP_LOAD);
-    AddAttachementDesc(ad[ELightBuffer_DebugDirLight], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[ELightBuffer_DebugDirLight].format);
-    AddAttachementDesc(ad[ELightBUffer_DebugPointLight], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[ELightBUffer_DebugPointLight].format);
-    AddAttachementDesc(ad[ELightBuffer_Depth], VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format, VK_ATTACHMENT_LOAD_OP_LOAD);
+    AddAttachementDesc(ad[EDirLightBuffers_Final], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[EDirLightBuffers_Final].format, VK_ATTACHMENT_LOAD_OP_LOAD);
+    AddAttachementDesc(ad[EDirLightBuffers_Debug], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[EDirLightBuffers_Debug].format);
 
     std::vector<VkAttachmentReference> attachment_ref;
-    attachment_ref.resize(ELightBuffer_Count);
+    attachment_ref.resize(EDirLightBuffers_Count);
 
-    attachment_ref[ELightBuffer_Final] = CreateAttachmentReference(ELightBuffer_Final, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    attachment_ref[ELightBuffer_DebugDirLight] = CreateAttachmentReference(ELightBuffer_DebugDirLight, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    attachment_ref[ELightBUffer_DebugPointLight] = CreateAttachmentReference(ELightBUffer_DebugPointLight, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    attachment_ref[ELightBuffer_Depth] = CreateAttachmentReference(ELightBuffer_Depth, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    attachment_ref[EDirLightBuffers_Final] = CreateAttachmentReference(EDirLightBuffers_Final, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    attachment_ref[EDirLightBuffers_Debug] = CreateAttachmentReference(EDirLightBuffers_Debug, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
     std::vector<VkAttachmentReference> dirLightAtt;
     dirLightAtt.reserve(2);
-    dirLightAtt.push_back(attachment_ref[ELightBuffer_Final]);
-    dirLightAtt.push_back(attachment_ref[ELightBuffer_DebugDirLight]);
+    dirLightAtt.push_back(attachment_ref[EDirLightBuffers_Final]);
+    dirLightAtt.push_back(attachment_ref[EDirLightBuffers_Debug]);
 
     std::vector<VkSubpassDescription> sd;
     sd.resize(ELightSubpass_DirCount);
@@ -2309,37 +2395,45 @@ void CApplication::CreateDirLightingRenderPass(const FramebufferDescription& fbD
 void CApplication::CreatePointLightingRenderPass(const FramebufferDescription& fbDesc)
 {
     std::vector<VkAttachmentDescription> ad;
-    ad.resize(ELightBuffer_Count);
+    ad.resize(EPointLightBuffer_Count);
 
-    AddAttachementDesc(ad[ELightBuffer_Final], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[ELightBuffer_Final].format, VK_ATTACHMENT_LOAD_OP_LOAD);
-    AddAttachementDesc(ad[ELightBuffer_DebugDirLight], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[ELightBuffer_DebugDirLight].format);
-    AddAttachementDesc(ad[ELightBUffer_DebugPointLight], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[ELightBUffer_DebugPointLight].format);
-    AddAttachementDesc(ad[ELightBuffer_Depth], VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format, VK_ATTACHMENT_LOAD_OP_LOAD);
+    AddAttachementDesc(ad[EPointLightBuffer_Final], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[EPointLightBuffer_Final].format, VK_ATTACHMENT_LOAD_OP_LOAD);
+    AddAttachementDesc(ad[EPointLightBuffer_Debug], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[EPointLightBuffer_Debug].format);
+	AddAttachementDesc(ad[EPointLightBuffer_Accum], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[EPointLightBuffer_Accum].format);
+    AddAttachementDesc(ad[EPointLightBuffer_Depth], VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format, VK_ATTACHMENT_LOAD_OP_LOAD);
 
     std::vector<VkAttachmentReference> attachment_ref;
-    attachment_ref.resize(ELightBuffer_Count);
+    attachment_ref.resize(EPointLightBuffer_Count);
 
-    attachment_ref[ELightBuffer_Final] = CreateAttachmentReference(ELightBuffer_Final, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    attachment_ref[ELightBuffer_DebugDirLight] = CreateAttachmentReference(ELightBuffer_DebugDirLight, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    attachment_ref[ELightBUffer_DebugPointLight] = CreateAttachmentReference(ELightBUffer_DebugPointLight, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    attachment_ref[ELightBuffer_Depth] = CreateAttachmentReference(ELightBuffer_Depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    attachment_ref[EPointLightBuffer_Final] = CreateAttachmentReference(EPointLightBuffer_Final, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	attachment_ref[EPointLightBuffer_Accum] = CreateAttachmentReference(EPointLightBuffer_Accum, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    attachment_ref[EPointLightBuffer_Debug] = CreateAttachmentReference(EPointLightBuffer_Debug, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    attachment_ref[EPointLightBuffer_Depth] = CreateAttachmentReference(EPointLightBuffer_Depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+	std::vector<VkAttachmentReference> pointLightAtt;
+	pointLightAtt.push_back(attachment_ref[EPointLightBuffer_Accum]);
+	pointLightAtt.push_back(attachment_ref[EPointLightBuffer_Debug]);
 
     std::vector<VkSubpassDescription> sd;
     sd.resize(ELightSubpass_PointCount);
 
-    std::vector<VkAttachmentReference> pointLightAtt;
-    pointLightAtt.push_back(attachment_ref[ELightBuffer_Final]);
-    pointLightAtt.push_back(attachment_ref[ELightBUffer_DebugPointLight]);
-
-    sd[ELightSubpass_PrePoint] = CreateSubpassDesc(nullptr, 0, &attachment_ref[ELightBuffer_Depth]);
-    sd[ELightSubpass_Point] = CreateSubpassDesc(pointLightAtt.data(), (uint32_t)pointLightAtt.size(), &attachment_ref[ELightBuffer_Depth]);
+    sd[ELightSubpass_PrePoint] = CreateSubpassDesc(nullptr, 0, &attachment_ref[EPointLightBuffer_Depth]);
+    sd[ELightSubpass_PointAccum] = CreateSubpassDesc(pointLightAtt.data(), (uint32_t)pointLightAtt.size(), &attachment_ref[EPointLightBuffer_Depth]);
+	sd[ELightSubpass_Blend] = CreateSubpassDesc(&attachment_ref[EPointLightBuffer_Final], 1, nullptr);
 
     std::vector<VkSubpassDependency> subDeps;
-    subDeps.push_back(CreateSubpassDependency(VK_SUBPASS_EXTERNAL, ELightSubpass_Point, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
-        VK_ACCESS_COLOR_ATTACHMENT_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT));
+    subDeps.push_back(CreateSubpassDependency(VK_SUBPASS_EXTERNAL, ELightSubpass_PointAccum, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
+		VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT));
 
-    subDeps.push_back(CreateSubpassDependency(ELightSubpass_PrePoint, ELightSubpass_Point, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
+	subDeps.push_back(CreateSubpassDependency(VK_SUBPASS_EXTERNAL, ELightSubpass_PrePoint, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+		VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT));
+
+    subDeps.push_back(CreateSubpassDependency(ELightSubpass_PrePoint, ELightSubpass_PointAccum, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT));
+
+	subDeps.push_back(CreateSubpassDependency(ELightSubpass_PointAccum, ELightSubpass_Blend, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+		VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT));
+
 
     VkRenderPassCreateInfo rpci;
     cleanStructure(rpci);
@@ -2354,6 +2448,24 @@ void CApplication::CreatePointLightingRenderPass(const FramebufferDescription& f
     rpci.pDependencies =  subDeps.data();
 
     VULKAN_ASSERT(vk::CreateRenderPass(vk::g_vulkanContext.m_device, &rpci, nullptr, &m_pointLightRenderPass));
+}
+
+void CApplication::CreateDeferredTileShadingRenderPass(const FramebufferDescription& fbDesc)
+{
+	std::vector<VkAttachmentDescription> ad(1);
+	AddAttachementDesc(ad[0], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[0].format, VK_ATTACHMENT_LOAD_OP_LOAD);
+
+	std::vector<VkAttachmentReference> attRef(1);
+	attRef[0] = CreateAttachmentReference(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+	std::vector<VkSubpassDescription> sd;
+	sd.push_back(CreateSubpassDesc(attRef.data(), (uint32_t)attRef.size(), nullptr));
+
+	std::vector<VkSubpassDependency> subDeps;
+	subDeps.push_back(CreateSubpassDependency(VK_SUBPASS_EXTERNAL, 0, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
+
+	NewRenderPass(&m_deferredTileShadingRenderPass, ad, sd, subDeps);
 }
 
 void CApplication::SetupShadowMapRendering()
@@ -2954,13 +3066,6 @@ void CApplication::CreateQueryPools()
 CCubeMapTexture* CreateSkyTexture()
 {
     std::vector<std::string> facesFilename;
-    //facesFilename.push_back("text/left.png");
-    //facesFilename.push_back("text/right.png");
-    //facesFilename.push_back("text/top.png");
-    //facesFilename.push_back("text/bot.png");
-    //facesFilename.push_back("text/front.png");
-    //facesFilename.push_back("text/back.png");
-
     facesFilename.push_back("text/side.png");
     facesFilename.push_back("text/side.png");
     facesFilename.push_back("text/side.png");
@@ -3043,10 +3148,9 @@ void CApplication::CreateResources()
 
     GetPickManager()->CreateDebug(m_uiManager);
     directionalLight.CreateDebug(m_uiManager);
-    SetupParticles();
-    
-    //TODO FIX point lights
-    //SetupPointLights();
+    //SetupParticles();
+
+    SetupPointLights();
 }
 
 void CApplication::UpdateCamera()
@@ -3123,8 +3227,8 @@ void CApplication::Render()
     m_shadowResolveRenderer->Render();
 
     m_lightRenderer->Render();
-    m_pointLightRenderer->Render();
-    
+    //m_pointLightRenderer->Render();
+	m_pointLightRenderer2->Render();
     m_sunRenderer->Render();
     m_skyRenderer->Render();
     m_particlesRenderer->Render();
@@ -3398,12 +3502,12 @@ void CApplication::ProcMsg(UINT uMsg, WPARAM wParam,LPARAM lParam)
 
         if (wParam == 'O')
         {
-            m_pointLightRenderer->ChangeIntensity(1.0f);
+            m_pointLightRenderer->ChangeIntensity(0.25f);
         }
 
         if (wParam == 'L')
         {
-            m_pointLightRenderer->ChangeIntensity(-1.0f);
+            m_pointLightRenderer->ChangeIntensity(-0.25f);
         }
 
         if (wParam == VK_OEM_PLUS)
@@ -3421,6 +3525,101 @@ void CApplication::ProcMsg(UINT uMsg, WPARAM wParam,LPARAM lParam)
             directionalLight.ChangeLightColor();
         }
     }
+}
+
+
+glm::vec4 GetPlaneFrom(glm::vec4 p1, glm::vec4 p2, glm::vec4 p3)
+{
+	glm::vec3 normal = glm::cross(glm::vec3(p2 - p1), glm::vec3(p3 - p1));
+	normal = glm::normalize(normal);
+	float d = glm::dot(normal, glm::vec3(p1));
+	return glm::vec4(normal, d);
+}
+
+void CApplication::RenderCameraFrustrum()
+{
+	glm::mat4 proj = glm::perspective(glm::radians(45.0f), 16.0f / 9.f, 0.1f, 3.0f);
+	PerspectiveMatrix(proj);
+	ConvertToProjMatrix(proj);
+
+	glm::mat4 view = glm::lookAt(glm::vec3(10.f, 1.f, 0.0f), glm::vec3(0.f, 1.f, -1.f), glm::vec3(0.f, 1.f, 0.f));
+	glm::mat4 projViewMatrix = proj * view;
+	glm::mat4 invProjViewMatrix = glm::inverse(projViewMatrix);
+
+	glm::vec4 colors[] = { glm::vec4(1.0f, 0.f, 0.0f, 1.0f),
+		glm::vec4(0.0f, 1.f, 0.0f, 1.0f),
+		glm::vec4(0.0f, 0.f, 1.0f, 1.0f),
+		glm::vec4(1.0f, 1.f, 0.0f, 1.0f) };
+
+	unsigned int n = 8;
+	float l = 2 / float(n);
+	for (unsigned int x = 0; x < n; ++x)
+		for (unsigned int y = 0; y < n; ++y)
+		{
+			glm::vec4 ndcPoints[] = { glm::vec4(-1.f + x * l, -1.f + y * l, 0.f, 1.f),
+									glm::vec4(-1.f + (x + 1.f) * l, -1.f + y * l, 0.f, 1.f),
+									glm::vec4(-1.f + (x + 1.f) * l, -1.f + (y + 1.f) * l, 0.f, 1.f),
+									glm::vec4(-1.f + x * l, -1.f + (y + 1.f) * l, 0.f, 1.f),
+									glm::vec4(-1.f + x * l, -1.f + y * l, 1.f, 1.f),
+									glm::vec4(-1.f + (x + 1.f) * l, -1.f + y * l, 1.f, 1.f),
+									glm::vec4(-1.f + (x + 1.f) * l, -1.f + (y + 1.f) * l, 1.f, 1.f),
+									glm::vec4(-1.f + x * l, -1.f + (y + 1.f) * l, 1.f, 1.f) };
+
+			glm::vec4 worldPoints[8];
+			for (unsigned int i = 0; i < 8; ++i)
+			{
+				worldPoints[i] = invProjViewMatrix * ndcPoints[i];
+				//worldPoints[i] = glm::inverse(proj) * ndcPoints[i];
+				worldPoints[i] /= worldPoints[i].w;
+			}
+
+			glm::vec4 color = colors[(x + y) % 4];
+
+			//build near/far planes
+			for (unsigned int i = 0; i < 3; ++i)
+			{
+				m_uiManager->CreateVectorItem(glm::vec3(worldPoints[i]), glm::vec3(worldPoints[i + 1] - worldPoints[i]), color);
+			}
+
+			//close the loop
+			m_uiManager->CreateVectorItem(glm::vec3(worldPoints[3]), glm::vec3(worldPoints[0] - worldPoints[3]), color);
+
+			for (unsigned int i = 4; i < 7; ++i)
+			{
+				m_uiManager->CreateVectorItem(glm::vec3(worldPoints[i]), glm::vec3(worldPoints[i + 1] - worldPoints[i]), color);
+			}
+
+			//close the loop
+			m_uiManager->CreateVectorItem(glm::vec3(worldPoints[7]), glm::vec3(worldPoints[4] - worldPoints[7]), color);
+
+			//build the sides
+			for (unsigned int i = 0; i < 4; ++i)
+			{
+				m_uiManager->CreateVectorItem(glm::vec3(worldPoints[i]), glm::vec3(worldPoints[i + 4] - worldPoints[i]), color);
+			}
+
+			glm::vec4 planes[6];
+			//near
+			planes[0] = GetPlaneFrom(worldPoints[2], worldPoints[0], worldPoints[1]);
+			//far
+			planes[1] = GetPlaneFrom(worldPoints[6], worldPoints[5], worldPoints[4]);
+			//left
+			planes[2] = GetPlaneFrom(worldPoints[3], worldPoints[7], worldPoints[4]);
+			//right
+			planes[3] = GetPlaneFrom(worldPoints[5], worldPoints[6], worldPoints[2]);
+			//top
+			planes[4] = GetPlaneFrom(worldPoints[5], worldPoints[1], worldPoints[0]);
+			//bot
+			planes[5] = GetPlaneFrom(worldPoints[3], worldPoints[2], worldPoints[6]);
+
+			//m_uiManager->CreateVectorItem(glm::vec3(worldPoints[0]), glm::vec3(planes[0]), glm::vec4(0.f, 1.f, 0.f, 1.0f));
+			//m_uiManager->CreateVectorItem(glm::vec3(worldPoints[4]), glm::vec3(planes[1]), glm::vec4(0.f, 1.f, 0.f, 1.0f)); //because of inverse y
+			//m_uiManager->CreateVectorItem(glm::vec3(worldPoints[3]), glm::vec3(planes[2]), glm::vec4(0.f, 1.f, 0.f, 1.0f));
+			//m_uiManager->CreateVectorItem(glm::vec3(worldPoints[5]), glm::vec3(planes[3]), glm::vec4(0.f, 1.f, 0.f, 1.0f));
+			//m_uiManager->CreateVectorItem(glm::vec3(worldPoints[1]), glm::vec3(planes[4]), glm::vec4(0.f, 1.f, 0.f, 1.0f));
+			//m_uiManager->CreateVectorItem(glm::vec3(worldPoints[6]), glm::vec3(planes[5]), glm::vec4(0.f, 1.f, 0.f, 1.0f));
+
+		}
 }
 
 int main(int argc, char* arg[])

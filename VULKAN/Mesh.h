@@ -3,59 +3,7 @@
 #include "VulkanLoader.h"
 #include <vector>
 #include "glm/glm.hpp"
-#include "assimp/Importer.hpp"
-
-struct SVertex
-{
-    glm::vec3 pos;
-    glm::vec2 uv;
-    glm::vec3 normal;
-    glm::vec3 bitangent;
-    glm::vec3 tangent;
-    unsigned int color;
-
-    SVertex(){}
-    SVertex(glm::vec3 p) : pos(p), uv(){}
-    SVertex(glm::vec3 p, glm::vec2 tuv) : pos(p), uv(tuv){}
-    SVertex(glm::vec3 p, glm::vec2 textuv, glm::vec3 n) : pos(p), uv(textuv), normal(n) {}
-
-    void SetColor(unsigned char r, unsigned char g, unsigned char b, unsigned char a)
-    {
-        color = 0;
-        color |= a << 24;
-        color |= b << 16;
-        color |= g << 8;
-        color |= r;
-    }
-};
-struct aiScene;
-struct aiMesh;
-class MeshLoader 
-{
-public:
-    typedef std::vector<SVertex> VertexContainer;
-    typedef std::vector<unsigned int> IndexContainer;
-
-    MeshLoader();
-    virtual ~MeshLoader();
-
-    void LoadInto(const std::string filename, VertexContainer* outVertexes, IndexContainer* outIndexes);
-
-private:
-    void CountMeshElements();
-    void ConvertScene();
-
-    void ConvertMesh(aiMesh* currMesh, unsigned int vertexOffset);
-private:
-    VertexContainer*    m_pVertexes;
-    IndexContainer*     m_pIndexes;    
-
-    unsigned int        m_vertexCount;
-    unsigned int        m_indexCount;
-
-    Assimp::Importer    m_importer;
-    const aiScene*      m_scene;
-};
+#include "SVertex.h"
 
 struct BoundingBox
 {

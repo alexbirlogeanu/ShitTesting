@@ -16,6 +16,7 @@ layout (set=0, binding=5) uniform Common
 
 layout(set=1, binding=0) uniform Specifics
 {
+	vec4 Attenuation;
 	mat4 ModelMatrix;
     vec4 LightRadiance;
 };
@@ -76,6 +77,7 @@ vec3 ComputeLightColor(vec3 N, vec3 L, vec3 V, vec3 albedo, vec3 lightIradiance,
 	vec3 kS = F;
 	vec3 kD = vec3(1.0f) - kS;
 	kD *= 1.0f - metalness;
+	kD = max(kD, vec3(0.0f));
 	
 	float NdotL = max(dot(N, L), 0.01f);
 	float NdotV = max(dot(N, V), 0.01f);
@@ -86,6 +88,7 @@ vec3 ComputeLightColor(vec3 N, vec3 L, vec3 V, vec3 albedo, vec3 lightIradiance,
 
 	vec3 radiance = lightIradiance * NdotL * attenuation;
 	color = (kD * albedo / PI + specular) * radiance;
+	debug = vec4(kD, 1.0f);
 	
 	return color;
 }
@@ -101,12 +104,13 @@ float Depth()
 void main()
 {
 	ivec2 screenSize = textureSize(albedoText, 0);
-	vec2 uv = gl_FragCoord.xy * 1.0f / vec2(screenSize);
-	vec4 materialProp = texture(specularText, uv);
+	//vec2 uv = gl_FragCoord.xy * 1.0f / vec2(screenSize);
+	ivec2 uv = ivec2(gl_FragCoord.xy);
+	vec4 materialProp = texelFetch(specularText, uv, 0);
 	//vec3 light = texture(lightMap, uv).rgb;
-	vec3 color = texture(albedoText, uv).rgb;
-	vec3 normal = texture(normalText, uv).xyz;
-	vec3 worldPos = texture(worldPosText, uv).xyz;
+	vec3 color = texelFetch(albedoText, uv, 0).rgb;
+	vec3 normal = texelFetch(normalText, uv, 0).xyz;
+	vec3 worldPos = texelFetch(worldPosText, uv, 0).xyz;
 	float roughness = materialProp.x;
 	float metalness = materialProp.y;
 	
@@ -114,12 +118,13 @@ void main()
 	vec3 L = centerWorldPos.xyz - worldPos;
 	float distToLight = length(L);
 	L /= distToLight;
-	float attenuation = 1.0f /( 1 + distToLight * distToLight);
+	float attenuation = 1.0f - (Attenuation.x + Attenuation.y * distToLight + Attenuation.z * pow(distToLight, 2)) / Attenuation.w;
+	//float attenuation = 1.f / (1.f + distToLight * distToLight);
 	
 	vec3 lightColor = ComputeLightColor(normal, L, V, color, LightRadiance.rgb, attenuation, roughness, metalness);
 	
 	out_color = vec4(lightColor, 1.0f);
 	gl_FragDepth = Depth();
 	
-	debug = vec4(lightColor, 1.0f);
+	
 }
