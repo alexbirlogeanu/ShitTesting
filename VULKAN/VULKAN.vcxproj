@@ -32,7 +32,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v120</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
@@ -76,8 +76,8 @@
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(ProjectDir)\include;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>freeimage/FreeImage.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)include;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>freeimage\FreeImage.lib;assimp\assimp.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -128,10 +128,12 @@
     <ClInclude Include="3DTexture.h" />
     <ClInclude Include="ao.h" />
     <ClInclude Include="DebugMarkers.h" />
+    <ClInclude Include="MemoryManager.h" />
     <ClInclude Include="MeshLoader.h" />
     <ClInclude Include="Object.h" />
     <ClInclude Include="PointLightRenderer2.h" />
     <ClInclude Include="ResourceTable.h" />
+    <ClInclude Include="Singleton.h" />
     <ClInclude Include="SkyRenderer.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="defines.h" />
@@ -154,6 +156,7 @@
     <ClCompile Include="ao.cpp" />
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="DebugMarkers.cpp" />
+    <ClCompile Include="MemoryManager.cpp" />
     <ClCompile Include="MeshLoader.cpp" />
     <ClCompile Include="Object.cpp" />
     <ClCompile Include="PointLightRenderer2.cpp" />
