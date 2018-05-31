@@ -26,6 +26,8 @@ public:
 	VkDeviceSize GetOffset() const { return m_offset; }
 
 	BufferHandle* CreateSubbuffer(VkDeviceSize size);
+
+	VkBufferMemoryBarrier CreateMemoryBarrier(VkAccessFlags srcAccess, VkAccessFlags dstAccess);
 private:
 	BufferHandle(VkBuffer buffer, VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize offset = 0);
 	virtual ~BufferHandle();

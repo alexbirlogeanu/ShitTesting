@@ -8,22 +8,6 @@
 
 void AllocBufferMemory(VkBuffer& buffer, VkDeviceMemory& memory, uint32_t size, VkBufferUsageFlags usage);
 
-VkBufferMemoryBarrier CreateBufferMemoryBarrier(BufferHandle* handle, VkAccessFlags srcAccess, VkAccessFlags dstAccess)
-{
-	VkBufferMemoryBarrier barrier;
-	cleanStructure(barrier);
-	barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-	barrier.srcAccessMask = srcAccess;
-	barrier.dstAccessMask = dstAccess;
-	barrier.buffer = handle->GetBuffer();
-	barrier.offset = handle->GetOffset();
-	barrier.size = handle->GetSize();
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-	return barrier;
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////
 //TransferMeshInfo
 ////////////////////////////////////////////////////////////////////////////////////////
@@ -131,8 +115,8 @@ void MeshManager::Update()
 		for (unsigned int i = 0; i < m_transferInProgress.size(); ++i)
 		{
 			TransferMeshInfo& transInfo = m_transferInProgress[i];
-			copyBarriers.push_back(CreateBufferMemoryBarrier(transInfo.m_toVertexBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT));
-			copyBarriers.push_back(CreateBufferMemoryBarrier(transInfo.m_toIndexBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_INDEX_READ_BIT));
+			copyBarriers.push_back(transInfo.m_toVertexBuffer->CreateMemoryBarrier(VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT));
+			copyBarriers.push_back(transInfo.m_toIndexBuffer->CreateMemoryBarrier(VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_INDEX_READ_BIT));
 
 			transInfo.BeginTransfer(cmdBuffer);
 		}

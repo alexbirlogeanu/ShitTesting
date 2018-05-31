@@ -37,6 +37,23 @@ BufferHandle* BufferHandle::CreateSubbuffer(VkDeviceSize size)
 	m_subbuffers.push_back(hSubBuffer);
 	return hSubBuffer;
 }
+
+VkBufferMemoryBarrier BufferHandle::CreateMemoryBarrier(VkAccessFlags srcAccess, VkAccessFlags dstAccess)
+{
+	VkBufferMemoryBarrier barrier;
+	cleanStructure(barrier);
+	barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+	barrier.srcAccessMask = srcAccess;
+	barrier.dstAccessMask = dstAccess;
+	barrier.buffer = GetBuffer();
+	barrier.offset = GetOffset();
+	barrier.size = GetSize();
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+	return barrier;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////
 //MemoryContext::MappedMemory
 ///////////////////////////////////////////////////////////////////////////////////
