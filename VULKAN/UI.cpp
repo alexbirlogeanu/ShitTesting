@@ -247,7 +247,7 @@ void CUIText::Update()
     if(m_isDirty)
     {
         if (!m_textMesh)
-            CreateMesh();
+            //CreateMesh();
 
         UpdateMesh();
         m_isDirty = false;
@@ -387,7 +387,7 @@ CUIVector::CUIVector(glm::vec3 pos, glm::vec3 vector, glm::vec4 color)
     for(unsigned int i =0; i < m_vertexCount; ++i)
         indexes.push_back(i);
 
-    m_mesh = new Mesh(vertices, indexes);
+    //m_mesh = new Mesh(vertices, indexes);
 }
 
 CUIVector::~CUIVector()
@@ -397,7 +397,8 @@ CUIVector::~CUIVector()
 
 void CUIVector::Render()
 {
-    m_mesh->Render();
+	if (m_mesh)
+		m_mesh->Render();
 }
 
 void CUIVector::Update()

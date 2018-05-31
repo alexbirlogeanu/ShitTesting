@@ -38,12 +38,12 @@ private:
 	VkBuffer		m_buffer;
 	VkDeviceSize	m_size;
 	VkDeviceSize	m_offset;
-	VkDeviceSize	m_alignment;
+	VkDeviceSize	m_alignment; //if alignment is 0, then is not considered when creating sub buffers.
 
 	EMemoryContextType	m_memoryContext;
 
 	//used for creating subbuffers
-	std::vector<BufferHandle*>	m_subbuffers; //i dont know why i need this? ?
+	std::vector<BufferHandle*>	m_subbuffers;
 	VkDeviceSize				m_freeOffset;
 };
 

@@ -38,6 +38,9 @@ ShadowMapRenderer::~ShadowMapRenderer()
 
 void ShadowMapRenderer::Init()
 {
+	if (m_nodes.empty())
+		return;
+
     CRenderer::Init();
 
     m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
@@ -160,6 +163,9 @@ void ShadowMapRenderer::UpdateGraphicInterface()
 
 void ShadowMapRenderer::Render()
 {
+	if (m_nodes.empty())
+		return;
+
     VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
 
     vk::CmdBindPipeline(cmd, m_pipeline.GetBindPoint(), m_pipeline.Get());

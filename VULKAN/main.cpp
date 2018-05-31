@@ -1759,7 +1759,7 @@ CApplication::CApplication()
     SetupDeferredRendering();
     SetupAORendering();
 	SetupDirectionalLightingRendering();
-	SetupPointLightingRendering();
+	//SetupPointLightingRendering();
 	SetupDeferredTileShading();
     SetupShadowMapRendering();
     SetupShadowResolveRendering();
@@ -3157,7 +3157,7 @@ void CApplication::CreateResources()
     directionalLight.CreateDebug(m_uiManager);
     //SetupParticles();
 
-    SetupPointLights();
+    //SetupPointLights();
 }
 
 void CApplication::UpdateCamera()

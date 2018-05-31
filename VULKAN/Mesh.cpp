@@ -107,16 +107,20 @@ void MeshManager::Update()
 		unsigned int staggingMemoryTotalSize = CalculateStagginMemorySize();
 		MemoryManager::GetInstance()->AllocStaggingMemory(staggingMemoryTotalSize);
 		//
-		MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::Stagging);
-		MappedMemory* memoryMap = MemoryManager::GetInstance()->GetMappedMemory(EMemoryContextType::Stagging);
+		
 		TRAP(m_transferInProgress.empty() && "All transfer should be processed"); 
 		m_transferInProgress.reserve(m_pendingMeshes.size());
 
 		for (auto m : m_pendingMeshes)
 		{
-			TransferMeshInfo info(m);
-			m->CopyLocalData(memoryMap, info.m_stagginVertexBuffer, info.m_staggingIndexBuffer);
-			m_transferInProgress.push_back(info);
+			m_transferInProgress.push_back(TransferMeshInfo(m));
+		}
+
+		MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::Stagging);
+		MappedMemory* memoryMap = MemoryManager::GetInstance()->GetMappedMemory(EMemoryContextType::Stagging);
+		for (auto info : m_transferInProgress)
+		{
+			info.m_mesh->CopyLocalData(memoryMap, info.m_stagginVertexBuffer, info.m_staggingIndexBuffer);
 		}
 
 		MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::Stagging);
@@ -144,7 +148,7 @@ unsigned int MeshManager::CalculateStagginMemorySize()
 	for (auto m : m_pendingMeshes)
 		totalSize += m->MemorySizeNeeded();
 
-	return 2 * totalSize; //hack too
+	return totalSize + m_pendingMeshes.size() * vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////
@@ -153,10 +157,6 @@ unsigned int MeshManager::CalculateStagginMemorySize()
 Mesh::InputVertexDescription* Mesh::ms_vertexDescription = nullptr;
 
 Mesh::Mesh()
-    //: m_vertexBuffer(VK_NULL_HANDLE)
-    //, m_vertexMemory(VK_NULL_HANDLE)
-    //, m_indexMemory(VK_NULL_HANDLE)
-    //, m_indexBuffer(VK_NULL_HANDLE)
 	: m_meshBuffer(nullptr)
 	, m_vertexSubBuffer(nullptr)
 	, m_indexSubBuffer(nullptr)
@@ -164,10 +164,6 @@ Mesh::Mesh()
 }
 
 Mesh::Mesh(const std::vector<SVertex>& vertexes, const std::vector<unsigned int>& indices)
-    //: m_vertexBuffer(VK_NULL_HANDLE)
-    //, m_vertexMemory(VK_NULL_HANDLE)
-    //, m_indexMemory(VK_NULL_HANDLE)
-    //, m_indexBuffer(VK_NULL_HANDLE)
 	: m_meshBuffer(nullptr)
 	, m_vertexSubBuffer(nullptr)
 	, m_indexSubBuffer(nullptr)
@@ -178,16 +174,10 @@ Mesh::Mesh(const std::vector<SVertex>& vertexes, const std::vector<unsigned int>
 }
 
 Mesh::Mesh(const std::string filename) //use the binarized version
-    //: m_vertexBuffer(VK_NULL_HANDLE)
-    //, m_vertexMemory(VK_NULL_HANDLE)
-    //, m_indexMemory(VK_NULL_HANDLE)
-    //, m_indexBuffer(VK_NULL_HANDLE)
 	: m_meshBuffer(nullptr)
 	, m_vertexSubBuffer(nullptr)
 	, m_indexSubBuffer(nullptr)
 {
-   /* MeshLoader loader;
-    loader.LoadInto(filename, &m_vertexes, &m_indices);*/
 	std::fstream inFile(filename, std::ios_base::in | std::ios_base::binary);
 
 	TRAP(inFile.is_open());
@@ -214,27 +204,7 @@ Mesh::Mesh(const std::string filename) //use the binarized version
 
 void Mesh::Create()
 {
-   /* m_nbOfIndexes = (unsigned int)m_indices.size();
-
-    unsigned int size = (uint32_t)m_vertexes.size() * sizeof(SVertex);
-    AllocBufferMemory(m_vertexBuffer, m_vertexMemory, size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-    TRAP(size);
-
-    void* memPtr = nullptr;
-    VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_vertexMemory, 0, size, 0, &memPtr));
-    memcpy(memPtr, m_vertexes.data(), size);
-    vk::UnmapMemory(vk::g_vulkanContext.m_device, m_vertexMemory);
-
-    size = (uint32_t)m_indices.size() * sizeof(unsigned int);
-    TRAP(size);
-
-    AllocBufferMemory(m_indexBuffer, m_indexMemory, size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
-
-    VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_indexMemory, 0, size, 0, &memPtr));
-    memcpy(memPtr, m_indices.data(), size);
-    vk::UnmapMemory(vk::g_vulkanContext.m_device, m_indexMemory);
-    
-    CreateBoundigBox();*/
+   m_nbOfIndexes = (unsigned int)m_indices.size();
 	MeshManager::GetInstance()->RegisterForUploading(this);
 
 	CreateBoundigBox();
@@ -268,9 +238,10 @@ unsigned int Mesh::GetIndicesMemorySize() const
 
 void Mesh::CopyLocalData(MappedMemory* mapMemory, BufferHandle* stagginVertexBuffer, BufferHandle* staggingIndexBuffer)
 {
-	memcpy(mapMemory->GetPtr<void*>(stagginVertexBuffer), m_vertexes.data(), GetVerticesMemorySize());
-	memcpy(mapMemory->GetPtr<void*>(staggingIndexBuffer), m_indices.data(), GetIndicesMemorySize());
-
+	void* vertexMem = mapMemory->GetPtr<void*>(stagginVertexBuffer); //for debug purpose only
+	void* indexMem = mapMemory->GetPtr<void*>(staggingIndexBuffer);
+	memcpy(vertexMem, m_vertexes.data(), GetVerticesMemorySize());
+	memcpy(indexMem, m_indices.data(), GetIndicesMemorySize());
 }
 
 
@@ -359,11 +330,4 @@ VkPipelineVertexInputStateCreateInfo& Mesh::GetVertexDesc()
 
 Mesh::~Mesh()
 {
-    //VkDevice dev = vk::g_vulkanContext.m_device;
-
-    //vk::DestroyBuffer(dev, m_indexBuffer, nullptr);
-    //vk::FreeMemory(dev, m_indexMemory, nullptr);
-
-    //vk::DestroyBuffer(vk::g_vulkanContext.m_device, m_vertexBuffer, nullptr);
-    //vk::FreeMemory(vk::g_vulkanContext.m_device, m_vertexMemory, nullptr);
 }

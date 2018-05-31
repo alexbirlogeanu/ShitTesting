@@ -1,6 +1,6 @@
 #include "MemoryManager.h"
 
-
+#include <iostream>
 ///////////////////////////////////////////////////////////////////////////////////
 //BufferHandle
 ///////////////////////////////////////////////////////////////////////////////////
@@ -26,11 +26,13 @@ BufferHandle::~BufferHandle()
 BufferHandle* BufferHandle::CreateSubbuffer(VkDeviceSize size)
 {
 	VkDeviceSize bufferOffset = m_freeOffset;
-	if (m_freeOffset % m_alignment != 0)
+	if ((m_alignment != 0) && (m_freeOffset % m_alignment != 0))
 		bufferOffset += m_alignment - (m_freeOffset % m_alignment);
 
 	TRAP(bufferOffset + size <= m_size && "Not enough memory for this sub buffer");
-	BufferHandle* hSubBuffer = new BufferHandle(m_buffer, size, m_alignment, bufferOffset); //get offset relative to the memory
+	BufferHandle* hSubBuffer = new BufferHandle(m_buffer, size, m_alignment, bufferOffset);
+	hSubBuffer->SetMemoryContext(m_memoryContext);
+
 	m_freeOffset = bufferOffset + size;
 	m_subbuffers.push_back(hSubBuffer);
 	return hSubBuffer;
@@ -135,9 +137,6 @@ bool MemoryContext::CanMapMemory()
 
 BufferHandle* MemoryContext::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage)
 {
-	//HACK! Just to get rid of the trap in BufferHandle::CreateSubbufer();
-	size += 4 * 256; //4 times the alignment
-
 	VkBufferCreateInfo crtInfo;
 	cleanStructure(crtInfo);
 	crtInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -154,6 +153,7 @@ BufferHandle* MemoryContext::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags 
 
 	uint32_t buffMemIndex = vk::SVUlkanContext::GetMemTypeIndex(memReq.memoryTypeBits, m_memoryFlags);
 	TRAP(buffMemIndex == m_memoryTypeIndex && "Memory req for this buffer is not in the same heap");
+	std::cout << "For buffer " << buffer << " in context memory " << (unsigned int)m_contextType << " buffer memory index: " << buffMemIndex << " with memory index: " << m_memoryTypeIndex << std::endl;
 
 	VkDeviceSize bufferOffset = m_freeOffset;
 	if (bufferOffset % memReq.alignment != 0)
@@ -164,10 +164,16 @@ BufferHandle* MemoryContext::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags 
 
 	//bind buffer to memory
 	VULKAN_ASSERT(vk::BindBufferMemory(vk::g_vulkanContext.m_device, buffer, m_memory, bufferOffset));
-	BufferHandle* hBufferHandle = new BufferHandle(buffer, memReq.size, memReq.alignment);
+	VkDeviceSize alignment;
+	if (usage & (VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT))
+		alignment = memReq.alignment; //if is one of the above buffers, we use aligmnent when create sub buffers.
+	else
+		alignment = 0; // for index and vertex buffers. It seems that these buffers dont have to be aligned when we suballocate
+
+	BufferHandle* hBufferHandle = new BufferHandle(buffer, memReq.size, alignment);
 	hBufferHandle->SetMemoryContext(m_contextType);
 
-	m_buffersToOffset.emplace(hBufferHandle, bufferOffset);
+	m_buffersToOffset.emplace(std::pair<BufferHandle*, VkDeviceSize>(hBufferHandle, bufferOffset));
 
 	return hBufferHandle;
 }
@@ -201,7 +207,7 @@ BufferHandle* MemoryManager::CreateBuffer(EMemoryContextType context, VkDeviceSi
 
 void MemoryManager::AllocStaggingMemory(VkDeviceSize size)
 {
-	m_memoryContexts[(unsigned int)EMemoryContextType::Stagging]->AllocateMemory(size, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	m_memoryContexts[(unsigned int)EMemoryContextType::Stagging]->AllocateMemory(size, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 }
 
 void MemoryManager::FreeStagginMemory()

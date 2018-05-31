@@ -56,7 +56,7 @@ float CreateRandFloat(float min, float max)
 
 void AddDescriptorType(std::vector<VkDescriptorPoolSize>& pool, VkDescriptorType type, unsigned int count)
 {
-    TRAP(count > 0);
+	TRAP(count > 0);
     auto it = std::find_if(pool.begin(), pool.end(), [type](const VkDescriptorPoolSize& other){
         return other.type == type;
     });
