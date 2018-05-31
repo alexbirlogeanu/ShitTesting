@@ -9,6 +9,7 @@
 #include <utility>
 #include <array>
 #include <algorithm>
+#include <unordered_map>
 
 enum class EMemoryContextType
 {
@@ -74,6 +75,7 @@ public:
 	virtual ~MemoryContext();
 
 	BufferHandle* CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage);
+	void FreeBuffer(BufferHandle* handle);
 	void AllocateMemory(VkDeviceSize size, VkMemoryPropertyFlags flags);
 	void FreeMemory();
 	
@@ -83,10 +85,27 @@ public:
 	bool IsMapped() const { return m_mappedMemory != nullptr; }
 	MappedMemory* GetMappedMemory() const { return (IsMapped())? m_mappedMemory : nullptr; }
 private:
+	struct Chunk
+	{
+		Chunk() : m_offset(0), m_size(0){}
+		Chunk(VkDeviceSize offset, VkDeviceSize size) : m_offset(offset), m_size(size) {}
+
+		bool operator< (const Chunk& other) const { return m_size < other.m_size || m_offset < other.m_offset; }
+		bool operator!=(const Chunk& other) const { return m_offset != other.m_offset || m_size != other.m_size; }
+
+		VkDeviceSize	m_offset;
+		VkDeviceSize	m_size;
+	};
+
+	Chunk GetFreeChunk(VkDeviceSize size, VkDeviceSize alignment);
+	void FreeChunk(Chunk chunk);
 private:
-	std::set<std::pair<BufferHandle*, VkDeviceSize>>	m_buffersToOffset;
+	typedef std::pair<BufferHandle*, Chunk> BufferToOffset_t;
+	std::unordered_map<VkBuffer, BufferToOffset_t>		m_buffersToOffset;
+	std::set<Chunk>										m_chunks;
+
 	VkDeviceMemory										m_memory;
-	VkDeviceSize										m_freeOffset;
+	//VkDeviceSize										m_freeOffset;
 	VkDeviceSize										m_totalSize;
 	uint32_t											m_memoryTypeIndex;
 	MappedMemory*										m_mappedMemory;
@@ -100,18 +119,16 @@ T MappedMemory::GetPtr(BufferHandle* handle)
 {
 	//change this function is shit
 	auto& handles = m_parentMemoryContext->m_buffersToOffset;
-	auto it = std::find_if(handles.begin(), handles.end(), [&](std::pair<BufferHandle*, VkDeviceSize> other)
-	{
-		return handle->GetBuffer() == other.first->GetBuffer();
-	});
-
+	auto it = handles.find(handle->GetBuffer());
 	if (it == handles.end())
 	{
 		TRAP(false && " This buffer is not from this memory context");
 		return nullptr;
 	}
+
 	VkDeviceSize subBufferOffset = handle->GetOffset(); //handle can be a subbuffer from a bigger buffer;
-	VkDeviceSize bufferOffset = it->second; //this is the offset inside the VkDeviceMemory that is mapped to the buffer
+	MemoryContext::BufferToOffset_t buffToOff = it->second;
+	VkDeviceSize bufferOffset = buffToOff.second.m_offset; //this is the offset inside the VkDeviceMemory that is mapped to the buffer
 	uint8_t* bufferMemPtr = (uint8_t*)m_memPtr + bufferOffset + subBufferOffset;
 	return (T)bufferMemPtr;
 }
@@ -121,6 +138,8 @@ class MemoryManager : public Singleton<MemoryManager>
 	friend class Singleton<MemoryManager>;
 public:
 	BufferHandle* CreateBuffer(EMemoryContextType context, VkDeviceSize size, VkBufferUsageFlags usage);
+	void FreeBuffer(EMemoryContextType context, BufferHandle* handle);
+
 	void AllocStaggingMemory(VkDeviceSize size);
 	void FreeStagginMemory();
 

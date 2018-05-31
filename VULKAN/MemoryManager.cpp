@@ -77,7 +77,6 @@ MappedMemory::~MappedMemory()
 MemoryContext::MemoryContext(EMemoryContextType type)
 	: m_memory(VK_NULL_HANDLE)
 	, m_totalSize(0)
-	, m_freeOffset(0)
 	, m_memoryTypeIndex(-1)
 	, m_contextType(type)
 	, m_mappedMemory(nullptr)
@@ -105,6 +104,8 @@ void MemoryContext::AllocateMemory(VkDeviceSize size, VkMemoryPropertyFlags flag
 	allocInfo.allocationSize = m_totalSize;
 	allocInfo.memoryTypeIndex = m_memoryTypeIndex;
 	VULKAN_ASSERT(vk::AllocateMemory(vk::g_vulkanContext.m_device, &allocInfo, nullptr, &m_memory));
+
+	m_chunks.insert(Chunk(0, m_totalSize));
 }
 
 void MemoryContext::FreeMemory()
@@ -116,13 +117,14 @@ void MemoryContext::FreeMemory()
 
 	VkDevice dev = vk::g_vulkanContext.m_device;
 
-	for (auto buff : m_buffersToOffset)
+	for (auto e : m_buffersToOffset)
 	{
-		vk::DestroyBuffer(dev, buff.first->GetBuffer(), nullptr);
-		delete buff.first;
+		BufferToOffset_t buffToOffset = e.second;
+		vk::DestroyBuffer(dev, buffToOffset.first->GetBuffer(), nullptr);
+		delete buffToOffset.first;
 	}
 
-
+	m_chunks.clear();
 	m_buffersToOffset.clear();
 	vk::FreeMemory(dev, m_memory, nullptr);
 	m_memory = VK_NULL_HANDLE;
@@ -132,7 +134,7 @@ bool MemoryContext::MapMemory()
 {
 	TRAP(!IsMapped() && "Dont map memory if it is already mapped");
 	void* memPtr = nullptr;
-	VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_memory, 0, m_freeOffset, 0, &memPtr));
+	VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_memory, 0, m_totalSize, 0, &memPtr));
 	m_mappedMemory = new MappedMemory(memPtr, this);
 	return memPtr != nullptr;
 }
@@ -150,6 +152,57 @@ void MemoryContext::UnmapMemory()
 bool MemoryContext::CanMapMemory()
 {
 	return m_contextType != EMemoryContextType::DeviceLocal;
+}
+
+MemoryContext::Chunk MemoryContext::GetFreeChunk(VkDeviceSize size, VkDeviceSize alignment)
+{
+	auto found = m_chunks.begin();
+	for (; found != m_chunks.end(); ++found)
+	{
+		if (found->m_size >= size)
+			break;
+	}
+	TRAP(found != m_chunks.end() && "No chunk found for allocation! Too fragmented or not enough memory");
+	TRAP(found->m_offset % alignment == 0 && "Something is wrong! All chunks should be stay aligned!! Maybe size is not from MemoryRequirments struct");
+	
+	Chunk foundChunk = *found;
+	m_chunks.erase(found);
+	
+	//split the chunk
+	Chunk allocChunk(foundChunk.m_offset, size);
+	Chunk newChunk(foundChunk.m_offset + allocChunk.m_size, foundChunk.m_size - allocChunk.m_size);
+	if (newChunk.m_size > 0)
+		m_chunks.insert(newChunk);
+
+	return allocChunk;
+}
+
+void MemoryContext::FreeChunk(MemoryContext::Chunk chunk)
+{
+	Chunk newChunk = chunk;
+	auto prevChunk = std::find_if(m_chunks.begin(), m_chunks.end(), [&](const Chunk& other)
+	{
+		return other.m_offset + other.m_size == chunk.m_offset;
+	});
+	   
+	if (prevChunk != m_chunks.end())
+	{
+		newChunk = Chunk(prevChunk->m_offset, prevChunk->m_size + newChunk.m_size);
+		m_chunks.erase(prevChunk);
+	}
+
+	auto nextChunk = std::find_if(m_chunks.begin(), m_chunks.end(), [&](const Chunk& other)
+	{
+		return other.m_offset == chunk.m_offset + chunk.m_size;
+	});
+
+	if (nextChunk != m_chunks.end())
+	{
+		newChunk = Chunk(newChunk.m_offset, newChunk.m_size + nextChunk->m_size);
+		m_chunks.erase(nextChunk);
+	}
+	if (newChunk.m_size > 0)
+		m_chunks.insert(newChunk);
 }
 
 BufferHandle* MemoryContext::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage)
@@ -172,30 +225,37 @@ BufferHandle* MemoryContext::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags 
 	TRAP(buffMemIndex == m_memoryTypeIndex && "Memory req for this buffer is not in the same heap");
 	std::cout << "For buffer " << buffer << " in context memory " << (unsigned int)m_contextType << " buffer memory index: " << buffMemIndex << " with memory index: " << m_memoryTypeIndex << std::endl;
 
-	VkDeviceSize bufferOffset = m_freeOffset;
-	if (bufferOffset % memReq.alignment != 0)
-		bufferOffset += memReq.alignment - (bufferOffset % memReq.alignment);
-
-	TRAP(bufferOffset + memReq.size <= m_totalSize && "Not enough memory for this buffer");
-	m_freeOffset = bufferOffset + memReq.size;
+	Chunk memoryChunk = GetFreeChunk(memReq.size, memReq.alignment);
 
 	//bind buffer to memory
-	VULKAN_ASSERT(vk::BindBufferMemory(vk::g_vulkanContext.m_device, buffer, m_memory, bufferOffset));
+	VULKAN_ASSERT(vk::BindBufferMemory(vk::g_vulkanContext.m_device, buffer, m_memory, memoryChunk.m_offset));
 	VkDeviceSize alignment;
 	if (usage & (VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT))
 		alignment = memReq.alignment; //if is one of the above buffers, we use aligmnent when create sub buffers.
 	else
 		alignment = 0; // for index and vertex buffers. It seems that these buffers dont have to be aligned when we suballocate
 
-	BufferHandle* hBufferHandle = new BufferHandle(buffer, memReq.size, alignment);
+	BufferHandle* hBufferHandle = new BufferHandle(buffer, size, alignment);
 	hBufferHandle->SetMemoryContext(m_contextType);
 
-	m_buffersToOffset.emplace(std::pair<BufferHandle*, VkDeviceSize>(hBufferHandle, bufferOffset));
+	m_buffersToOffset.emplace(buffer, std::pair<BufferHandle*, Chunk>(hBufferHandle, memoryChunk));
 
 	return hBufferHandle;
 }
 
+void MemoryContext::FreeBuffer(BufferHandle* handle)
+{
+	auto found = m_buffersToOffset.find(handle->GetBuffer());
+	if (found == m_buffersToOffset.end())
+		return;
 
+	BufferToOffset_t buffToOffset = found->second;
+
+	m_buffersToOffset.erase(found);
+	FreeChunk(buffToOffset.second);
+	vk::DestroyBuffer(vk::g_vulkanContext.m_device, buffToOffset.first->GetBuffer(), nullptr);
+	delete buffToOffset.first;
+}
 
 ///////////////////////////////////////////////////////////////////////////////////
 //MemoryManager
@@ -220,6 +280,11 @@ MemoryManager::~MemoryManager()
 BufferHandle* MemoryManager::CreateBuffer(EMemoryContextType context, VkDeviceSize size, VkBufferUsageFlags usage)
 {
 	return m_memoryContexts[(unsigned int)context]->CreateBuffer(size, usage);
+}
+
+void MemoryManager::FreeBuffer(EMemoryContextType context, BufferHandle* handle)
+{
+	m_memoryContexts[(unsigned int)context]->FreeBuffer(handle);
 }
 
 void MemoryManager::AllocStaggingMemory(VkDeviceSize size)
