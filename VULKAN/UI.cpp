@@ -309,19 +309,19 @@ void CUIText::CreateMesh()
 
 void CUIText::UpdateMesh()
 {
-    TRAP(m_textMesh);
-    unsigned int textSize = (unsigned int)m_text.size();
-    if(textSize == 0)
-        return;
-    VkDeviceMemory vertexMemory = m_textMesh->GetVertexMemory();
-    void* bufMemory;
-    vk::MapMemory(vk::g_vulkanContext.m_device, vertexMemory, 0, VK_WHOLE_SIZE, 0, &bufMemory);
+    //TRAP(m_textMesh);
+    //unsigned int textSize = (unsigned int)m_text.size();
+    //if(textSize == 0)
+    //    return;
+    //VkDeviceMemory vertexMemory = m_textMesh->GetVertexMemory();
+    //void* bufMemory;
+    //vk::MapMemory(vk::g_vulkanContext.m_device, vertexMemory, 0, VK_WHOLE_SIZE, 0, &bufMemory);
 
-    CFont2::UIString uiString;
-    m_font->GetUIString(m_text, uiString);
-    memcpy(bufMemory, &uiString[0], uiString.size() * sizeof(SVertex));
+    //CFont2::UIString uiString;
+    //m_font->GetUIString(m_text, uiString);
+    //memcpy(bufMemory, &uiString[0], uiString.size() * sizeof(SVertex));
 
-    vk::UnmapMemory(vk::g_vulkanContext.m_device, vertexMemory);
+    //vk::UnmapMemory(vk::g_vulkanContext.m_device, vertexMemory);
 }
 
 void CUIText::Render()
@@ -402,22 +402,22 @@ void CUIVector::Render()
 
 void CUIVector::Update()
 {
-    if(m_dirty)
-    {
-        VkDeviceMemory vertexMemory = m_mesh->GetVertexMemory();
-        void* bufMemory;
-        vk::MapMemory(vk::g_vulkanContext.m_device, vertexMemory, 0, VK_WHOLE_SIZE, 0, &bufMemory);
-        SVertex* p = (SVertex*)bufMemory;
-        p[0].pos = m_position;
-        p[1].pos = m_position + m_vector;
+    //if(m_dirty)
+    //{
+    //    VkDeviceMemory vertexMemory = m_mesh->GetVertexMemory();
+    //    void* bufMemory;
+    //    vk::MapMemory(vk::g_vulkanContext.m_device, vertexMemory, 0, VK_WHOLE_SIZE, 0, &bufMemory);
+    //    SVertex* p = (SVertex*)bufMemory;
+    //    p[0].pos = m_position;
+    //    p[1].pos = m_position + m_vector;
 
-        for(unsigned int i = 0; i < m_vertexCount; ++i, ++p)
-            p->SetColor(GetColorComponent(m_color.x), GetColorComponent(m_color.y), GetColorComponent(m_color.z), GetColorComponent(m_color.w));
+    //    for(unsigned int i = 0; i < m_vertexCount; ++i, ++p)
+    //        p->SetColor(GetColorComponent(m_color.x), GetColorComponent(m_color.y), GetColorComponent(m_color.z), GetColorComponent(m_color.w));
 
-        vk::UnmapMemory(vk::g_vulkanContext.m_device, vertexMemory);
+    //    vk::UnmapMemory(vk::g_vulkanContext.m_device, vertexMemory);
 
-        m_dirty = false;
-    }
+    //    m_dirty = false;
+    //}
 }
 
 void CUIVector::SetColor(glm::vec4 color)

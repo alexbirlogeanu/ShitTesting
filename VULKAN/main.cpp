@@ -36,6 +36,7 @@
 #include "ShadowRenderer.h"
 #include "Object.h"
 #include "PointLightRenderer2.h"
+#include "MemoryManager.h"
 
 #define OUT_FORMAT VK_FORMAT_R16G16B16A16_SFLOAT
 //#define OUT_FORMAT VK_FORMAT_B8G8R8A8_UNORM
@@ -1745,6 +1746,9 @@ CApplication::CApplication()
     CreateSurface();
     CreateSwapChains();
 
+	MemoryManager::CreateInstance();
+	MeshManager::CreateInstance();
+
     CreateCommandBuffer();
 
     CPickManager::CreateInstance();
@@ -1822,6 +1826,9 @@ CApplication::~CApplication()
     vk::DestroyRenderPass(dev, m_fogRenderPass, nullptr);
     vk::DestroyRenderPass(dev, m_3DtextureRenderPass, nullptr);
     vk::DestroyRenderPass(dev, m_volumetricRenderPass, nullptr);
+
+	MeshManager::DestroyInstance();
+	MemoryManager::DestroyInstance();
 
     vk::DestroyCommandPool(dev, m_commandPool, nullptr);
     vk::DestroySurfaceKHR(vk::g_vulkanContext.m_instance, m_surface, nullptr);
@@ -3209,7 +3216,7 @@ void CApplication::Render()
     StartCommandBuffer();
 
     CTextureManager::GetInstance()->Update();
-
+	MeshManager::GetInstance()->Update();
     //BeginFrame();
     QueryManager::GetInstance().Reset();
     QueryManager::GetInstance().StartStatistics();

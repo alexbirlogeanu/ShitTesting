@@ -81,7 +81,7 @@ int main(int argc, char** argv)
 	{
 		rapidxml::xml_attribute<char>* file = child->first_attribute("file", 0, false);
 		TRAP(file);
-		meshList.insert(file->value());
+		meshList.insert(std::string(file->value()));
 	}
 
 	for (auto it = meshList.begin(); it != meshList.end(); ++it)

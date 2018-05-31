@@ -595,7 +595,7 @@ void CComputePipeline::CreatePipeline()
     crtInfo.stage = CreatePipelineStage(m_computeShader, VK_SHADER_STAGE_COMPUTE_BIT);
     crtInfo.layout = m_pipelineLayout;
 
-    VULKAN_ASSERT(vk::CreateComputePipelines(vk::g_vulkanContext.m_device, nullptr, 1, &crtInfo, nullptr, &m_pipeline));
+    VULKAN_ASSERT(vk::CreateComputePipelines(vk::g_vulkanContext.m_device, VK_NULL_HANDLE, 1, &crtInfo, nullptr, &m_pipeline));
 }
 
 void CComputePipeline::CleanInternal()

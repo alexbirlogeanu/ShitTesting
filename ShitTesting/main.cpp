@@ -966,6 +966,38 @@ int GetInt()
 	return a;
 }
 
+template<class A, class C>
+class Printer
+{
+public:
+	void Print(C c)
+	{
+		std::cout << "Ia Pula: ERROR" << endl;
+	}
+};
+
+template <class A>
+class Printer<A, int> 
+{
+public:
+	void Print(int i)
+	{
+		std::cout << "Ia Pula: int " << std::endl;
+	}
+};
+
+
+template<class A, class P1, class P2>
+class Printer<A, std::pair<P1, P2> >
+{
+public:
+	void Print(std::pair<P1, P2> p)
+	{
+		std::cout << "Ia Pula: Pair " << std::endl;
+
+	}
+};
+
 int main (int argc, char** argv)
 {
 	/*TestSer t(21.6f, 10, 20);
@@ -986,6 +1018,6 @@ int main (int argc, char** argv)
 	ComplexTestSer ctload;
 	ctload.Serialize(&serializer);
 */
-
+	
     return 0;
 }

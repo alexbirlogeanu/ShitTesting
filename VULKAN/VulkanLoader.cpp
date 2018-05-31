@@ -461,59 +461,6 @@ namespace vk {
 
         return true;
     }
-    void* NewInstance(
-        void*                                       pUserData,
-        size_t                                      size,
-        size_t                                      alignment,
-        VkSystemAllocationScope                     allocationScope)
-    {
-        //std::cout << "Instance no: " << *((int*)pUserData) << std::endl;
-
-        std::string out("NewInstance no: ");
-        char nr[10];
-        _itoa_s(*((int*)pUserData), nr, 10);
-        out += nr;
-        out += "\n";
-
-        OutputDebugString(out.c_str());
-
-        void* ret = calloc(1, size);
-
-        return ret;
-    };
-
-    void* ReallocInstace(
-        void*                                       pUserData,
-        void*                                       pOriginal,
-        size_t                                      size,
-        size_t                                      alignment,
-        VkSystemAllocationScope                     allocationScope)
-    {
-        std::string out("ReallocInstance no: ");
-        char nr[10];
-        _itoa_s(*((int*)pUserData), nr, 10);
-        out += nr;
-        out += "\n";
-
-        OutputDebugString(out.c_str());
-        void* ret = realloc(pOriginal, size);
-
-        return ret;
-    };
-
-    void FreeInstance(
-        void*                                       pUserData,
-        void*                                       pMemory)
-    {
-        std::string out("FreeInstance no: ");
-        char nr[10];
-        _itoa_s(*((int*)pUserData), nr, 10);
-        out += nr;
-        out += "\n";
-
-        OutputDebugString(out.c_str());
-        free(pMemory);
-    };
     unsigned int ms_inst = 0;
     void InitInstance()
     {
@@ -533,14 +480,6 @@ namespace vk {
         instCrtInfo.ppEnabledLayerNames = layersName.data();
         instCrtInfo.enabledExtensionCount = (unsigned int)mandatoryExtensions.size();
         instCrtInfo.ppEnabledExtensionNames = mandatoryExtensions.data();
-
-        /*VkAllocationCallbacks alloc;
-        cleanStructure(alloc);
-        alloc.pUserData = &ms_inst;
-        alloc.pfnAllocation = &NewInstance;
-        alloc.pfnReallocation = &ReallocInstace;
-        alloc.pfnFree = &FreeInstance;*/
-
 
         VkResult result = CreateInstance(&instCrtInfo, nullptr, &g_vulkanContext.m_instance);
         TRAP(result >= VK_SUCCESS);
@@ -640,9 +579,6 @@ namespace vk {
         devQueueCrtInfo.queueCount = 1;
         devQueueCrtInfo.pQueuePriorities = &queuePriority;
 
-        std::vector<char*> layersName(1, "VK_LAYER_LUNARG_standard_validation");
-        layersName.push_back("VK_LAYER_RENDERDOC_Capture");
-
         VkDeviceCreateInfo devCrtInfo;
         cleanStructure(devCrtInfo);
         devCrtInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -650,8 +586,8 @@ namespace vk {
         devCrtInfo.flags = 0;
         devCrtInfo.queueCreateInfoCount = 1;
         devCrtInfo.pQueueCreateInfos = &devQueueCrtInfo;
-        devCrtInfo.enabledLayerCount = (uint32_t)layersName.size();
-        devCrtInfo.ppEnabledLayerNames = layersName.data();
+        devCrtInfo.enabledLayerCount = 0;
+        devCrtInfo.ppEnabledLayerNames = nullptr;
         devCrtInfo.enabledExtensionCount = (unsigned int)deviceMandatoryExt.size();
         devCrtInfo.ppEnabledExtensionNames = deviceMandatoryExt.data();
         devCrtInfo.pEnabledFeatures = &devFeatures;
@@ -708,7 +644,7 @@ namespace vk {
         debug_report_info.flags = VK_DEBUG_REPORT_WARNING_BIT_EXT |
             VK_DEBUG_REPORT_ERROR_BIT_EXT;
         debug_report_info.pUserData = nullptr;
-        debug_report_info.pfnCallback = DebugReport;    
+        debug_report_info.pfnCallback = (PFN_vkDebugReportCallbackEXT)DebugReport;
 
         VULKAN_ASSERT(vk::CreateDebugReportCallbackEXT(g_vulkanContext.m_instance,
             &debug_report_info, nullptr, &g_vulkanContext.m_debugReport));
@@ -735,11 +671,7 @@ namespace vk {
         RegisterDebugInfo();
         
         InitDevice();
-
         init_dispatch_table_bottom(g_vulkanContext.m_instance, g_vulkanContext.m_device);
-        
-        /*HMODULE renderDocDll = LoadLibrary(renderDoc);
-        TRAP(renderDocDll);*/
     }
 
     void Unload()

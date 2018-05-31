@@ -4,24 +4,173 @@
 
 #include "defines.h"
 #include "MeshLoader.h"
+#include "MemoryManager.h"
 
 void AllocBufferMemory(VkBuffer& buffer, VkDeviceMemory& memory, uint32_t size, VkBufferUsageFlags usage);
 
+VkBufferMemoryBarrier CreateBufferMemoryBarrier(BufferHandle* handle, VkAccessFlags srcAccess, VkAccessFlags dstAccess)
+{
+	VkBufferMemoryBarrier barrier;
+	cleanStructure(barrier);
+	barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+	barrier.srcAccessMask = srcAccess;
+	barrier.dstAccessMask = dstAccess;
+	barrier.buffer = handle->GetBuffer();
+	barrier.offset = handle->GetOffset();
+	barrier.size = handle->GetSize();
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+	return barrier;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////
+//TransferMeshInfo
+////////////////////////////////////////////////////////////////////////////////////////
+
+MeshManager::TransferMeshInfo::TransferMeshInfo(){}
+MeshManager::TransferMeshInfo::TransferMeshInfo(Mesh* mesh)
+	: m_stagginVertexBuffer(nullptr)
+	, m_toVertexBuffer(nullptr)
+	, m_staggingIndexBuffer(nullptr)
+	, m_toIndexBuffer(nullptr)
+	, m_meshBuffer(nullptr)
+	, m_staggingBuffer(nullptr)
+	, m_mesh(mesh)
+{
+
+	m_meshBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::DeviceLocal, m_mesh->MemorySizeNeeded(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+	m_staggingBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::Stagging, m_mesh->MemorySizeNeeded(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+
+	m_toVertexBuffer = m_meshBuffer->CreateSubbuffer(m_mesh->GetVerticesMemorySize());
+	m_toIndexBuffer = m_meshBuffer->CreateSubbuffer(m_mesh->GetIndicesMemorySize());
+
+	m_stagginVertexBuffer = m_staggingBuffer->CreateSubbuffer(m_mesh->GetVerticesMemorySize());
+	m_staggingIndexBuffer = m_staggingBuffer->CreateSubbuffer(m_mesh->GetIndicesMemorySize());
+}
+
+void MeshManager::TransferMeshInfo::BeginTransfer(VkCommandBuffer cmdBuffer)
+{
+	VkBufferCopy regions[2];
+	//copy vertexes
+	regions[0].size = m_stagginVertexBuffer->GetSize();
+	regions[0].srcOffset = m_stagginVertexBuffer->GetOffset();
+	regions[0].dstOffset = m_toVertexBuffer->GetOffset();
+
+	//copy indices
+	regions[1].size = m_staggingIndexBuffer->GetSize();
+	regions[1].srcOffset = m_staggingIndexBuffer->GetOffset();
+	regions[1].dstOffset = m_toIndexBuffer->GetOffset();
+
+	vk::CmdCopyBuffer(cmdBuffer, m_staggingBuffer->GetBuffer(), m_meshBuffer->GetBuffer(), 2, regions);
+}
+
+void MeshManager::TransferMeshInfo::EndTransfer()
+{
+	m_mesh->m_meshBuffer = m_meshBuffer;
+	m_mesh->m_indexSubBuffer = m_toIndexBuffer;
+	m_mesh->m_vertexSubBuffer = m_toVertexBuffer;
+}
+////////////////////////////////////////////////////////////////////////////////////////
+//MeshManager
+////////////////////////////////////////////////////////////////////////////////////////
+
+
+MeshManager::MeshManager()
+{
+
+}
+
+MeshManager::~MeshManager()
+{
+
+}
+
+void MeshManager::RegisterForUploading(Mesh* m)
+{
+	m_pendingMeshes.push_back(m);
+}
+
+void MeshManager::Update()
+{
+	if (!m_transferInProgress.empty()) //if I will use 2 different queue this is not a valid condition. I have to check if the transfers are finished
+	{
+		for (unsigned int i = 0; i < m_transferInProgress.size(); ++i)
+			m_transferInProgress[i].EndTransfer();
+
+		m_transferInProgress.clear();
+		MemoryManager::GetInstance()->FreeStagginMemory();
+	}
+
+	if (!m_pendingMeshes.empty())
+	{
+		unsigned int staggingMemoryTotalSize = CalculateStagginMemorySize();
+		MemoryManager::GetInstance()->AllocStaggingMemory(staggingMemoryTotalSize);
+		//
+		MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::Stagging);
+		MappedMemory* memoryMap = MemoryManager::GetInstance()->GetMappedMemory(EMemoryContextType::Stagging);
+		TRAP(m_transferInProgress.empty() && "All transfer should be processed"); 
+		m_transferInProgress.reserve(m_pendingMeshes.size());
+
+		for (auto m : m_pendingMeshes)
+		{
+			TransferMeshInfo info(m);
+			m->CopyLocalData(memoryMap, info.m_stagginVertexBuffer, info.m_staggingIndexBuffer);
+			m_transferInProgress.push_back(info);
+		}
+
+		MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::Stagging);
+		std::vector<VkBufferMemoryBarrier> copyBarriers;
+		copyBarriers.reserve(m_transferInProgress.size());
+
+		VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer; //for now use this command buffer and the same queue. At home, try to create a transfer queue, with a different command buffer
+		for (unsigned int i = 0; i < m_transferInProgress.size(); ++i)
+		{
+			TransferMeshInfo& transInfo = m_transferInProgress[i];
+			copyBarriers.push_back(CreateBufferMemoryBarrier(transInfo.m_toVertexBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT));
+			copyBarriers.push_back(CreateBufferMemoryBarrier(transInfo.m_toIndexBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_INDEX_READ_BIT));
+
+			transInfo.BeginTransfer(cmdBuffer);
+		}
+
+		vk::CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0, 0, nullptr, (uint32_t)copyBarriers.size(), copyBarriers.data(), 0, nullptr);
+		m_pendingMeshes.clear();
+	}
+}
+
+unsigned int MeshManager::CalculateStagginMemorySize()
+{
+	unsigned int totalSize = 0;
+	for (auto m : m_pendingMeshes)
+		totalSize += m->MemorySizeNeeded();
+
+	return 2 * totalSize; //hack too
+}
+
+////////////////////////////////////////////////////////////////////////////////////////
+//Mesh
+////////////////////////////////////////////////////////////////////////////////////////
 Mesh::InputVertexDescription* Mesh::ms_vertexDescription = nullptr;
 
 Mesh::Mesh()
-    : m_vertexBuffer(VK_NULL_HANDLE)
-    , m_vertexMemory(VK_NULL_HANDLE)
-    , m_indexMemory(VK_NULL_HANDLE)
-    , m_indexBuffer(VK_NULL_HANDLE)
+    //: m_vertexBuffer(VK_NULL_HANDLE)
+    //, m_vertexMemory(VK_NULL_HANDLE)
+    //, m_indexMemory(VK_NULL_HANDLE)
+    //, m_indexBuffer(VK_NULL_HANDLE)
+	: m_meshBuffer(nullptr)
+	, m_vertexSubBuffer(nullptr)
+	, m_indexSubBuffer(nullptr)
 {
 }
 
 Mesh::Mesh(const std::vector<SVertex>& vertexes, const std::vector<unsigned int>& indices)
-    : m_vertexBuffer(VK_NULL_HANDLE)
-    , m_vertexMemory(VK_NULL_HANDLE)
-    , m_indexMemory(VK_NULL_HANDLE)
-    , m_indexBuffer(VK_NULL_HANDLE)
+    //: m_vertexBuffer(VK_NULL_HANDLE)
+    //, m_vertexMemory(VK_NULL_HANDLE)
+    //, m_indexMemory(VK_NULL_HANDLE)
+    //, m_indexBuffer(VK_NULL_HANDLE)
+	: m_meshBuffer(nullptr)
+	, m_vertexSubBuffer(nullptr)
+	, m_indexSubBuffer(nullptr)
     , m_vertexes(vertexes)
     , m_indices(indices)
 {
@@ -29,10 +178,13 @@ Mesh::Mesh(const std::vector<SVertex>& vertexes, const std::vector<unsigned int>
 }
 
 Mesh::Mesh(const std::string filename) //use the binarized version
-    : m_vertexBuffer(VK_NULL_HANDLE)
-    , m_vertexMemory(VK_NULL_HANDLE)
-    , m_indexMemory(VK_NULL_HANDLE)
-    , m_indexBuffer(VK_NULL_HANDLE)
+    //: m_vertexBuffer(VK_NULL_HANDLE)
+    //, m_vertexMemory(VK_NULL_HANDLE)
+    //, m_indexMemory(VK_NULL_HANDLE)
+    //, m_indexBuffer(VK_NULL_HANDLE)
+	: m_meshBuffer(nullptr)
+	, m_vertexSubBuffer(nullptr)
+	, m_indexSubBuffer(nullptr)
 {
    /* MeshLoader loader;
     loader.LoadInto(filename, &m_vertexes, &m_indices);*/
@@ -57,12 +209,12 @@ Mesh::Mesh(const std::string filename) //use the binarized version
 
 	inFile.close();
 
-    Create();
+	Create();
 }
 
 void Mesh::Create()
 {
-    m_nbOfIndexes = (unsigned int)m_indices.size();
+   /* m_nbOfIndexes = (unsigned int)m_indices.size();
 
     unsigned int size = (uint32_t)m_vertexes.size() * sizeof(SVertex);
     AllocBufferMemory(m_vertexBuffer, m_vertexMemory, size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
@@ -82,7 +234,10 @@ void Mesh::Create()
     memcpy(memPtr, m_indices.data(), size);
     vk::UnmapMemory(vk::g_vulkanContext.m_device, m_indexMemory);
     
-    CreateBoundigBox();
+    CreateBoundigBox();*/
+	MeshManager::GetInstance()->RegisterForUploading(this);
+
+	CreateBoundigBox();
 }
 
 void Mesh::CreateBoundigBox()
@@ -97,14 +252,39 @@ void Mesh::CreateBoundigBox()
     }
 }
 
+unsigned int Mesh::MemorySizeNeeded() const
+{
+	return GetVerticesMemorySize() + GetIndicesMemorySize();
+}
+
+unsigned int Mesh::GetVerticesMemorySize() const
+{
+	return m_vertexes.size() * sizeof(SVertex);
+}
+unsigned int Mesh::GetIndicesMemorySize() const
+{
+	return m_indices.size() * sizeof(unsigned int);
+}
+
+void Mesh::CopyLocalData(MappedMemory* mapMemory, BufferHandle* stagginVertexBuffer, BufferHandle* staggingIndexBuffer)
+{
+	memcpy(mapMemory->GetPtr<void*>(stagginVertexBuffer), m_vertexes.data(), GetVerticesMemorySize());
+	memcpy(mapMemory->GetPtr<void*>(staggingIndexBuffer), m_indices.data(), GetIndicesMemorySize());
+
+}
+
+
 void Mesh::Render(unsigned int numIndexes, unsigned int instances)
 {
+	if (!m_meshBuffer)
+		return;
+
     unsigned int indexesToRender = (numIndexes == -1)? m_nbOfIndexes : numIndexes;
 
     VkCommandBuffer cmdBuff = vk::g_vulkanContext.m_mainCommandBuffer;
-    const VkDeviceSize offsets[1] = {0};
-    vk::CmdBindVertexBuffers(cmdBuff, 0, 1, &m_vertexBuffer, offsets);
-    vk::CmdBindIndexBuffer(cmdBuff, m_indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+    const VkDeviceSize offsets[1] = {m_vertexSubBuffer->GetOffset()};
+    vk::CmdBindVertexBuffers(cmdBuff, 0, 1, &m_vertexSubBuffer->GetBuffer(), offsets);
+    vk::CmdBindIndexBuffer(cmdBuff, m_indexSubBuffer->GetBuffer(), m_indexSubBuffer->GetOffset(), VK_INDEX_TYPE_UINT32);
     vk::CmdDrawIndexed(cmdBuff, 
         indexesToRender,
         instances,
@@ -179,11 +359,11 @@ VkPipelineVertexInputStateCreateInfo& Mesh::GetVertexDesc()
 
 Mesh::~Mesh()
 {
-    VkDevice dev = vk::g_vulkanContext.m_device;
+    //VkDevice dev = vk::g_vulkanContext.m_device;
 
-    vk::DestroyBuffer(dev, m_indexBuffer, nullptr);
-    vk::FreeMemory(dev, m_indexMemory, nullptr);
+    //vk::DestroyBuffer(dev, m_indexBuffer, nullptr);
+    //vk::FreeMemory(dev, m_indexMemory, nullptr);
 
-    vk::DestroyBuffer(vk::g_vulkanContext.m_device, m_vertexBuffer, nullptr);
-    vk::FreeMemory(vk::g_vulkanContext.m_device, m_vertexMemory, nullptr);
+    //vk::DestroyBuffer(vk::g_vulkanContext.m_device, m_vertexBuffer, nullptr);
+    //vk::FreeMemory(vk::g_vulkanContext.m_device, m_vertexMemory, nullptr);
 }

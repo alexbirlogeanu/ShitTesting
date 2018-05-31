@@ -26,17 +26,17 @@ void EndDebugMarker(const std::string& markerName)
 template<>
 VkDebugReportObjectTypeEXT GetDebugObjectType<VkImage>()
 {
-    return VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT;
+	return VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT;
 }
 
 template<>
 VkDebugReportObjectTypeEXT GetDebugObjectType<VkSampler>()
 {
-    return VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_EXT;
+	return VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_EXT;
 }
 
 template<>
 VkDebugReportObjectTypeEXT GetDebugObjectType<VkImageView>()
 {
-    return VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_VIEW_EXT;
+	return VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_VIEW_EXT;
 }

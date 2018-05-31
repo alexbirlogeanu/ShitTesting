@@ -4,6 +4,7 @@
 #include <vector>
 #include "glm/glm.hpp"
 #include "SVertex.h"
+#include "Singleton.h"
 
 struct BoundingBox
 {
@@ -30,9 +31,53 @@ struct BoundingBox
             tPoints[i] = glm::vec3(tMatrix * glm::vec4(tPoints[i], 1.0f));
     }
 };
+class Mesh;
+class MappedMemory;
+class BufferHandle;
+class MeshManager : public Singleton<MeshManager>
+{
+	friend class Singleton<MeshManager>;
+public:
+	void RegisterForUploading(Mesh* m);
+	void Update();
+
+private:
+	MeshManager();
+	virtual ~MeshManager();
+
+	MeshManager(const MeshManager& other);
+	MeshManager& operator=(const MeshManager& other);
+
+	//
+	unsigned int CalculateStagginMemorySize();
+private:
+	class TransferMeshInfo
+	{
+	public:
+		TransferMeshInfo();
+		TransferMeshInfo(Mesh* mesh);
+
+		void BeginTransfer(VkCommandBuffer cmdBuffer);
+		void EndTransfer();
+
+		Mesh*			m_mesh;
+		BufferHandle*	m_meshBuffer;
+		BufferHandle*	m_staggingBuffer;
+		BufferHandle*	m_stagginVertexBuffer;
+		BufferHandle*	m_toVertexBuffer;
+		BufferHandle*	m_staggingIndexBuffer;
+		BufferHandle*	m_toIndexBuffer;
+	};
+private:
+	std::vector<Mesh*>					m_pendingMeshes;
+	std::vector<TransferMeshInfo>		m_transferInProgress;
+};
+
 
 class Mesh
 {
+	friend class MeshManager;
+	friend class TransferMeshInfo;
 public:
     Mesh();
     Mesh(const std::vector<SVertex>& vertexes, const std::vector<unsigned int>& indexes);
@@ -44,24 +89,29 @@ public:
 
     static VkPipelineVertexInputStateCreateInfo& Mesh::GetVertexDesc();
     //for dynamic use of the mesh (UI)
-    VkDeviceMemory  GetVertexMemory() const { return m_vertexMemory; }
+    //VkDeviceMemory  GetVertexMemory() const { return m_vertexMemory; }
     
     BoundingBox GetBB() const {return m_bbox; }
+
+	unsigned int MemorySizeNeeded() const;
+	unsigned int GetVerticesMemorySize() const;
+	unsigned int GetIndicesMemorySize() const;
+
 private:
     void Create();
     void CreateBoundigBox();
+	void CopyLocalData(MappedMemory* mapMemory, BufferHandle* stagginVertexBuffer, BufferHandle* staggingIndexBuffer);
 private:
-    VkBuffer                    m_vertexBuffer;
-    VkBuffer                    m_indexBuffer;
 
-    VkDeviceMemory              m_vertexMemory;
-    VkDeviceMemory              m_indexMemory;
+    std::vector<SVertex>			m_vertexes;
+    std::vector<unsigned int>		m_indices;
 
-    std::vector<SVertex>         m_vertexes;
-    std::vector<unsigned int>   m_indices;
+	BufferHandle*					m_meshBuffer;
+	BufferHandle*					m_vertexSubBuffer;
+	BufferHandle*					m_indexSubBuffer;
 
-    BoundingBox                 m_bbox;
-    unsigned int                m_nbOfIndexes;
+    BoundingBox						m_bbox;
+    unsigned int					m_nbOfIndexes;
 
     struct InputVertexDescription
     {

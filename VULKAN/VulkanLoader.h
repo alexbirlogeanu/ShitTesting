@@ -18,12 +18,12 @@ namespace vk {
         {
         }
 
-        VkDevice                m_device;
-        VkPhysicalDevice        m_physicalDevice;
-        VkInstance              m_instance;
-        VkPhysicalDeviceLimits  m_limits;
-        VkPhysicalDeviceMemoryProperties m_memProperties;
-        VkDebugReportCallbackEXT            m_debugReport;
+        VkDevice							m_device;
+        VkPhysicalDevice					m_physicalDevice;
+        VkInstance							m_instance;
+        VkPhysicalDeviceLimits				m_limits;
+        VkPhysicalDeviceMemoryProperties	m_memProperties;
+        VkDebugReportCallbackEXT			m_debugReport;
         VkCommandBuffer                     m_mainCommandBuffer;
         VkQueue                             m_graphicQueue;
 
