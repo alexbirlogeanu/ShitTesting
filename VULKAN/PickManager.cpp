@@ -342,9 +342,6 @@ bool CPickRenderer::AreCoordsValid(glm::uvec2 coords)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //CPickManager
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-CPickManager* CPickManager::ms_instance = nullptr;
-
 CPickManager::CPickManager()
     : m_selectedID(-1)
     , m_renderPass(VK_NULL_HANDLE)
@@ -501,24 +498,6 @@ void CPickManager::SetupRenderpass(const FramebufferDescription& fbDesc)
     rpci.pDependencies =  subpass_deps.data(); 
 
     VULKAN_ASSERT(vk::CreateRenderPass(vk::g_vulkanContext.m_device, &rpci, nullptr, &m_renderPass));
-}
-
-void CPickManager::CreateInstance()
-{
-    TRAP(!ms_instance);
-    ms_instance = new CPickManager();
-}
-
-void CPickManager::DestroyInstance()
-{
-    TRAP(ms_instance);
-    delete ms_instance;
-    ms_instance = nullptr;
-}
-
-CPickManager* CPickManager::GetInstance()
-{
-    return ms_instance;
 }
 
 void CPickManager::Register(CPickable* p)

@@ -8,6 +8,7 @@
 #include "Renderer.h"
 #include "defines.h"
 #include "Utils.h"
+#include "Singleton.h"
 
 #define MAXPICKABLES 16
 #include "Mesh.h"
@@ -95,14 +96,10 @@ private:
 class CUIManager;
 class CUIText;
 class CUITextContainer;
-class CPickManager
+class CPickManager : public Singleton<CPickManager>
 {
+	friend class Singleton<CPickManager>;
 public:
-    static void CreateInstance();
-    static void DestroyInstance();
-
-    static CPickManager* GetInstance();
-    
     void Register(CPickable* p);
     void Unregister(CPickable* p);
 
@@ -122,8 +119,6 @@ private:
     void UpdateEditInfo();
 
 private:
-    static CPickManager*        ms_instance;
-
     bool                        m_editMode;
     bool                        m_needRefresh;
 

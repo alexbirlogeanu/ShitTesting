@@ -544,82 +544,7 @@ protected:
     VkDescriptorSet                 m_descriptorSet;
 
     void*                           m_memPtr;
-    CGraphicPipeline                       m_pipeline;
-};
-
-class CPointLight
-{
-public:
-    
-    glm::mat4 GetModelMatrix() const { return m_model; }
-
-    void SetPosition(glm::vec3 p) { m_position = p; m_isDirty = true; }
-    glm::vec3 GetPosition() const { return m_position; }
-
-    void SetIntensity(float i) { m_intensity = glm::min(glm::max(i, 0.0f), 100.0f); m_isDirty = true; }
-    float GetIntensity() const { return m_intensity;}
-
-    void SetRadiance(glm::vec3 r) { m_radiance = r; m_isDirty = true; }
-    glm::vec3 GetRadiance() const { return m_radiance; }
-
-    bool Emits() const { return m_intensity > 0.0f; }
-private:
-    CPointLight()
-        : m_isDirty(true)
-        , m_position(0.0f)
-        , m_radiance(1.0f)
-        , m_radius(0)
-        , m_intensity(0.0f)
-    {
-        Update();
-    }
-
-    CPointLight(glm::vec3 p, glm::vec3 radiance, float intensity = 1.0f)
-        : m_isDirty(true)
-        , m_position(p)
-        , m_radiance(radiance)
-        , m_intensity(intensity)
-    {
-        Update();
-    }
-
-    virtual ~CPointLight()
-    {
-    }
-
-    void Reset()
-    {
-        m_isDirty = false;
-    }
-
-    bool GetDirty() const { return m_isDirty; }
-
-    friend class CPointLightRenderer;
-
-    void Update()
-    {
-        static const float  k = 0.1f;
-        glm::vec3 totalRadiance = m_radiance * m_intensity;
-        float IMax = glm::compMax(totalRadiance);
-		//m_radius = glm::sqrt(IMax / k + 1);
-		m_radius = m_intensity;
-
-        TRAP(! (m_radius != m_radius)); //nan or inf
-
-        m_model = glm::mat4(1.0f);
-        m_model = glm::translate(m_model, m_position);
-        m_model = glm::scale(m_model, glm::vec3(m_radius));
-    }
-
-private:
-    glm::vec3           m_position;
-    glm::vec3           m_radiance;
-    glm::mat4           m_model;
-
-    float               m_intensity;
-    float               m_radius;
-
-    bool                m_isDirty;
+    CGraphicPipeline                m_pipeline;
 };
 
 class CSkyRenderer : public CRenderer
@@ -1225,16 +1150,12 @@ CApplication::CApplication()
 	MeshManager::CreateInstance();
 
     CreateCommandBuffer();
-
     CPickManager::CreateInstance();
-
     ObjectFactory::LoadXml("scene.xml");
-    //CreateDescriptorPool();
 
     SetupDeferredRendering();
     SetupAORendering();
 	SetupDirectionalLightingRendering();
-	//SetupPointLightingRendering();
 	SetupDeferredTileShading();
     SetupShadowMapRendering();
     SetupShadowResolveRendering();
