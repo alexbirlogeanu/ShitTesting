@@ -622,527 +622,6 @@ private:
     bool                m_isDirty;
 };
 
-struct SPointLightCommon
-{
-    glm::vec4 CameraPosition;
-    glm::mat4 ProjViewMatrix;
-};
-
-struct SPointLightSpecifics
-{
-	glm::vec4 Attenuation;
-    glm::mat4 ModelMatrix;
-    glm::vec4 LightRadiance;
-};
-
-class CPointLightRenderer : public CRenderer
-{
-public:
-	CPointLightRenderer(VkRenderPass renderPass)
-		: CRenderer(renderPass, "PointLightsRenderPass")
-		, m_pointLightMesh(nullptr)
-		, m_pointLightsCommonBuffer(VK_NULL_HANDLE)
-		, m_pointLightsCommonMemory(VK_NULL_HANDLE)
-		, m_pointLightsSpecificsMemory(VK_NULL_HANDLE)
-		, m_pointLightsSpecificsBuffer(VK_NULL_HANDLE)
-		, m_commonDescSet(VK_NULL_HANDLE)
-		, m_commonDescSetLayout(VK_NULL_HANDLE)
-		, m_specificDescSetLyout(VK_NULL_HANDLE)
-		, m_blendDescSetLayout(VK_NULL_HANDLE)
-		, m_blendDescSet(VK_NULL_HANDLE)
-        , m_selectedIndex(-1)
-        , m_selectedLightInfo(nullptr)
-        , m_selectedLightPosition(nullptr)
-        , m_editModeEnabled(false)
-        , m_editModeInfo(nullptr)
-        , m_needEditModeUpdate(false)
-    {
-    }
-
-    virtual ~CPointLightRenderer()
-    {
-        delete m_pointLightMesh;
-
-        VkDevice dev = vk::g_vulkanContext.m_device;
-
-        vk::DestroyDescriptorSetLayout(dev, m_specificDescSetLyout, nullptr);
-        vk::DestroyDescriptorSetLayout(dev, m_commonDescSetLayout, nullptr);
-		vk::DestroyDescriptorSetLayout(dev, m_blendDescSetLayout, nullptr);
-    }
-
-    CPointLight* AddLight(glm::vec3 pos, glm::vec3 radiance, float intensity)
-    {
-        for(unsigned int i = 0; i < m_nodes.size(); ++i)
-            if (m_nodes[i].Light == nullptr)
-            {
-                m_nodes[i].Light = new CPointLight(pos, radiance, intensity);
-                return m_nodes[i].Light;
-            }
-
-        TRAP(false);   
-        return nullptr;
-    }
-
-    virtual void AllocDescriptors(VkDescriptorPool descPool)
-    {
-        AllocDescriptorSets(descPool, m_commonDescSetLayout, &m_commonDescSet);
-		AllocDescriptorSets(descPool, m_blendDescSetLayout, &m_blendDescSet);
-        {
-            std::vector<VkDescriptorSetLayout> layouts(ms_plCnt, m_specificDescSetLyout);
-            m_specificDescSets.resize(ms_plCnt);
-
-            AllocDescriptorSets(descPool, layouts, m_specificDescSets);
-
-            for(unsigned int i = 0; i < m_nodes.size(); ++i)
-                m_nodes[i].Set = m_specificDescSets[i];
-        }
-    }
-
-    void ToggleEditMode(CUIManager* manager)
-    {
-        if(!m_selectedLightInfo)
-        {
-            m_selectedLightInfo = manager->CreateTextItem("", glm::uvec2(1000, 50), 32);
-        }
-
-        if(!m_selectedLightPosition)
-        {
-            m_selectedLightPosition = manager->CreateAxisSystemItem(glm::vec3(0), glm::vec3(0.3f, 0.0f, 0.0f), glm::vec3(0.0f, 0.3f, 0.0f), glm::vec3(0.0f, 0.0f, 0.3f));
-        }
-
-        if(!m_editModeInfo)
-        {
-            std::vector<std::string> texts;
-            texts.resize(2);
-            texts[0] = std::string("Q/E - Cycle through lights");
-            texts[1] = std::string("O/L - Change intensity");
-
-            m_editModeInfo = manager->CreateTextContainerItem(texts, glm::uvec2(1000, 650), 5, 36);
-        }
-        m_editModeEnabled = !m_editModeEnabled;
-        m_selectedLightInfo->SetVisible(m_editModeEnabled);
-        m_selectedLightPosition->SetVisible(m_editModeEnabled);
-        m_editModeInfo->SetVisible(m_editModeEnabled);
-
-        m_needEditModeUpdate = m_editModeEnabled;
-    }
-
-    virtual void Render() override
-    {
-        Update();
-
-        VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
-        std::vector<SLightNode*> renderNodes;
-        renderNodes.reserve(ms_plCnt);
-
-        for(unsigned int i = 0; i < m_nodes.size(); ++i)
-            if (m_nodes[i].Light)
-                renderNodes.push_back(&m_nodes[i]);
-
-        StartRenderPass();
-
-        BeginMarkerSection("StencilCulling");
-        vk::CmdBindPipeline(cmdBuffer, m_stencilCullingPipeline.GetBindPoint(), m_stencilCullingPipeline.Get());
-        vk::CmdBindDescriptorSets(cmdBuffer, m_stencilCullingPipeline.GetBindPoint(), m_stencilCullingPipeline.GetLayout(), 0, 1, &m_commonDescSet, 0, nullptr);
-        VkImage renderSurface = m_framebuffer->GetColorImage(0);
-
-        for(unsigned int i = 0; i < renderNodes.size(); ++i)
-        {
-            if(renderNodes[i]->Light->Emits())
-            {
-                vk::CmdBindDescriptorSets(cmdBuffer, m_stencilCullingPipeline.GetBindPoint(), m_stencilCullingPipeline.GetLayout(), 1, 1, &renderNodes[i]->Set, 0, nullptr);
-                m_pointLightMesh->Render();
-            }
-            
-        }
-
-        EndMarkerSection();
-
-        BeginMarkerSection("RenderLightVolumes");
-        vk::CmdNextSubpass(cmdBuffer, VK_SUBPASS_CONTENTS_INLINE);
-        vk::CmdBindPipeline(cmdBuffer, m_lightAccumPipeline.GetBindPoint(), m_lightAccumPipeline.Get());
-        vk::CmdBindDescriptorSets(cmdBuffer, m_lightAccumPipeline.GetBindPoint(), m_lightAccumPipeline.GetLayout(), 0, 1, &m_commonDescSet, 0, nullptr);
-
-        for(unsigned int i = 0; i < renderNodes.size(); ++i)
-        {
-            if(renderNodes[i]->Light->Emits())
-            {
-                vk::CmdBindDescriptorSets(cmdBuffer, m_lightAccumPipeline.GetBindPoint(), m_lightAccumPipeline.GetLayout(), 1, 1, &renderNodes[i]->Set, 0, nullptr);
-                m_pointLightMesh->Render();
-            }
-        }
-        EndMarkerSection();
-
-		vk::CmdNextSubpass(cmdBuffer, VK_SUBPASS_CONTENTS_INLINE);
-		vk::CmdBindPipeline(cmdBuffer, m_finalLightPipeline.GetBindPoint(), m_finalLightPipeline.Get());
-		vk::CmdBindDescriptorSets(cmdBuffer, m_finalLightPipeline.GetBindPoint(), m_finalLightPipeline.GetLayout(), 0, 1, &m_blendDescSet, 0, nullptr);
-
-		Mesh* quad = CreateFullscreenQuad();
-		quad->Render();
-
-        EndRenderPass();
-    }
-    
-    void CycleLights(int step)
-    {
-        if(m_editModeEnabled)
-        {
-            m_selectedIndex = (m_selectedIndex > ms_plCnt)? 0 : m_selectedIndex;
-            int index = (int)m_selectedIndex;
-            do 
-            {
-                index = (index + ms_plCnt + step) % ms_plCnt;
-
-            } while (m_nodes[index].Light == nullptr && index != m_selectedIndex);
-            
-            m_needEditModeUpdate = index != m_selectedIndex;
-            m_selectedIndex = index;
-            if (!m_nodes[m_selectedIndex].Light) //no light found
-                m_selectedIndex = -1;
-        }
-    }
-
-    void ChangeIntensity(float value)
-    {
-        if(m_editModeEnabled && m_selectedIndex < m_nodes.size())
-        {
-            TRAP(m_nodes[m_selectedIndex].Light);
-            CPointLight* light = m_nodes[m_selectedIndex].Light;
-            float intensity = light->GetIntensity();
-            intensity += value;
-            light->SetIntensity(intensity);
-            m_needEditModeUpdate = true;
-        }
-    }
-    
-    virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override
-    {
-        AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 + 1); //+ 1 from blend 
-        AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, ms_plCnt + 1);
-
-        maxSets = ms_plCnt + 1 + 1; //+ 1 from blend pass
-    }
-
-    virtual void Init() override
-    {
-        CRenderer::Init();
-        PerspectiveMatrix(m_projPtr);
-        ConvertToProjMatrix(m_projPtr);
-
-        AllocDescriptors(m_descriptorPool);
-
-        CreateNearestSampler(m_sampler);
-
-        m_pointLightMesh = new Mesh ("obj\\pointlight.mb");
-
-        AllocBufferMemory(m_pointLightsCommonBuffer, m_pointLightsCommonMemory, sizeof(SPointLightCommon), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-
-        TRAP(sizeof(SPointLightSpecifics) < vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment);
-        VkDeviceSize specsSize = vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment * ms_plCnt;
-        AllocBufferMemory(m_pointLightsSpecificsBuffer, m_pointLightsSpecificsMemory, (unsigned int)specsSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-
-        UpdateSpecificBuffers();
-
-        std::vector<VkDescriptorSetLayout> layouts;
-        layouts.push_back(m_commonDescSetLayout);
-        layouts.push_back(m_specificDescSetLyout);
-
-        m_stencilCullingPipeline.SetVertexShaderFile("pointlight.vert");
-        m_stencilCullingPipeline.SetFragmentShaderFile("lineardepth.frag");
-        m_stencilCullingPipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
-        m_stencilCullingPipeline.SetStencilTest(true);
-        m_stencilCullingPipeline.SetStencilOp(VK_COMPARE_OP_ALWAYS);
-        m_stencilCullingPipeline.SetStencilOperations(VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP);
-        m_stencilCullingPipeline.SetStencilValues(0x01, 0x01, 1);
-        m_stencilCullingPipeline.SetDepthTest(true);
-        m_stencilCullingPipeline.SetDepthWrite(false);
-        m_stencilCullingPipeline.SetDepthOp(VK_COMPARE_OP_LESS_OR_EQUAL);
-        m_stencilCullingPipeline.SetVertexInputState(Mesh::GetVertexDesc());
-        m_stencilCullingPipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-        m_stencilCullingPipeline.CreatePipelineLayout(layouts);
-        m_stencilCullingPipeline.Init(this, m_renderPass, ELightSubpass_PrePoint);
-
-        VkPipelineColorBlendAttachmentState plState = CGraphicPipeline::CreateDefaultBlendState();
-        plState.blendEnable = VK_TRUE;
-        plState.colorBlendOp = VK_BLEND_OP_ADD;
-        plState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-        plState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
-        plState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        plState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        plState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
-
-        VkPipelineColorBlendAttachmentState debugState = CGraphicPipeline::CreateDefaultBlendState();
-        debugState.blendEnable = VK_TRUE;
-        debugState.colorBlendOp = VK_BLEND_OP_ADD;
-        debugState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-        debugState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
-        debugState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        debugState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        debugState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
-
-        m_lightAccumPipeline.SetVertexInputState(Mesh::GetVertexDesc());
-        m_lightAccumPipeline.SetVertexShaderFile("pointlight.vert");
-        m_lightAccumPipeline.SetFragmentShaderFile("pointlight.frag");
-        m_lightAccumPipeline.SetCullMode(VK_CULL_MODE_FRONT_BIT);
-        m_lightAccumPipeline.SetDepthTest(true);
-        m_lightAccumPipeline.SetDepthOp(VK_COMPARE_OP_GREATER_OR_EQUAL);
-        m_lightAccumPipeline.SetDepthWrite(false);
-        m_lightAccumPipeline.SetStencilTest(true);
-        m_lightAccumPipeline.SetStencilOp(VK_COMPARE_OP_EQUAL);
-        m_lightAccumPipeline.SetStencilOperations(VK_STENCIL_OP_ZERO, VK_STENCIL_OP_ZERO, VK_STENCIL_OP_ZERO);
-        m_lightAccumPipeline.SetStencilValues(0x01, 0x01, 0);
-        
-        m_lightAccumPipeline.AddBlendState(plState);
-        m_lightAccumPipeline.AddBlendState(debugState);
-
-        m_lightAccumPipeline.CreatePipelineLayout(layouts);
-        m_lightAccumPipeline.Init(this, m_renderPass, ELightSubpass_PointAccum);
-
-		m_finalLightPipeline.SetVertexInputState(Mesh::GetVertexDesc());
-		m_finalLightPipeline.SetVertexShaderFile("screenquad.vert");
-		m_finalLightPipeline.SetFragmentShaderFile("passtrough.frag");
-		m_finalLightPipeline.SetDepthTest(false);
-		m_finalLightPipeline.SetDepthWrite(false);
-		m_finalLightPipeline.SetStencilTest(false);
-
-		m_finalLightPipeline.AddBlendState(plState); //WARNING! WIHT THIS BLEND
-
-		m_finalLightPipeline.CreatePipelineLayout(m_blendDescSetLayout);
-		m_finalLightPipeline.Init(this, m_renderPass, ELightSubpass_Blend);
-    }
-
-protected:
-
-    virtual void UpdateGraphicInterface() override
-    {
-        const unsigned int descSize = GBuffer_Final;
-        VkDescriptorImageInfo imgInfo[descSize];
-        imgInfo[GBuffer_Albedo].sampler = m_sampler;
-        imgInfo[GBuffer_Albedo].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
-        imgInfo[GBuffer_Albedo].imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-        imgInfo[GBuffer_Normals].sampler = m_sampler;
-        imgInfo[GBuffer_Normals].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_NormalsImageView);
-        imgInfo[GBuffer_Normals].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        imgInfo[GBuffer_Position].sampler = m_sampler;
-        imgInfo[GBuffer_Position].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_PositionsImageView);
-        imgInfo[GBuffer_Position].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        imgInfo[GBuffer_Specular].sampler = m_sampler;
-        imgInfo[GBuffer_Specular].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_SpecularImageView);
-        imgInfo[GBuffer_Specular].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        std::vector<VkWriteDescriptorSet> writeSets;
-        writeSets.resize(2);
-        cleanStructure(writeSets[0]);
-        writeSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeSets[0].pNext = nullptr;
-        writeSets[0].dstSet = m_commonDescSet;
-        writeSets[0].dstBinding = 0;
-        writeSets[0].dstArrayElement = 0;
-        writeSets[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        writeSets[0].descriptorCount = descSize; //same problem as light renderer
-        writeSets[0].pImageInfo = imgInfo;
-
-        VkDescriptorBufferInfo buffInfo;
-        buffInfo.buffer = m_pointLightsCommonBuffer;
-        buffInfo.offset = 0;
-        buffInfo.range = sizeof(SPointLightCommon);
-
-        writeSets[1] = InitUpdateDescriptor(m_commonDescSet, GBuffer_Final + 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfo);
-
-		VkDescriptorImageInfo blendImgInfo = CreateDescriptorImageInfo(m_sampler, m_framebuffer->GetColorImageView(EPointLightBuffer_Accum), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-		writeSets.push_back(InitUpdateDescriptor(m_blendDescSet, 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &blendImgInfo));
-
-        vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)writeSets.size(), writeSets.data(), 0, nullptr);
-    }
-
-    void UpdateSpecificBuffers()
-    {
-        std::array<VkDescriptorBufferInfo, ms_plCnt> buffInfo;
-        std::vector<VkWriteDescriptorSet> wDesc;
-        wDesc.resize(ms_plCnt);
-
-        for(unsigned int i = 0; i < m_nodes.size(); ++i)
-        {
-            m_nodes[i].Offset = unsigned int(i * vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment);
-            //VkDescriptorBufferInfo& bufInfo = buffInfo[i];
-            cleanStructure(buffInfo[i]);
-            buffInfo[i].buffer = m_pointLightsSpecificsBuffer;
-            buffInfo[i].offset = m_nodes[i].Offset;
-            buffInfo[i].range = sizeof(SPointLightSpecifics);
-
-            wDesc[i] = InitUpdateDescriptor(m_nodes[i].Set, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfo[i]);
-        }
-
-        vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
-    }
-
-    void UpdateEditMode()
-    {
-        if(m_needEditModeUpdate)
-        {
-            TRAP(m_selectedLightInfo);
-            TRAP(m_selectedLightPosition);
-            m_selectedLightPosition->SetVisible(false);
-            std::string displayString ("No light found");
-            if(m_selectedIndex < ms_plCnt)
-            {
-                CPointLight* light = m_nodes[m_selectedIndex].Light;
-                displayString = "Light Intensity: " + std::to_string(light->GetIntensity());
-
-                m_selectedLightPosition->SetPosition(light->GetPosition());
-                m_selectedLightPosition->SetVisible(true);
-            }
-            
-            m_selectedLightInfo->SetText(displayString);
-            m_needEditModeUpdate = false;
-        }
-
-    }
-
-    void Update()
-    {
-        if (m_editModeEnabled)
-            UpdateEditMode();
-
-
-        VkDevice dev = vk::g_vulkanContext.m_device;
-        //update uniform params
-        SPointLightCommon* common = nullptr;
-        VULKAN_ASSERT(vk::MapMemory(dev, m_pointLightsCommonMemory, 0, VK_WHOLE_SIZE, 0, (void**)&common));
-        common->CameraPosition = glm::vec4(ms_camera.GetPos(), 1.0f);
-        common->ProjViewMatrix = m_projPtr * ms_camera.GetViewMatrix();
-        vk::UnmapMemory(dev, m_pointLightsCommonMemory);
-
-        for(unsigned int i = 0; i < m_nodes.size(); ++i)
-        {
-            CPointLight* light = m_nodes[i].Light;
-            if(light && light->GetDirty())
-            {
-				
-                light->Update();
-				float att = 1.f + 5.f * light->m_radius + 2.f * light->m_radius * light->m_radius;
-                SPointLightSpecifics* params = nullptr;
-                VULKAN_ASSERT(vk::MapMemory(dev, m_pointLightsSpecificsMemory, m_nodes[i].Offset, sizeof(SPointLightSpecifics), 0, (void**)&params));
-				params->Attenuation = glm::vec4(1.f, 5.f, 2.f, att);
-                params->ModelMatrix = light->GetModelMatrix();
-                params->LightRadiance = glm::vec4(light->GetRadiance() * light->GetIntensity(), 1.0f);
-                vk::UnmapMemory(dev, m_pointLightsSpecificsMemory);
-                light->Reset();
-            }
-        }
-
-    }
-
-    virtual void CreateDescriptorSetLayout() override
-    {
-        CreateDescriptorLayoutCommon();
-        CreateDescriptorLayoutSpecifics();
-    }
-
-    virtual void CreateDescriptorLayoutCommon()
-    {
-        const unsigned int size = GBuffer_Final + 1; //+ uniform buffer
-        std::vector<VkDescriptorSetLayoutBinding> descCnt;
-        descCnt.resize(size);
-        descCnt[GBuffer_Albedo] = CreateDescriptorBinding(GBuffer_Albedo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-        descCnt[GBuffer_Normals] = CreateDescriptorBinding(GBuffer_Normals, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-        descCnt[GBuffer_Position] = CreateDescriptorBinding(GBuffer_Position, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-        descCnt[GBuffer_Specular] = CreateDescriptorBinding(GBuffer_Specular, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-
-        unsigned int uniformIndex = GBuffer_Final;
-        descCnt[uniformIndex] = CreateDescriptorBinding(GBuffer_Final + 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT);
-
-        VkDescriptorSetLayoutCreateInfo descSetLayout;
-        cleanStructure(descSetLayout);
-        descSetLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        descSetLayout.pNext = nullptr;
-        descSetLayout.flags = 0;
-        descSetLayout.bindingCount = (uint32_t)descCnt.size();
-        descSetLayout.pBindings = descCnt.data();
-        
-        VULKAN_ASSERT(vk::CreateDescriptorSetLayout(vk::g_vulkanContext.m_device, &descSetLayout, nullptr, &m_commonDescSetLayout));
-
-		VkDescriptorSetLayoutBinding blendDescBind = CreateDescriptorBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-		NewDescriptorSetLayout(std::vector<VkDescriptorSetLayoutBinding>(1, blendDescBind), &m_blendDescSetLayout);
-    }
-    
-    void CreateDescriptorLayoutSpecifics()
-    {
-        std::vector<VkDescriptorSetLayoutBinding> bindings;
-        bindings.resize(1);
-        bindings[0] = CreateDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT);
-
-        VkDescriptorSetLayoutCreateInfo descSetLayout;
-        cleanStructure(descSetLayout);
-        descSetLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        descSetLayout.pNext = nullptr;
-        descSetLayout.flags = 0;
-        descSetLayout.bindingCount = (uint32_t)bindings.size();
-        descSetLayout.pBindings = bindings.data();
-
-        VULKAN_ASSERT(vk::CreateDescriptorSetLayout(vk::g_vulkanContext.m_device, &descSetLayout, nullptr, &m_specificDescSetLyout));
-
-    }
-    struct SLightNode
-    {
-        SLightNode()
-            : Light(nullptr)
-            , Set(VK_NULL_HANDLE)
-            , Offset(0)
-        {}
-
-        ~SLightNode()
-        {
-            delete Light;
-        }
-
-        CPointLight*    Light;
-        VkDescriptorSet Set;
-        unsigned int    Offset;
-    };
-
-private:
-    static const unsigned int ms_plCnt = 4; //point lights count
-
-    std::array<SLightNode, ms_plCnt> m_nodes;
-
-    Mesh*           m_pointLightMesh;
-    glm::mat4       m_projPtr;
-
-    CGraphicPipeline		m_stencilCullingPipeline;
-    CGraphicPipeline		m_lightAccumPipeline;
-	CGraphicPipeline		m_finalLightPipeline;
-
-    VkSampler       m_sampler;
-
-    VkBuffer        m_pointLightsCommonBuffer;
-    VkDeviceMemory  m_pointLightsCommonMemory;
-
-    VkBuffer        m_pointLightsSpecificsBuffer;
-    VkDeviceMemory  m_pointLightsSpecificsMemory;
-
-    VkDescriptorSetLayout   m_commonDescSetLayout;
-    VkDescriptorSet         m_commonDescSet;
-    VkDescriptorSetLayout   m_specificDescSetLyout;
-    std::vector<VkDescriptorSet>         m_specificDescSets;
-	
-	VkDescriptorSetLayout	m_blendDescSetLayout;
-	VkDescriptorSet			m_blendDescSet;
-
-    //for edit mode
-    bool            m_editModeEnabled;
-    bool            m_needEditModeUpdate;
-    CUIAxisSystem*  m_selectedLightPosition;
-    CUIText*        m_selectedLightInfo;
-    unsigned int    m_selectedIndex;
-    CUIManager*     m_manager;
-    CUITextContainer*        m_editModeInfo;
-
-};
-
 class CSkyRenderer : public CRenderer
 {
 public:
@@ -1537,7 +1016,6 @@ private:
     void SetupDeferredRendering();
     void SetupAORendering();
     void SetupDirectionalLightingRendering();
-	void SetupPointLightingRendering();
 	void SetupDeferredTileShading();
     void SetupShadowMapRendering();
     void SetupShadowResolveRendering();
@@ -1584,7 +1062,6 @@ private:
     void CreateQueryPools();
 
     void SetupParticles();
-    void SetupPointLights();
 
 	//TESTING
 	void RenderCameraFrustrum();
@@ -1655,7 +1132,6 @@ private:
     ObjectRenderer*             m_objectRenderer;
     CAORenderer*                m_aoRenderer;
     CLightRenderer*             m_lightRenderer;
-    CPointLightRenderer*        m_pointLightRenderer;
 	PointLightRenderer2*		m_pointLightRenderer2;
     CParticlesRenderer*         m_particlesRenderer;
     ShadowMapRenderer*             m_shadowRenderer;
@@ -1716,7 +1192,6 @@ CApplication::CApplication()
     , m_sunTexture(nullptr)
     , m_smokeTexture(nullptr)
     , m_lightRenderer(nullptr)
-    , m_pointLightRenderer(nullptr)
 	, m_pointLightRenderer2(nullptr)
     , m_particlesRenderer(nullptr)
     , m_objectRenderer(nullptr)
@@ -1792,7 +1267,6 @@ CApplication::~CApplication()
     delete m_objectRenderer;
     delete m_aoRenderer;
     delete m_lightRenderer;
-    delete m_pointLightRenderer;
 	delete m_pointLightRenderer2;
     delete m_particlesRenderer;
     delete m_uiRenderer;
@@ -2217,28 +1691,6 @@ void CApplication::SetupDirectionalLightingRendering()
 	m_lightRenderer->Init();
 	m_lightRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
 };
-
-void CApplication::SetupPointLightingRendering()
-{
-    FramebufferDescription fbDesc;
-    fbDesc.Begin(EPointLightBuffer_Count - 1); //without depth
-    VkImage outImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
-    VkImageView outImgView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
-    VkImage depthImg = g_commonResources.GetAs<VkImage>(EResourceType_DepthBufferImage);
-    VkImageView depthImgView = g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView);
-
-    fbDesc.AddColorAttachmentDesc(EPointLightBuffer_Final, OUT_FORMAT, outImg, outImgView);
-    fbDesc.AddColorAttachmentDesc(EPointLightBuffer_Debug, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "PointLightDebug");
-    fbDesc.AddColorAttachmentDesc(EPointLightBuffer_Accum, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "PointLightAccum");
-    fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, depthImg, depthImgView);
-    fbDesc.End();
-
-    CreatePointLightingRenderPass(fbDesc);
-
-    m_pointLightRenderer = new CPointLightRenderer(m_pointLightRenderPass);
-    m_pointLightRenderer->Init();
-    m_pointLightRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
-}
 
 void CApplication::SetupDeferredTileShading()
 {
@@ -3123,13 +2575,6 @@ void CApplication::SetupParticles()
     m_particlesRenderer->Register(m_smokeParticleSystem);
 }
 
-void CApplication::SetupPointLights()
-{
-    m_pointLightRenderer->AddLight(glm::vec3(0.0f, -.3f, -4.25f), glm::vec3(1.164f, 1.11f, 3.9f), 5.0f);
-    m_pointLightRenderer->AddLight(glm::vec3(0.0f, 0.0f, -1.25f), glm::vec3(1.164f, 3.911f, 1.1f), 5.0f);
-}
-
-
 void CApplication::CreateResources()
 {
     bool isSrgb = true;
@@ -3234,7 +2679,6 @@ void CApplication::Render()
     m_shadowResolveRenderer->Render();
 
     m_lightRenderer->Render();
-    //m_pointLightRenderer->Render();
 	m_pointLightRenderer2->Render();
     m_sunRenderer->Render();
     m_skyRenderer->Render();
@@ -3481,11 +2925,6 @@ void CApplication::ProcMsg(UINT uMsg, WPARAM wParam,LPARAM lParam)
             m_screenshotRequested = true;
         }
 
-        if (wParam == VK_F3)
-        {
-            m_pointLightRenderer->ToggleEditMode(m_uiManager);
-        }
-
         if (wParam == VK_F4)
         {
             GetPickManager()->ToggleEditMode();
@@ -3496,25 +2935,9 @@ void CApplication::ProcMsg(UINT uMsg, WPARAM wParam,LPARAM lParam)
             m_enableFog = !m_enableFog;
         }
 
-        if (wParam == 'Q')
-            m_pointLightRenderer->CycleLights(-1);
-
-        if (wParam == 'E')
-            m_pointLightRenderer->CycleLights(1);
-
         if (wParam == VK_TAB)
         {
             m_uiManager->ToggleDisplayInfo();
-        }
-
-        if (wParam == 'O')
-        {
-            m_pointLightRenderer->ChangeIntensity(0.25f);
-        }
-
-        if (wParam == 'L')
-        {
-            m_pointLightRenderer->ChangeIntensity(-0.25f);
         }
 
         if (wParam == VK_OEM_PLUS)
@@ -3631,9 +3054,7 @@ void CApplication::RenderCameraFrustrum()
 
 int main(int argc, char* arg[])
 {
-    FreeImage_Initialise();
     CApplication app;
     app.Run();
-    //FreeImage_DeInitialise();
     return 0;
 }
