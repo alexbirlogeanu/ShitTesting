@@ -38,34 +38,21 @@ public:
 
 enum EResourceType
 {
-    EResourceType_FinalImage,
-    EResourceType_FinalImageView,
-    EResourceType_AlbedoImage,
-    EResourceType_AlbedoImageView,
-    EResourceType_SpecularImage,
-    EResourceType_SpecularImageView,
-    EResourceType_NormalsImage,
-    EResourceType_NormalsImageView,
-    EResourceType_PositionsImage,
-    EResourceType_PositionsImageView,
-    EResourceType_DepthBufferImage,
-    EResourceType_DepthBufferImageView,
-    EResourceType_ShadowMapImage,
-    EResourceType_ShadowMapImageView,
-    EResourceType_AOBufferImage,
-    EResourceType_AOBufferImageView,
-    EResourceType_ResolvedShadowImage,
-    EResourceType_ResolvedShadowImageView,
-    EResourceType_SunImage,
-    EResourceType_SunImageView,
-    EResourceType_AfterPostProcessImage,
-    EResourceType_AfterPostProcessImageView,
-    EResourceType_VolumetricImage,
-    EResourceType_VolumetricImageView,
-    EResourceType_ShadowProjViewMat,
-    EResourceType_Count
+	EResourceType_FinalImage,
+	EResourceType_AlbedoImage,
+	EResourceType_SpecularImage,
+	EResourceType_NormalsImage,
+	EResourceType_PositionsImage,
+	EResourceType_DepthBufferImage,
+	EResourceType_ShadowMapImage,
+	EResourceType_AOBufferImage,
+	EResourceType_ResolvedShadowImage,
+	EResourceType_SunImage,
+	EResourceType_AfterPostProcessImage,
+	EResourceType_VolumetricImage,
+	EResourceType_ShadowProjViewMat,
+	EResourceType_Count
 };
-
 
 class ResourceTable
 {

@@ -49,13 +49,14 @@ bool IsDepthFormat(VkFormat format);
 bool IsStencilFormat(VkFormat format);
 bool IsColorFormat(VkFormat format);
 bool CreateShaderModule(const std::string& inFileName, VkShaderModule& outModule);
-void CreateImageView(VkImageView& outImgView, VkImage& img, const VkImageCreateInfo& crtInfo);
+void CreateImageView(VkImageView& outImgView, const VkImage& img, const VkImageCreateInfo& crtInfo);
 void AllocBufferMemory(VkBuffer& buffer, VkDeviceMemory& memory, uint32_t size, VkBufferUsageFlags usage);
 void AllocImageMemory(const VkImageCreateInfo& imgInfo, VkImage& outImage, VkDeviceMemory& outMemory, const std::string& debugName = std::string());
 
-void AddImageBarrier(VkImageMemoryBarrier& outBarrier, VkImage& img, VkImageLayout oldLayout, VkImageLayout newLayout, 
+//TODO remove this function
+void AddImageBarrier(VkImageMemoryBarrier& outBarrier, const VkImage& img, VkImageLayout oldLayout, VkImageLayout newLayout, 
                      VkAccessFlags srcMask, VkAccessFlags dstMask, VkImageAspectFlags aspectFlags, unsigned int layersCount = VK_REMAINING_ARRAY_LAYERS);
-void AddBufferBarier(VkBufferMemoryBarrier& outBarrier, VkBuffer& buffer, VkAccessFlags srcMask, VkAccessFlags dstMask);
+void AddBufferBarier(VkBufferMemoryBarrier& outBarrier, const VkBuffer& buffer, VkAccessFlags srcMask, VkAccessFlags dstMask);
 
 VkPipelineShaderStageCreateInfo CreatePipelineStage(VkShaderModule modue, VkShaderStageFlagBits stage);
 

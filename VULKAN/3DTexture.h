@@ -10,11 +10,12 @@
 ///////////////////////
 //Test class
 //////////////////////
-#define TEXTURE3DLAYERS (unsigned int)128
+#define TEXTURE3DLAYERS (unsigned int)1
 //#define TEST3DTEXT
 
 class Mesh;
 class CTexture;
+class ImageHandle;
 class C3DTextureRenderer : public CRenderer //give a proper name
 {
 public:
@@ -24,7 +25,7 @@ public:
     virtual void Init() override;
     virtual void Render() override;
 
-    VkImageView GetOutTexture() const { return m_outTextureView; }
+    VkImageView GetOutTexture() const { return m_outTexture->GetView(); } //TODO rename function
 protected:
     virtual void CreateDescriptorSetLayout() override;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>&, unsigned int& maxSets) override;
@@ -54,11 +55,9 @@ private:
     unsigned int                m_height;
     unsigned int                m_depth;
 
-    FogParameters               m_parameters;
+    FogParameters               m_parameters;				
 
-    VkImage                     m_outTexture;
-    VkImageView                 m_outTextureView;
-    VkDeviceMemory              m_outTextureMemory;
+	ImageHandle*                m_outTexture;
 
     CTexture*                   m_patternTexture;
     

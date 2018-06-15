@@ -40,26 +40,29 @@ VkRect2D CFrameBuffer::GetRenderArea()
     return renderArea;
 }
 
-void CFrameBuffer::AddAttachment(VkImageCreateInfo& imgInfo, VkFormat format, VkImageUsageFlags usage, unsigned int layers, VkImageTiling tiling) 
+VkImageCreateInfo CFrameBuffer::CreateImageInfo(const FBAttachment& fbDesc)
 {
+	VkImageCreateInfo imgInfo;
     cleanStructure(imgInfo);
     imgInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imgInfo.pNext = nullptr;
     imgInfo.flags = 0;
     imgInfo.imageType = VK_IMAGE_TYPE_2D;
-    imgInfo.format = format;
+	imgInfo.format = fbDesc.format;
     imgInfo.extent.height = m_height;
     imgInfo.extent.width = m_width;
     imgInfo.extent.depth = 1;
-    imgInfo.arrayLayers = layers;
+	imgInfo.arrayLayers = fbDesc.layers;
     imgInfo.mipLevels = 1;
     imgInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imgInfo.usage = usage;
+	imgInfo.usage = fbDesc.usage;
     imgInfo.queueFamilyIndexCount = 0;
     imgInfo.pQueueFamilyIndices = nullptr;
     imgInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    imgInfo.tiling = tiling;
+    imgInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+
+	return imgInfo;
 }
 
 void CFrameBuffer::CreateFramebuffer(VkRenderPass renderPass, const FramebufferDescription& fbDesc)
@@ -71,10 +74,8 @@ void CFrameBuffer::CreateFramebuffer(VkRenderPass renderPass, const FramebufferD
     const std::vector<FBAttachment>& colorAtt = fbDesc.m_colorAttachments;
     for(unsigned int i = 0; i < m_colorsAttNum; ++i)
     {
-        AddAttachment(m_attachments[i].imageInfo, colorAtt[i].format, colorAtt[i].usage, colorAtt[i].layers);
+        VkImageCreateInfo imageInfo =  CreateImageInfo(colorAtt[i]);
         m_clearValues[i] = colorAtt[i].clearValue;
-
-        VkFormat format = m_attachments[i].imageInfo.format;
 
         if(colorAtt[i].NeedCreateImageView())
         {
@@ -82,45 +83,39 @@ void CFrameBuffer::CreateFramebuffer(VkRenderPass renderPass, const FramebufferD
             if (!colorAtt[i].debugName.empty())
                 debugName = colorAtt[i].debugName + std::string("ColorAtt");
 
-            AllocImageMemory(m_attachments[i].imageInfo, m_attachments[i].image, m_attachments[i].imageMemory, debugName);
-            CreateImageView(m_attachments[i].imageView, m_attachments[i].image, m_attachments[i].imageInfo);
+			m_attachments[i].SetImage(MemoryManager::GetInstance()->CreateImage(EMemoryContextType::Framebuffers, imageInfo, debugName), true);
         }
         else
         {
-            m_attachments[i].image = colorAtt[i].existingImage;
-            m_attachments[i].imageView = colorAtt[i].existingImageView;
+            m_attachments[i].SetImage(colorAtt[i].existingImage, false);
         }
     }
 
     if(fbDesc.m_depthAttachments.IsValid())
     {
-        AddAttachment(m_depthAttachment.imageInfo, fbDesc.m_depthAttachments.format, fbDesc.m_depthAttachments.usage, fbDesc.m_depthAttachments.layers);
-
-        VkFormat format = m_depthAttachment.imageInfo.format;
+		VkImageCreateInfo imageInfo = CreateImageInfo(fbDesc.m_depthAttachments);
         if(fbDesc.m_depthAttachments.NeedCreateImageView())
         {
             std::string debugName;
             if (!fbDesc.m_depthAttachments.debugName.empty())
                 debugName = fbDesc.m_depthAttachments.debugName + std::string("DepthAtt");
 
-            AllocImageMemory(m_depthAttachment.imageInfo, m_depthAttachment.image, m_depthAttachment.imageMemory, debugName );
-            CreateImageView(m_depthAttachment.imageView, m_depthAttachment.image, m_depthAttachment.imageInfo);
+			m_depthAttachment.SetImage(MemoryManager::GetInstance()->CreateImage(EMemoryContextType::Framebuffers, imageInfo, debugName), true);
         }
         else
         {
-            m_depthAttachment.image = fbDesc.m_depthAttachments.existingImage;
-            m_depthAttachment.imageView = fbDesc.m_depthAttachments.existingImageView;
+			m_depthAttachment.SetImage(fbDesc.m_depthAttachments.existingImage, false);
         }
         m_clearValues.push_back(fbDesc.m_depthAttachments.clearValue);
     }
 
     std::vector<VkImageView> imageViews;
     ConvertTo<VkImageView>(m_attachments, imageViews, [](const SFramebufferAttch& att) {
-        return att.imageView;
+        return att.GetView();
     });
 
     if (m_depthAttachment.IsValid())
-        imageViews.push_back(m_depthAttachment.imageView);
+        imageViews.push_back(m_depthAttachment.GetView());
 
     VkFramebufferCreateInfo fbCreateInfo;
     cleanStructure(fbCreateInfo);
@@ -137,12 +132,12 @@ void CFrameBuffer::CreateFramebuffer(VkRenderPass renderPass, const FramebufferD
     VULKAN_ASSERT(vk::CreateFramebuffer(vk::g_vulkanContext.m_device, &fbCreateInfo, nullptr, &m_frameBuffer));
 }
 
-void CFrameBuffer::Finalize()
+void CFrameBuffer::Finalize() //TODO fix this shit method
 {
     if(!m_depthAttachment.IsValid())
         return;
 
-    VkFormat depthFormat = m_depthAttachment.imageInfo.format;
+    VkFormat depthFormat = m_depthAttachment.m_image->GetFormat();
 
     TRAP(IsDepthFormat(depthFormat));
 
@@ -166,14 +161,15 @@ void CFrameBuffer::Finalize()
     VkImageMemoryBarrier image_memory_barrier[barrierCnt];
     VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
     aspectMask |= (IsStencilFormat(depthFormat))? VK_IMAGE_ASPECT_STENCIL_BIT : 0;
-    AddImageBarrier(image_memory_barrier[0], m_depthAttachment.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 
-        0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, aspectMask);
+    //AddImageBarrier(image_memory_barrier[0], m_depthAttachment.GetImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 
+        //0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, aspectMask); //TODO create a CreateImageBarrier in ImageHandle
 
+	image_memory_barrier[0] = m_depthAttachment.m_image->CreateMemoryBarrier(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+		0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, aspectMask);
 
     vk::BeginCommandBuffer(cmdBuff, &bufferBeginInfo);
     vk::CmdPipelineBarrier(cmdBuff, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, NULL, 0, nullptr, 1, &image_memory_barrier[0]); 
     vk::EndCommandBuffer(cmdBuff);
-
 
     VkSubmitInfo submitInfo;
     cleanStructure(submitInfo);
@@ -723,14 +719,11 @@ void CRenderer::CreateDescPool(std::vector<VkDescriptorPoolSize>& poolSize, unsi
 
 void CRenderer::UpdateResourceTableForColor(unsigned int fbIndex, EResourceType tableType)
 {
-    g_commonResources.SetAs<VkImage>(&m_framebuffer->GetColorImage(fbIndex), tableType);
-    EResourceType nextType = (EResourceType) ((unsigned int)tableType + 1);
-    g_commonResources.SetAs<VkImageView>(&m_framebuffer->GetColorImageView(fbIndex), nextType);
+	g_commonResources.SetAs<ImageHandle*>(&m_framebuffer->GetColorImageHandle(fbIndex), tableType);
 }
 
 void CRenderer::UpdateResourceTableForDepth(EResourceType tableType)
 {
-    g_commonResources.SetAs<VkImage>(&m_framebuffer->GetDepthImage(), tableType);
-    EResourceType nextType = (EResourceType) ((unsigned int)tableType + 1);
-    g_commonResources.SetAs<VkImageView>(&m_framebuffer->GetDepthImageView(), nextType);
+	g_commonResources.SetAs<ImageHandle*>(&m_framebuffer->GetDepthImageHandle(), tableType);
+
 }

@@ -357,12 +357,11 @@ CPickManager::~CPickManager()
 
 void CPickManager::Setup()
 {
-    VkImage outImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
-    VkImageView outImgView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
+	ImageHandle* outImg = g_commonResources.GetAs<ImageHandle*>(EResourceType_FinalImage);
     FramebufferDescription fbDesc;
     fbDesc.Begin(2);
     fbDesc.AddColorAttachmentDesc(0, PICKBUFFERFORMAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-    fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, outImg, outImgView);
+	fbDesc.AddColorAttachmentDesc(1, outImg);
     fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D16_UNORM, 0);
     fbDesc.End();
 

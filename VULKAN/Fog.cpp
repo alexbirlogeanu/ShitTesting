@@ -82,11 +82,11 @@ void CFogRenderer::Render()
 
 void CFogRenderer::UpdateGraphicInterface()
 {
-    VkImageView imgView = g_commonResources.GetAs<VkImageView>(EResourceType_PositionsImageView);
+    ImageHandle* positionImage = g_commonResources.GetAs<ImageHandle*>(EResourceType_PositionsImage);
 
     VkDescriptorImageInfo imgInfo;
     imgInfo.sampler = m_sampler;
-    imgInfo.imageView = imgView;
+	imgInfo.imageView = positionImage->GetView();
     imgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     VkDescriptorBufferInfo bufInfo;

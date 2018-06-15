@@ -411,7 +411,7 @@ bool CreateShaderModule(const std::string& inFileName, VkShaderModule& outModule
     return (outModule != VK_NULL_HANDLE);
 }
 
-void CreateImageView(VkImageView& outImgView, VkImage& img, const VkImageCreateInfo& crtInfo)
+void CreateImageView(VkImageView& outImgView, const VkImage& img, const VkImageCreateInfo& crtInfo)
 {
     VkFormat format = crtInfo.format;
     VkImageAspectFlags aspectFlags = 0;
@@ -425,9 +425,22 @@ void CreateImageView(VkImageView& outImgView, VkImage& img, const VkImageCreateI
         //aspectFlags |= (IsStencilFormat(format))? VK_IMAGE_ASPECT_STENCIL_BIT : 0;
     }
 
-    TRAP(crtInfo.extent.depth == 1);
     TRAP(aspectFlags);
-    VkImageViewType viewType = (crtInfo.arrayLayers > 1)? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
+	VkImageViewType viewType = (crtInfo.extent.height > 1) ? VK_IMAGE_VIEW_TYPE_2D : VK_IMAGE_VIEW_TYPE_1D;
+	viewType = (crtInfo.extent.depth > 1) ? VK_IMAGE_VIEW_TYPE_3D : viewType;
+
+	if (crtInfo.arrayLayers > 1)
+	{
+		if (viewType == VK_IMAGE_VIEW_TYPE_2D)
+			viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+		else if (viewType == VK_IMAGE_VIEW_TYPE_1D)
+			viewType = VK_IMAGE_VIEW_TYPE_1D_ARRAY;
+	}
+
+    //VkImageViewType viewType = (crtInfo.arrayLayers > 1)? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
+
+	if (crtInfo.extent.depth > 1)
+		viewType = VK_IMAGE_VIEW_TYPE_3D;
 
     VkImageViewCreateInfo ImgView;
     cleanStructure(ImgView);
@@ -475,6 +488,7 @@ void AllocBufferMemory(VkBuffer& buffer, VkDeviceMemory& memory, uint32_t size, 
 
 void AllocImageMemory(const VkImageCreateInfo& imgInfo, VkImage& outImage, VkDeviceMemory& outMemory, const std::string& debugName)
 {
+	//TRAP(false);
     VkDevice& dev = vk::g_vulkanContext.m_device;
     VULKAN_ASSERT(vk::CreateImage(dev, &imgInfo, nullptr, &outImage));
 
@@ -497,9 +511,10 @@ void AllocImageMemory(const VkImageCreateInfo& imgInfo, VkImage& outImage, VkDev
 }
 
 
-void AddImageBarrier(VkImageMemoryBarrier& outBarrier, VkImage& img, VkImageLayout oldLayout, VkImageLayout newLayout, 
+void AddImageBarrier(VkImageMemoryBarrier& outBarrier, const VkImage& img, VkImageLayout oldLayout, VkImageLayout newLayout, 
                      VkAccessFlags srcMask, VkAccessFlags dstMask, VkImageAspectFlags aspectFlags, unsigned int layersCount)
 {
+	//TRAP(false); TODO remove this function
     cleanStructure(outBarrier);
     outBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     outBarrier.pNext = NULL;
@@ -517,7 +532,7 @@ void AddImageBarrier(VkImageMemoryBarrier& outBarrier, VkImage& img, VkImageLayo
     outBarrier.subresourceRange.layerCount = layersCount;
 }
 
-void AddBufferBarier(VkBufferMemoryBarrier& outBarrier, VkBuffer& buffer, VkAccessFlags srcMask, VkAccessFlags dstMask)
+void AddBufferBarier(VkBufferMemoryBarrier& outBarrier, const VkBuffer& buffer, VkAccessFlags srcMask, VkAccessFlags dstMask)
 {
     cleanStructure(outBarrier);
     outBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;

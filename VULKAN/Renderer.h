@@ -8,6 +8,7 @@
 
 #include "Utils.h"
 #include "ResourceTable.h"
+#include "MemoryManager.h"
 
 struct FBAttachment
 {
@@ -16,15 +17,13 @@ struct FBAttachment
     VkClearValue        clearValue;
     unsigned int        layers;
     //
-    VkImage             existingImage;
-    VkImageView         existingImageView;
+    ImageHandle*        existingImage;
     std::string         debugName;
 
     FBAttachment()
         : format(VK_FORMAT_UNDEFINED)
         , usage(0)
-        , existingImage(VK_NULL_HANDLE)
-        , existingImageView(VK_NULL_HANDLE)
+        , existingImage(nullptr)
         , layers(0)
     {
         clearValue = VkClearValue();
@@ -41,24 +40,20 @@ struct FBAttachment
         , layers(l)
         , debugName(debug)
         , existingImage(VK_NULL_HANDLE)
-        , existingImageView(VK_NULL_HANDLE)
     {
     }
 
-    FBAttachment(VkFormat f
-        , VkImage img
-        , VkImageView imgView
+    FBAttachment(ImageHandle* img
         , VkClearValue clr)
-        : format(f)
+		: format(img->GetFormat())
         , clearValue(clr)
         , existingImage(img)
-        , existingImageView(imgView)
     {
     }
 
     bool IsValid() const { return format != VK_FORMAT_UNDEFINED; }
 
-    bool NeedCreateImageView() const { return existingImageView == VK_NULL_HANDLE || existingImage == VK_NULL_HANDLE; }
+    bool NeedCreateImageView() const { return  existingImage == nullptr; }
 };
 
 
@@ -85,10 +80,10 @@ struct FramebufferDescription
         m_colorAttachments[index] = FBAttachment(format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | additionalUsage, layers, clr, debugName);
     }
 
-    void AddColorAttachmentDesc(unsigned int index, VkFormat format, VkImage existingImage, VkImageView existingImgView, VkClearValue clr = VkClearValue())
+    void AddColorAttachmentDesc(unsigned int index, ImageHandle* img, VkClearValue clr = VkClearValue())
     {
         TRAP(index < m_numColors);
-        m_colorAttachments[index] = FBAttachment(format, existingImage, existingImgView, clr);
+		m_colorAttachments[index] = FBAttachment(img, clr);
     }
 
     void AddDepthAttachmentDesc(VkFormat format, VkImageUsageFlags additionalUsage, const std::string& debugName = std::string(), uint8_t stencilClrValue = 0)
@@ -100,13 +95,13 @@ struct FramebufferDescription
         m_depthAttachments = FBAttachment(format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | additionalUsage, 1, clrVal, debugName);
     }
 
-     void AddDepthAttachmentDesc(VkFormat format, VkImage existingImage, VkImageView existingImgView, uint8_t stencilClrValue = 0)
+     void AddDepthAttachmentDesc( ImageHandle* existingImage, uint8_t stencilClrValue = 0)
      {
-         TRAP(IsDepthFormat(format));
+		 TRAP(IsDepthFormat(existingImage->GetFormat()));
          VkClearValue clrVal;
          clrVal.depthStencil.depth = 1.0f;
          clrVal.depthStencil.stencil = stencilClrValue;
-         m_depthAttachments = FBAttachment(format, existingImage, existingImgView, clrVal);
+         m_depthAttachments = FBAttachment(existingImage, clrVal);
      }
 
     std::vector<FBAttachment>   m_colorAttachments;
@@ -115,8 +110,41 @@ struct FramebufferDescription
 
 };
 
+class ImageHandle;
 class CFrameBuffer
 {
+
+	struct SFramebufferAttch
+	{
+		SFramebufferAttch()
+			: m_image(nullptr)
+			, m_ownImage(false)
+		{
+		}
+
+		void SetImage(ImageHandle* hImage, bool ownImage)
+		{
+			m_image = hImage;
+			m_ownImage = ownImage;
+		}
+
+		const VkImage& GetImage() const { return m_image->Get(); }
+		const VkImageView& GetView() const { return m_image->GetView(); }
+
+		bool IsValid() const { return m_image != nullptr; }
+
+		void Clean(VkDevice dev)
+		{
+			if (m_ownImage)
+			{
+				MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::Framebuffers, m_image);
+			}
+		}
+
+		ImageHandle*			m_image;
+		bool					m_ownImage;
+	};
+
 public:
 
     CFrameBuffer(unsigned int width
@@ -126,58 +154,27 @@ public:
 
     VkRect2D GetRenderArea();
     VkFramebuffer Get() const { return m_frameBuffer; }
-    const VkImage& GetColorImage(unsigned int index) const { TRAP(index < m_colorsAttNum); return m_attachments[index].image; }
-    const VkImageView& GetColorImageView(unsigned int index) const { TRAP(index < m_colorsAttNum); return m_attachments[index].imageView; }
-    VkDeviceMemory GetColorImageMemory(unsigned int index) const { TRAP(index < m_colorsAttNum); return m_attachments[index].imageMemory; }
 
-    //VkImage GetDepthImage() const { return m_depthAttachment.image; }
-    //VkImageView GetDepthImageView() const { return m_depthAttachment.imageView; }
+	const VkImage& GetColorImage(unsigned int index) const { TRAP(index < m_colorsAttNum && m_attachments[index].IsValid()); return m_attachments[index].GetImage(); }
+	const VkImageView& GetColorImageView(unsigned int index) const { TRAP(index < m_colorsAttNum && m_attachments[index].IsValid()); return m_attachments[index].GetView(); }
+	ImageHandle*& GetColorImageHandle(unsigned int index)  { TRAP(index < m_colorsAttNum && m_attachments[index].IsValid()); return m_attachments[index].m_image; }
+	const VkImage& GetDepthImage() const { TRAP(m_depthAttachment.IsValid());  return m_depthAttachment.GetImage(); }
+	const VkImageView& GetDepthImageView() const { TRAP(m_depthAttachment.IsValid()); return m_depthAttachment.GetView(); }
+	ImageHandle*& GetDepthImageHandle()  { TRAP(m_depthAttachment.IsValid()); return m_depthAttachment.m_image; }
 
-    const VkImage& GetDepthImage() const { return m_depthAttachment.image; }
-    const VkImageView& GetDepthImageView() const { return m_depthAttachment.imageView; }
     bool HasDepth() { return m_depthAttachment.IsValid(); }
-
-    void AddAttachment(VkImageCreateInfo& imgInfo, VkFormat format, VkImageUsageFlags usage, unsigned int layers, VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL);
 
     const std::vector<VkClearValue>& GetClearValues() const { return m_clearValues; }
 
     void CreateFramebuffer(VkRenderPass renderPass, const FramebufferDescription& fbDesc);
 
-    void Finalize();
-    VkFramebuffer                       m_frameBuffer;
+    void Finalize(); //refactor this shit method
     unsigned int GetWidth() const { return m_width; }
     unsigned int GetHeight() const { return m_height; }
     unsigned int GetLayers() const { return m_layers; }
 
-    struct SFramebufferAttch
-    {
-        VkImage             image;
-        VkImageView         imageView;
-        VkDeviceMemory      imageMemory;
-        VkImageCreateInfo   imageInfo;
-
-        SFramebufferAttch()
-            : image(VK_NULL_HANDLE)
-            , imageView(VK_NULL_HANDLE)
-            , imageMemory(VK_NULL_HANDLE)
-        {
-            cleanStructure(imageInfo);
-        }
-
-        bool IsCreateInfoValid() { return imageInfo.sType == VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO; }
-
-        bool IsValid() { return (image != VK_NULL_HANDLE) && (imageView != VK_NULL_HANDLE) /*&& (imageMemory != VK_NULL_HANDLE)*/;  }
-
-        void Clean(VkDevice dev)
-        {
-            if(imageMemory != VK_NULL_HANDLE) //means that the framebuffer "owns" the image, otherwise it got an image from a previous framebuffer
-            {
-                vk::FreeMemory(dev, imageMemory, nullptr);
-                vk::DestroyImageView(dev, imageView, nullptr);
-                vk::DestroyImage(dev, image, nullptr);
-            }
-        }
-    };
+private:
+	VkImageCreateInfo CreateImageInfo(const FBAttachment& fbDesc);
 
     template<typename T>
     void ConvertTo(const std::vector<SFramebufferAttch>& inVec, std::vector<T>& outVec, T (*getter)(const SFramebufferAttch& ))
@@ -189,8 +186,9 @@ public:
         }
     }
 
-    std::vector<SFramebufferAttch>      m_attachments;
     SFramebufferAttch                   m_depthAttachment;
+	VkFramebuffer                       m_frameBuffer;
+	std::vector<SFramebufferAttch>      m_attachments;
 
     std::vector<VkClearValue>           m_clearValues;
 
@@ -373,8 +371,8 @@ protected:
 
     void Reload();
     void CreateDescPool(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int maxSets);
-    void UpdateResourceTableForColor(unsigned int fbIndex, EResourceType tableType); // tableType = VkImage, tableType + 1 = VkImageView. Check EResourceType for layout
-    void UpdateResourceTableForDepth( EResourceType tableType); // tableType = VkImage, tableType + 1 = VkImageView. Check EResourceType for layout
+    void UpdateResourceTableForColor(unsigned int fbIndex, EResourceType tableType);
+    void UpdateResourceTableForDepth( EResourceType tableType);
 
 protected:
     CFrameBuffer*                                       m_framebuffer;

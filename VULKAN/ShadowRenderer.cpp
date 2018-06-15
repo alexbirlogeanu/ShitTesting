@@ -359,15 +359,15 @@ void CShadowResolveRenderer::UpdateShaderParams()
 
 void CShadowResolveRenderer::UpdateGraphicInterface()
 {
-    VkImageView normalView = g_commonResources.GetAs<VkImageView>(EResourceType_NormalsImageView);
-    VkImageView posView = g_commonResources.GetAs<VkImageView>(EResourceType_PositionsImageView);
-    VkImageView shadowMapView = g_commonResources.GetAs<VkImageView>(EResourceType_ShadowMapImageView);
+	ImageHandle* normalImage = g_commonResources.GetAs<ImageHandle*>(EResourceType_NormalsImage);
+	ImageHandle* positionImage = g_commonResources.GetAs<ImageHandle*>(EResourceType_PositionsImage);
+	ImageHandle* shadowMapImage = g_commonResources.GetAs<ImageHandle*>(EResourceType_ShadowMapImage);
 
-    VkDescriptorImageInfo normalInfo = CreateDescriptorImageInfo(m_nearSampler, normalView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    VkDescriptorImageInfo posInfo = CreateDescriptorImageInfo(m_nearSampler, posView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    VkDescriptorImageInfo shadowhInfo = CreateDescriptorImageInfo(m_depthSampler, shadowMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    VkDescriptorImageInfo normalInfo = CreateDescriptorImageInfo(m_nearSampler, normalImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    VkDescriptorImageInfo posInfo = CreateDescriptorImageInfo(m_nearSampler, positionImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    VkDescriptorImageInfo shadowhInfo = CreateDescriptorImageInfo(m_depthSampler, shadowMapImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     VkDescriptorBufferInfo constInfo = CreateDescriptorBufferInfo(m_uniformBuffer);
-    VkDescriptorImageInfo shadowText = CreateDescriptorImageInfo(m_nearSampler, shadowMapView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    VkDescriptorImageInfo shadowText = CreateDescriptorImageInfo(m_nearSampler, shadowMapImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     VkDescriptorImageInfo blockerDistText = CreateDescriptorImageInfo(m_nearSampler, m_blockerDistrText->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     VkDescriptorImageInfo pcfDistText = CreateDescriptorImageInfo(m_nearSampler, m_PCFDistrText->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 

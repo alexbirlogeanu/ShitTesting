@@ -5,6 +5,7 @@
 
 #include <vector>
 
+class ImageHandle;
 struct PointLightParams;
 class PointLight
 {
@@ -42,20 +43,15 @@ private:
 	void UpdateLightsBuffer();
 	void ReallocLightsBuffer();
 	
-	void CreateLightImage(VkImage& img, VkImageView& view, VkDeviceMemory& memory);
+	ImageHandle* CreateLightImage();
 	void PrepareLightImage();
 
 private:
 	VkBuffer					m_lightsBuffer;
 	VkDeviceMemory				m_lightsMemory;
 
-	VkImage						m_lightImage;
-	VkImageView					m_lightImageView;
-	VkDeviceMemory				m_lightImageMemory;
-
-	VkImage						m_debugImage; //free this objects  
-	VkImageView					m_debugImageView;
-	VkDeviceMemory				m_debugImageMemory;
+	ImageHandle*				m_lightImage;
+	ImageHandle*				m_debugImage;
 
 	VkSampler					Sampler;
 

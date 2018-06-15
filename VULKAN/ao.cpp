@@ -2,6 +2,7 @@
 
 #include "Utils.h"
 #include "Mesh.h"
+#include "MemoryManager.h"
 
 #include <random>
 
@@ -151,17 +152,17 @@ void CAORenderer::UpdateGraphicInterface()
     std::vector<VkWriteDescriptorSet> wDescSets;
     VkDescriptorImageInfo normalsImgInfo;
     normalsImgInfo.sampler = m_sampler;
-    normalsImgInfo.imageView = g_commonResources.GetAs<VkImageView>(EResourceType_NormalsImageView); //GBuffer_Normals
+    normalsImgInfo.imageView = g_commonResources.GetAs<ImageHandle*>(EResourceType_NormalsImage)->GetView(); //GBuffer_Normals
     normalsImgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     
     VkDescriptorImageInfo positionsImgInfo;
     positionsImgInfo.sampler = m_sampler;
-    positionsImgInfo.imageView = g_commonResources.GetAs<VkImageView>(EResourceType_PositionsImageView); //GBuffer_Position
+	positionsImgInfo.imageView = g_commonResources.GetAs<ImageHandle*>(EResourceType_PositionsImage)->GetView(); //GBuffer_Position
     positionsImgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     VkDescriptorImageInfo depthImgInfo;
     depthImgInfo.sampler = m_sampler;
-    depthImgInfo.imageView = g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView);
+	depthImgInfo.imageView = g_commonResources.GetAs<ImageHandle*>(EResourceType_DepthBufferImage)->GetView();
     depthImgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     VkDescriptorBufferInfo constBuffInfo;

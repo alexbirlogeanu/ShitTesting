@@ -1,41 +1,23 @@
 #include "MemoryManager.h"
+#include "Utils.h"
 
 #include <iostream>
 ///////////////////////////////////////////////////////////////////////////////////
 //BufferHandle
 ///////////////////////////////////////////////////////////////////////////////////
-BufferHandle::BufferHandle(VkBuffer buffer, VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize offset)
-	: m_buffer(buffer)
-	, m_size(size)
-	, m_offset(offset)
-	, m_alignment(alignment)
-	, m_freeOffset(0)
-	, m_memoryContext(EMemoryContextType::Count)
+BufferHandle::BufferHandle(VkBuffer handle, VkDeviceSize size, VkDeviceSize alignment)
+	: HandleImpl<VkBuffer>(handle, size, alignment)
 {
 
 }
-
-BufferHandle::~BufferHandle()
+BufferHandle::BufferHandle(BufferHandle* parent, VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize offset)
+	: HandleImpl<VkBuffer>(parent, size, alignment, offset)
 {
-	for (unsigned int i = 0; i < m_subbuffers.size(); ++i)
-		delete m_subbuffers[i];
-
-	m_subbuffers.clear();
 }
 
 BufferHandle* BufferHandle::CreateSubbuffer(VkDeviceSize size)
 {
-	VkDeviceSize bufferOffset = m_freeOffset;
-	if ((m_alignment != 0) && (m_freeOffset % m_alignment != 0))
-		bufferOffset += m_alignment - (m_freeOffset % m_alignment);
-
-	TRAP(bufferOffset + size <= m_size && "Not enough memory for this sub buffer");
-	BufferHandle* hSubBuffer = new BufferHandle(m_buffer, size, m_alignment, bufferOffset);
-	hSubBuffer->SetMemoryContext(m_memoryContext);
-
-	m_freeOffset = bufferOffset + size;
-	m_subbuffers.push_back(hSubBuffer);
-	return hSubBuffer;
+	return SubAllocate(this, size);
 }
 
 VkBufferMemoryBarrier BufferHandle::CreateMemoryBarrier(VkAccessFlags srcAccess, VkAccessFlags dstAccess)
@@ -45,7 +27,7 @@ VkBufferMemoryBarrier BufferHandle::CreateMemoryBarrier(VkAccessFlags srcAccess,
 	barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
 	barrier.srcAccessMask = srcAccess;
 	barrier.dstAccessMask = dstAccess;
-	barrier.buffer = GetBuffer();
+	barrier.buffer = Get();
 	barrier.offset = GetOffset();
 	barrier.size = GetSize();
 	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -54,6 +36,61 @@ VkBufferMemoryBarrier BufferHandle::CreateMemoryBarrier(VkAccessFlags srcAccess,
 	return barrier;
 }
 
+void BufferHandle::FreeResources()
+{
+	if (m_parent == nullptr)
+		vk::DestroyBuffer(vk::g_vulkanContext.m_device, Get(), nullptr);
+}
+
+///////////////////////////////////////////////////////////////////////////////////
+//ImageHandle
+///////////////////////////////////////////////////////////////////////////////////
+
+ImageHandle::ImageHandle(VkImage vkHandle, VkDeviceSize size, VkDeviceSize alignment, const VkImageCreateInfo& imgInfo)
+	: HandleImpl<VkImage>(vkHandle, size, alignment)
+	, m_view(VK_NULL_HANDLE)
+	, m_format(imgInfo.format)
+	, m_dimensions(imgInfo.extent)
+{
+	CreateImageView(m_view, Get(), imgInfo);
+}
+
+void ImageHandle::FreeResources()
+{
+	if (m_parent == nullptr)
+	{
+		VkDevice dev = vk::g_vulkanContext.m_device;
+		vk::DestroyImageView(dev, m_view, nullptr);
+		vk::DestroyImage(dev, Get(), nullptr);
+	}
+}
+
+ImageHandle::~ImageHandle()
+{
+
+}
+
+VkImageMemoryBarrier ImageHandle::CreateMemoryBarrier(VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcMask, VkAccessFlags dstMask, VkImageAspectFlags aspectFlags, unsigned int layersCount)
+{
+	VkImageMemoryBarrier outBarrier;
+	cleanStructure(outBarrier);
+	outBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	outBarrier.pNext = NULL;
+	outBarrier.srcAccessMask = srcMask;
+	outBarrier.dstAccessMask = dstMask;
+	outBarrier.oldLayout = oldLayout;
+	outBarrier.newLayout = newLayout;
+	outBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	outBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	outBarrier.image = Get();
+	outBarrier.subresourceRange.aspectMask = aspectFlags;
+	outBarrier.subresourceRange.baseMipLevel = 0;
+	outBarrier.subresourceRange.levelCount = 1;
+	outBarrier.subresourceRange.baseArrayLayer = 0;
+	outBarrier.subresourceRange.layerCount = layersCount;
+
+	return outBarrier;
+}
 ///////////////////////////////////////////////////////////////////////////////////
 //MemoryContext::MappedMemory
 ///////////////////////////////////////////////////////////////////////////////////
@@ -68,7 +105,6 @@ MappedMemory::~MappedMemory()
 {
 
 }
-
 
 ///////////////////////////////////////////////////////////////////////////////////
 //MemoryContext
@@ -93,8 +129,59 @@ MemoryContext::~MemoryContext()
 
 void MemoryContext::AllocateMemory(VkDeviceSize size, VkMemoryPropertyFlags flags)
 {
+	uint32_t bitsType = -1;
+	VkDevice dev = vk::g_vulkanContext.m_device;
+
+	if (IsBufferMemory())
+	{
+		VkBufferCreateInfo dummyCrtInfo;
+		cleanStructure(dummyCrtInfo);
+		dummyCrtInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		dummyCrtInfo.flags = 0;
+		dummyCrtInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		dummyCrtInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+		dummyCrtInfo.size = size;
+
+		VkBuffer dummyBuffer;
+		VULKAN_ASSERT(vk::CreateBuffer(dev, &dummyCrtInfo, nullptr, &dummyBuffer));
+
+		VkMemoryRequirements memReq;
+		vk::GetBufferMemoryRequirements(dev, dummyBuffer, &memReq);
+		vk::DestroyBuffer(dev, dummyBuffer, nullptr);
+
+		bitsType = memReq.memoryTypeBits;
+	}
+	else //for images
+	{
+		VkImageCreateInfo dummyCrtInfo;
+		cleanStructure(dummyCrtInfo);
+		dummyCrtInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		dummyCrtInfo.pNext = nullptr;
+		dummyCrtInfo.flags = 0;
+		dummyCrtInfo.imageType = VK_IMAGE_TYPE_2D;
+		dummyCrtInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+		dummyCrtInfo.extent.width = 8;
+		dummyCrtInfo.extent.height = 8;
+		dummyCrtInfo.extent.depth = 1;
+		dummyCrtInfo.mipLevels = 1;
+		dummyCrtInfo.arrayLayers = 1;
+		dummyCrtInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+		dummyCrtInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+		dummyCrtInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		dummyCrtInfo.queueFamilyIndexCount = 0;
+		dummyCrtInfo.pQueueFamilyIndices = NULL;
+		dummyCrtInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+		VkImage dummyImage;
+		VULKAN_ASSERT(vk::CreateImage(dev, &dummyCrtInfo, nullptr, &dummyImage));
+		VkMemoryRequirements memReq;
+		vk::GetImageMemoryRequirements(dev, dummyImage, &memReq);
+		vk::DestroyImage(dev, dummyImage, nullptr);
+
+		bitsType = memReq.memoryTypeBits;
+	}
 	TRAP(m_memory == VK_NULL_HANDLE && "Free memory before allocate another one");
-	m_memoryTypeIndex = vk::SVUlkanContext::GetMemTypeIndex(0xFFFFFFFF, flags);
+	m_memoryTypeIndex = vk::SVUlkanContext::GetMemTypeIndex(bitsType, flags);
 	m_totalSize = size;
 	m_memoryFlags = flags;
 
@@ -117,15 +204,15 @@ void MemoryContext::FreeMemory()
 
 	VkDevice dev = vk::g_vulkanContext.m_device;
 
-	for (auto e : m_buffersToOffset)
+	for (auto c : m_allocatedChunks)
 	{
-		BufferToOffset_t buffToOffset = e.second;
-		vk::DestroyBuffer(dev, buffToOffset.first->GetBuffer(), nullptr);
-		delete buffToOffset.first;
+		Handle* h = c.first;
+		h->FreeResources();
+		delete h;
 	}
-
+	m_allocatedChunks.clear();
 	m_chunks.clear();
-	m_buffersToOffset.clear();
+
 	vk::FreeMemory(dev, m_memory, nullptr);
 	m_memory = VK_NULL_HANDLE;
 }
@@ -149,9 +236,20 @@ void MemoryContext::UnmapMemory()
 	m_mappedMemory = nullptr;
 }
 
+bool MemoryContext::IsBufferMemory() const
+{ 
+	switch (m_contextType)
+	{
+	case EMemoryContextType::Framebuffers:
+	case EMemoryContextType::Textures:
+		return false;
+	default:
+		return true;
+	}
+}
 bool MemoryContext::CanMapMemory()
 {
-	return m_contextType != EMemoryContextType::DeviceLocal;
+	return IsBufferMemory() && m_contextType != EMemoryContextType::DeviceLocalBuffer;
 }
 
 MemoryContext::Chunk MemoryContext::GetFreeChunk(VkDeviceSize size, VkDeviceSize alignment)
@@ -162,9 +260,12 @@ MemoryContext::Chunk MemoryContext::GetFreeChunk(VkDeviceSize size, VkDeviceSize
 		if (found->m_size >= size)
 			break;
 	}
-	TRAP(found != m_chunks.end() && "No chunk found for allocation! Too fragmented or not enough memory");
+	TRAP(found != m_chunks.end() && "No chunk found for allocation! Too fragmented or not enough memory"); //try to resolve the fragmentation problem
 	TRAP(found->m_offset % alignment == 0 && "Something is wrong! All chunks should be stay aligned!! Maybe size is not from MemoryRequirments struct");
 	
+	if (size % alignment != 0)
+		size += alignment - (size % alignment);
+
 	Chunk foundChunk = *found;
 	m_chunks.erase(found);
 	
@@ -238,23 +339,52 @@ BufferHandle* MemoryContext::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags 
 	BufferHandle* hBufferHandle = new BufferHandle(buffer, size, alignment);
 	hBufferHandle->SetMemoryContext(m_contextType);
 
-	m_buffersToOffset.emplace(buffer, std::pair<BufferHandle*, Chunk>(hBufferHandle, memoryChunk));
+	m_allocatedChunks.emplace(hBufferHandle, memoryChunk);
 
 	return hBufferHandle;
 }
 
-void MemoryContext::FreeBuffer(BufferHandle* handle)
+ImageHandle* MemoryContext::CreateImage(const VkImageCreateInfo& crtInfo, const std::string& debugName)
 {
-	auto found = m_buffersToOffset.find(handle->GetBuffer());
-	if (found == m_buffersToOffset.end())
+	VkDevice dev = vk::g_vulkanContext.m_device;
+	VkImage image;
+	vk::CreateImage(dev, &crtInfo, nullptr, &image);
+
+	VkMemoryRequirements memReq;
+	vk::GetImageMemoryRequirements(dev, image, &memReq);
+
+	uint32_t imgMemIndex = vk::SVUlkanContext::GetMemTypeIndex(memReq.memoryTypeBits, m_memoryFlags);
+	TRAP(imgMemIndex == m_memoryTypeIndex && "Memory req for this image is not in the same heap");
+	
+	Chunk memoryChunk = GetFreeChunk(memReq.size, memReq.alignment);
+
+	//bind image to memory
+	VULKAN_ASSERT(vk::BindImageMemory(dev, image, m_memory, memoryChunk.m_offset));
+
+	ImageHandle* hImageHandle = new ImageHandle(image, memReq.size, memReq.alignment, crtInfo);
+	hImageHandle->SetMemoryContext(m_contextType);
+	
+	m_allocatedChunks.emplace(hImageHandle, memoryChunk);
+
+	if (!debugName.empty())
+		SetObjectDebugName(image, debugName);
+
+	return hImageHandle;
+}
+
+void MemoryContext::FreeHandle(Handle* handle)
+{
+	auto found = m_allocatedChunks.find(handle->GetRootParent());
+	if (found == m_allocatedChunks.end())
+	{
+		TRAP(false && "The handle is not allocated from this memory or a child handle is passed for freeing");
 		return;
+	}
 
-	BufferToOffset_t buffToOffset = found->second;
-
-	m_buffersToOffset.erase(found);
-	FreeChunk(buffToOffset.second);
-	vk::DestroyBuffer(vk::g_vulkanContext.m_device, buffToOffset.first->GetBuffer(), nullptr);
-	delete buffToOffset.first;
+	FreeChunk(found->second);
+	m_allocatedChunks.erase(found);
+	handle->FreeResources();
+	delete handle;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -268,33 +398,53 @@ MemoryManager::MemoryManager()
 		m_memoryContexts[i] = new MemoryContext((EMemoryContextType)i);
 	}
 
-	m_memoryContexts[(unsigned int)EMemoryContextType::DeviceLocal]->AllocateMemory(30 << 20, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	m_memoryContexts[(unsigned int)EMemoryContextType::DeviceLocalBuffer]->AllocateMemory(30 << 20, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	m_memoryContexts[(unsigned int)EMemoryContextType::Framebuffers]->AllocateMemory(256 << 20, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	m_memoryContexts[(unsigned int)EMemoryContextType::Textures]->AllocateMemory(256 << 20, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 }
 
 MemoryManager::~MemoryManager()
 {
 	for (unsigned int i = 0; i < (unsigned int)EMemoryContextType::Count; ++i)
+	{
 		m_memoryContexts[i]->FreeMemory();
+		delete m_memoryContexts[i];
+	}
 }
 
 BufferHandle* MemoryManager::CreateBuffer(EMemoryContextType context, VkDeviceSize size, VkBufferUsageFlags usage)
 {
-	return m_memoryContexts[(unsigned int)context]->CreateBuffer(size, usage);
+	MemoryContext* memContext = m_memoryContexts[(unsigned int)context];
+	if (memContext->IsBufferMemory())
+		return memContext->CreateBuffer(size, usage);
+	
+	TRAP(false && "Trying to create a buffer in an image memory context!");
+	return nullptr;
 }
 
-void MemoryManager::FreeBuffer(EMemoryContextType context, BufferHandle* handle)
+ImageHandle* MemoryManager::CreateImage(EMemoryContextType context, const VkImageCreateInfo& imgInfo, const std::string& debugName)
 {
-	m_memoryContexts[(unsigned int)context]->FreeBuffer(handle);
+	MemoryContext* memContext = m_memoryContexts[(unsigned int)context];
+	if (!memContext->IsBufferMemory())
+		return memContext->CreateImage(imgInfo, debugName);
+
+	TRAP(false && "Trying to create an image in a buffer memory context!");
+	return nullptr;
 }
 
-void MemoryManager::AllocStaggingMemory(VkDeviceSize size)
+void MemoryManager::FreeHandle(EMemoryContextType context, Handle* handle)
 {
-	m_memoryContexts[(unsigned int)EMemoryContextType::Stagging]->AllocateMemory(size, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	m_memoryContexts[(unsigned int)context]->FreeHandle(handle);
 }
 
-void MemoryManager::FreeStagginMemory()
+void MemoryManager::AllocMemory(EMemoryContextType context, VkDeviceSize size)
 {
-	m_memoryContexts[(unsigned int)EMemoryContextType::Stagging]->FreeMemory();
+	m_memoryContexts[(unsigned int)context]->AllocateMemory(size, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT); //Let it be. for now its ok
+}
+
+void MemoryManager::FreeMemory(EMemoryContextType context)
+{
+	m_memoryContexts[(unsigned int)context]->FreeMemory();
 }
 
 bool MemoryManager::MapMemoryContext(EMemoryContextType context)

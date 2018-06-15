@@ -447,25 +447,25 @@ public:
 protected:
     virtual void UpdateGraphicInterface() override
     {
-        VkImageView shadowMap = g_commonResources.GetAs<VkImageView>(EResourceType_ResolvedShadowImageView);
-        VkImageView aoMap = g_commonResources.GetAs<VkImageView>(EResourceType_AOBufferImageView);
+		ImageHandle* shadowMap = g_commonResources.GetAs<ImageHandle*>(EResourceType_ResolvedShadowImage);
+		ImageHandle* aoMap = g_commonResources.GetAs<ImageHandle*>(EResourceType_AOBufferImage);
 
         const unsigned int descSize = GBuffer_InputCnt;
         VkDescriptorImageInfo imgInfo[descSize];
         imgInfo[GBuffer_Albedo].sampler = m_sampler;
-        imgInfo[GBuffer_Albedo].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_AlbedoImageView);
+		imgInfo[GBuffer_Albedo].imageView = g_commonResources.GetAs<ImageHandle*>(EResourceType_AlbedoImage)->GetView();
         imgInfo[GBuffer_Albedo].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         imgInfo[GBuffer_Normals].sampler = m_sampler;
-        imgInfo[GBuffer_Normals].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_NormalsImageView);
+		imgInfo[GBuffer_Normals].imageView = g_commonResources.GetAs<ImageHandle*>(EResourceType_NormalsImage)->GetView();
         imgInfo[GBuffer_Normals].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         imgInfo[GBuffer_Position].sampler = m_sampler;
-        imgInfo[GBuffer_Position].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_PositionsImageView);
+		imgInfo[GBuffer_Position].imageView = g_commonResources.GetAs<ImageHandle*>(EResourceType_PositionsImage)->GetView();
         imgInfo[GBuffer_Position].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         imgInfo[GBuffer_Specular].sampler = m_sampler;
-        imgInfo[GBuffer_Specular].imageView = g_commonResources.GetAs<VkImageView>(EResourceType_SpecularImageView);
+		imgInfo[GBuffer_Specular].imageView = g_commonResources.GetAs<ImageHandle*>(EResourceType_SpecularImage)->GetView();
         imgInfo[GBuffer_Specular].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         std::vector<VkWriteDescriptorSet> writeSets;
@@ -489,14 +489,14 @@ protected:
 
         VkDescriptorImageInfo shadowMapDesc;
         shadowMapDesc.sampler = m_depthSampler;
-        shadowMapDesc.imageView = shadowMap;
+        shadowMapDesc.imageView = shadowMap->GetView();
         shadowMapDesc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         writeSets[2] = InitUpdateDescriptor(m_descriptorSet, GBuffer_InputCnt + 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &shadowMapDesc);
 
         VkDescriptorImageInfo aoMapDesc;
         aoMapDesc.sampler = m_sampler;
-        aoMapDesc.imageView = aoMap;
+        aoMapDesc.imageView = aoMap->GetView();
         aoMapDesc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         writeSets[3] = InitUpdateDescriptor(m_descriptorSet, GBuffer_InputCnt + 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &aoMapDesc);
@@ -637,14 +637,12 @@ public:
 
     void SetSkyImageView()
     {
-        VkImageView skyView = g_commonResources.GetAs<VkImageView>(EResourceType_SunImageView);
-
         CreateLinearSampler(m_sampler);
 
         VkDescriptorImageInfo imgInfo;
         cleanStructure(imgInfo);
         imgInfo.sampler = m_sampler;
-        imgInfo.imageView = skyView;
+		imgInfo.imageView = g_commonResources.GetAs<ImageHandle*>(EResourceType_SunImage)->GetView();
         imgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkWriteDescriptorSet wDesc = InitUpdateDescriptor(m_sunDescriptorSet, 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &imgInfo);
@@ -876,11 +874,10 @@ protected:
 
     virtual void UpdateGraphicInterface() override
     {
-        VkImageView finalColor = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView); 
         VkDescriptorImageInfo imgInfo;
         cleanStructure(imgInfo);
         imgInfo.sampler = m_sampler;
-        imgInfo.imageView = finalColor;
+		imgInfo.imageView = g_commonResources.GetAs<ImageHandle*>(EResourceType_FinalImage)->GetView();
         imgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkDescriptorBufferInfo buffInfo;
@@ -1148,6 +1145,7 @@ CApplication::CApplication()
 
 	MemoryManager::CreateInstance();
 	MeshManager::CreateInstance();
+	CTextureManager::CreateInstance();
 
     CreateCommandBuffer();
     CPickManager::CreateInstance();
@@ -1222,6 +1220,7 @@ CApplication::~CApplication()
     vk::DestroyRenderPass(dev, m_3DtextureRenderPass, nullptr);
     vk::DestroyRenderPass(dev, m_volumetricRenderPass, nullptr);
 
+	CTextureManager::DestroyInstance();
 	MeshManager::DestroyInstance();
 	MemoryManager::DestroyInstance();
 
@@ -1235,6 +1234,17 @@ CApplication::~CApplication()
 
 void CApplication::Run()
 {
+	MemoryManager::GetInstance()->AllocMemory(EMemoryContextType::StaggingBuffer, 256 * 3);
+	BufferHandle* first = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::StaggingBuffer, 46, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	BufferHandle* second = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::StaggingBuffer, 167, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	BufferHandle* third = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::StaggingBuffer, 204, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::StaggingBuffer, first);
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::StaggingBuffer, third);
+
+	MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::StaggingBuffer, 200, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	MemoryManager::GetInstance()->FreeMemory(EMemoryContextType::StaggingBuffer);
+
     bool isRunning = true;
     CreateResources();
     CreateQueryPools();
@@ -1598,10 +1608,8 @@ void CApplication::SetupDirectionalLightingRendering()
 {
 	FramebufferDescription fbDesc;
 	fbDesc.Begin(EDirLightBuffers_Count);
-	VkImage outImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
-	VkImageView outImgView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
 
-	fbDesc.AddColorAttachmentDesc(EDirLightBuffers_Final, OUT_FORMAT, outImg, outImgView);
+	fbDesc.AddColorAttachmentDesc(EDirLightBuffers_Final, g_commonResources.GetAs<ImageHandle*>(EResourceType_FinalImage));
 	fbDesc.AddColorAttachmentDesc(EDirLightBuffers_Debug, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "DirLightDebug");
 	fbDesc.End();
 
@@ -1617,10 +1625,8 @@ void CApplication::SetupDeferredTileShading()
 {
 	FramebufferDescription fbDesc;
 	fbDesc.Begin(1);
-	VkImage finalImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
-	VkImageView finalImgView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
 
-	fbDesc.AddColorAttachmentDesc(0, OUT_FORMAT, finalImg, finalImgView);
+	fbDesc.AddColorAttachmentDesc(0, g_commonResources.GetAs<ImageHandle*>(EResourceType_FinalImage));
 	fbDesc.End();
 
 	CreateDeferredTileShadingRenderPass(fbDesc);
@@ -1907,8 +1913,6 @@ void CApplication::SetupSunRendering()
 {
     FramebufferDescription fbDesc;
     fbDesc.Begin(ESunFB_Count);
-    VkImage outImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
-    VkImageView outImgView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
 
     fbDesc.AddColorAttachmentDesc(ESunFB_Final, VK_FORMAT_R16G16B16A16_SFLOAT,  VK_IMAGE_USAGE_SAMPLED_BIT, "SunFinal");
     fbDesc.AddColorAttachmentDesc(ESunFB_Sun, VK_FORMAT_R16G16B16A16_SFLOAT,  VK_IMAGE_USAGE_SAMPLED_BIT, "SunSprite");
@@ -1929,15 +1933,9 @@ void CApplication::SetupUIRendering()
 {
     FramebufferDescription fbDesc;
     fbDesc.Begin(1);
-    VkImageView postProcessOutView = g_commonResources.GetAs<VkImageView>(EResourceType_AfterPostProcessImageView);
-    VkImage postProcessOutImg = g_commonResources.GetAs<VkImage>(EResourceType_AfterPostProcessImage);
-    //VkImageView postProcessOutView = m_objectRenderer->GetFramebuffer()->GetColorImageView(GBuffer_DirLight);
-    //VkImage postProcessOutImg = m_objectRenderer->GetFramebuffer()->GetColorImage(GBuffer_DirLight);
-    VkImageView depthOutView = g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView);
-    VkImage depthOutImg = g_commonResources.GetAs<VkImage>(EResourceType_DepthBufferImage);
 
-    fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_B8G8R8A8_UNORM, postProcessOutImg, postProcessOutView);
-    fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, depthOutImg, depthOutView);
+	fbDesc.AddColorAttachmentDesc(0, g_commonResources.GetAs<ImageHandle*>(EResourceType_AfterPostProcessImage));
+	fbDesc.AddDepthAttachmentDesc(g_commonResources.GetAs<ImageHandle*>(EResourceType_DepthBufferImage));
     fbDesc.End();
 
     CreateUIRenderPass(fbDesc);
@@ -1951,13 +1949,9 @@ void CApplication::SetupSkyRendering()
 {
     FramebufferDescription fbDesc;
     fbDesc.Begin(1);
-    VkImageView passView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
-    VkImage passImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
-    VkImageView depthView = g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView);
-    VkImage depthImg = g_commonResources.GetAs<VkImage>(EResourceType_DepthBufferImage);
 
-    fbDesc.AddColorAttachmentDesc(0, OUT_FORMAT, passImg, passView);
-    fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, depthImg, depthView);
+	fbDesc.AddColorAttachmentDesc(0, g_commonResources.GetAs<ImageHandle*>(EResourceType_FinalImage));
+	fbDesc.AddDepthAttachmentDesc(g_commonResources.GetAs<ImageHandle*>(EResourceType_DepthBufferImage));
     fbDesc.End();
 
     CreateSkyRenderPass(fbDesc);
@@ -1971,13 +1965,9 @@ void CApplication::SetupParticleRendering()
 {
     FramebufferDescription fbDesc;
     fbDesc.Begin(1);
-    VkImageView passView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
-    VkImage passImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
-    VkImageView depthView = g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView);
-    VkImage depthImg = g_commonResources.GetAs<VkImage>(EResourceType_DepthBufferImage);
 
-    fbDesc.AddColorAttachmentDesc(0, OUT_FORMAT, passImg, passView);
-    fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, depthImg, depthView);
+	fbDesc.AddColorAttachmentDesc(0, g_commonResources.GetAs<ImageHandle*>(EResourceType_FinalImage));
+	fbDesc.AddDepthAttachmentDesc(g_commonResources.GetAs<ImageHandle*>(EResourceType_DepthBufferImage));
     fbDesc.End();
 
     CreateParticlesRenderPass(fbDesc);
@@ -1989,12 +1979,9 @@ void CApplication::SetupParticleRendering()
 
  void CApplication::SetupFogRendering()
  {
-     VkImageView outView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
-     VkImage outImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
-
      FramebufferDescription fbDesc;
      fbDesc.Begin(2);
-     fbDesc.AddColorAttachmentDesc(0, OUT_FORMAT, outImg, outView);
+	 fbDesc.AddColorAttachmentDesc(0, g_commonResources.GetAs<ImageHandle*>(EResourceType_FinalImage));
      fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "FogDebug"); 
      fbDesc.End();
 
@@ -2015,25 +2002,22 @@ void CApplication::SetupParticleRendering()
 
      Create3DTextureRenderPass(fbDesc);
 
-     unsigned int fbSize = 512;
+	 //TODO FIX IT. NO NEED FOR FRAMEBUFFER
+     unsigned int fbSize = 2;
      m_3dTextureRenderer = new C3DTextureRenderer(m_3DtextureRenderPass);
-     m_3dTextureRenderer->CreateFramebuffer(fbDesc, fbSize, fbSize, TEXTURE3DLAYERS);
+     m_3dTextureRenderer->CreateFramebuffer(fbDesc, fbSize, fbSize);
      m_3dTextureRenderer->Init();
  }
 
  void CApplication::SetupVolumetricRendering()
  {
     FramebufferDescription fbDesc;
-    VkImage depthImg = g_commonResources.GetAs<VkImage>(EResourceType_DepthBufferImage);
-    VkImageView depthImgView = g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView);
-    VkImage outImg = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
-    VkImageView outImgView = g_commonResources.GetAs<VkImageView>(EResourceType_FinalImageView);
 
     fbDesc.Begin(4);
-    fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, depthImg, depthImgView);
+	fbDesc.AddDepthAttachmentDesc(g_commonResources.GetAs<ImageHandle*>(EResourceType_DepthBufferImage));
     fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "VolumetricFrontCull");
     fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "VolumetricBackCull");
-    fbDesc.AddColorAttachmentDesc(2, VK_FORMAT_R16G16B16A16_SFLOAT, outImg, outImgView);
+	fbDesc.AddColorAttachmentDesc(2, g_commonResources.GetAs<ImageHandle*>(EResourceType_FinalImage));
     fbDesc.AddColorAttachmentDesc(3, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "VolumetricDebug");
     fbDesc.End();
 
@@ -2668,9 +2652,8 @@ void CApplication::RenderShadows()
 
 void CApplication::WaitForFinalImageToComplete()
 {
-    VkImageMemoryBarrier before;
-    VkImage img = g_commonResources.GetAs<VkImage>(EResourceType_FinalImage);
-    AddImageBarrier(before, img, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+	ImageHandle* img = g_commonResources.GetAs<ImageHandle*>(EResourceType_FinalImage);
+	VkImageMemoryBarrier before = img->CreateMemoryBarrier(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
     vk::CmdPipelineBarrier(vk::g_vulkanContext.m_mainCommandBuffer, 
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 

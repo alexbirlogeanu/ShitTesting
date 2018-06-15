@@ -23,8 +23,8 @@ MeshManager::TransferMeshInfo::TransferMeshInfo(Mesh* mesh)
 	, m_mesh(mesh)
 {
 
-	m_meshBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::DeviceLocal, m_mesh->MemorySizeNeeded(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-	m_staggingBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::Stagging, m_mesh->MemorySizeNeeded(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+	m_meshBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::DeviceLocalBuffer, m_mesh->MemorySizeNeeded(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+	m_staggingBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::StaggingBuffer, m_mesh->MemorySizeNeeded(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
 	m_toVertexBuffer = m_meshBuffer->CreateSubbuffer(m_mesh->GetVerticesMemorySize());
 	m_toIndexBuffer = m_meshBuffer->CreateSubbuffer(m_mesh->GetIndicesMemorySize());
@@ -46,7 +46,7 @@ void MeshManager::TransferMeshInfo::BeginTransfer(VkCommandBuffer cmdBuffer)
 	regions[1].srcOffset = m_staggingIndexBuffer->GetOffset();
 	regions[1].dstOffset = m_toIndexBuffer->GetOffset();
 
-	vk::CmdCopyBuffer(cmdBuffer, m_staggingBuffer->GetBuffer(), m_meshBuffer->GetBuffer(), 2, regions);
+	vk::CmdCopyBuffer(cmdBuffer, m_staggingBuffer->Get(), m_meshBuffer->Get(), 2, regions);
 }
 
 void MeshManager::TransferMeshInfo::EndTransfer()
@@ -83,13 +83,13 @@ void MeshManager::Update()
 			m_transferInProgress[i].EndTransfer();
 
 		m_transferInProgress.clear();
-		MemoryManager::GetInstance()->FreeStagginMemory();
+		MemoryManager::GetInstance()->FreeMemory(EMemoryContextType::StaggingBuffer);
 	}
 
 	if (!m_pendingMeshes.empty())
 	{
 		unsigned int staggingMemoryTotalSize = CalculateStagginMemorySize();
-		MemoryManager::GetInstance()->AllocStaggingMemory(staggingMemoryTotalSize);
+		MemoryManager::GetInstance()->AllocMemory(EMemoryContextType::StaggingBuffer, staggingMemoryTotalSize);
 		//
 		
 		TRAP(m_transferInProgress.empty() && "All transfer should be processed"); 
@@ -100,14 +100,14 @@ void MeshManager::Update()
 			m_transferInProgress.push_back(TransferMeshInfo(m));
 		}
 
-		MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::Stagging);
-		MappedMemory* memoryMap = MemoryManager::GetInstance()->GetMappedMemory(EMemoryContextType::Stagging);
+		MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::StaggingBuffer);
+		MappedMemory* memoryMap = MemoryManager::GetInstance()->GetMappedMemory(EMemoryContextType::StaggingBuffer);
 		for (auto info : m_transferInProgress)
 		{
 			info.m_mesh->CopyLocalData(memoryMap, info.m_stagginVertexBuffer, info.m_staggingIndexBuffer);
 		}
 
-		MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::Stagging);
+		MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::StaggingBuffer);
 		std::vector<VkBufferMemoryBarrier> copyBarriers;
 		copyBarriers.reserve(m_transferInProgress.size());
 
@@ -238,8 +238,8 @@ void Mesh::Render(unsigned int numIndexes, unsigned int instances)
 
     VkCommandBuffer cmdBuff = vk::g_vulkanContext.m_mainCommandBuffer;
     const VkDeviceSize offsets[1] = {m_vertexSubBuffer->GetOffset()};
-    vk::CmdBindVertexBuffers(cmdBuff, 0, 1, &m_vertexSubBuffer->GetBuffer(), offsets);
-    vk::CmdBindIndexBuffer(cmdBuff, m_indexSubBuffer->GetBuffer(), m_indexSubBuffer->GetOffset(), VK_INDEX_TYPE_UINT32);
+    vk::CmdBindVertexBuffers(cmdBuff, 0, 1, &m_vertexSubBuffer->Get(), offsets);
+    vk::CmdBindIndexBuffer(cmdBuff, m_indexSubBuffer->Get(), m_indexSubBuffer->GetOffset(), VK_INDEX_TYPE_UINT32);
     vk::CmdDrawIndexed(cmdBuff, 
         indexesToRender,
         instances,

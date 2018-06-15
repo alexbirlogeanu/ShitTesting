@@ -135,7 +135,7 @@ void CSunRenderer::Render()
 
 void CSunRenderer::UpdateGraphicInterface()
 {
-    VkImageView depthBuffer = g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView);
+    ImageHandle* depthBuffer = g_commonResources.GetAs<ImageHandle*>(EResourceType_DepthBufferImage);
 
     VkDescriptorImageInfo wSuntImg;
     wSuntImg.imageView = m_framebuffer->GetColorImageView(ESunFB_Sun);
@@ -154,7 +154,7 @@ void CSunRenderer::UpdateGraphicInterface()
 
     VkDescriptorImageInfo depthImg;
     depthImg.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    depthImg.imageView = depthBuffer;
+	depthImg.imageView = depthBuffer->GetView();
     depthImg.sampler = m_neareastSampler;
 
     VkDescriptorBufferInfo rbBuff;

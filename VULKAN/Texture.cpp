@@ -1,5 +1,7 @@
 #include "Texture.h"
 #include "Utils.h"
+#include "MemoryManager.h"
+
 #include <algorithm>
 
 void Read2DTextureData(SImageData& img, const std::string& filename, bool isSRGB)
@@ -58,8 +60,6 @@ void ReadLUTTextureData(SImageData& img, const std::string& filename, bool isSRG
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //CTextureManager
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-CTextureManager CTextureManager::ms_instance;
-
 CTextureManager::CTextureManager()
 {
 }
@@ -68,92 +68,113 @@ CTextureManager::~CTextureManager()
 {
 }
 
-CTextureManager* CTextureManager::GetInstance()
+void CTextureManager::RegisterTextureForCreation(TextureCreator* tc)
 {
-    return &ms_instance;
-}
-
-void CTextureManager::AddTextureWrapper(CWrapper* w)
-{
-    auto it = std::find(m_updateWrappers.begin(), m_updateWrappers.end(), w);
-    if(it != m_updateWrappers.end())
+	auto it = std::find(m_updateTextureCreators.begin(), m_updateTextureCreators.end(), tc);
+	if (it != m_updateTextureCreators.end())
         return;
 
-    m_updateWrappers.push_back(w);
+	m_updateTextureCreators.push_back(tc);
+}
+
+VkDeviceSize CTextureManager::EstimateMemory()
+{
+	VkDeviceSize totalSize = 0;
+	for (unsigned int i = 0; i < m_updateTextureCreators.size(); ++i)
+		totalSize += m_updateTextureCreators[i]->GetDataSize();
+
+	totalSize += m_updateTextureCreators.size() * vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment; //add some padding
+	return totalSize;
 }
 
 void CTextureManager::Update()
 {
-    if(!m_freeWrappers.empty())
+    if(!m_freeTextureCreators.empty())
     {
-        for(unsigned int i = 0; i < m_freeWrappers.size(); ++i)
-            delete m_freeWrappers[i];
+		for (unsigned int i = 0; i < m_freeTextureCreators.size(); ++i)
+			delete m_freeTextureCreators[i];
 
-        m_freeWrappers.clear();
+		m_freeTextureCreators.clear();
+		MemoryManager::GetInstance()->FreeMemory(EMemoryContextType::StaggingTextures);
     }
 
-    if (m_updateWrappers.empty())
+    if (m_updateTextureCreators.empty())
        return;
+
+	VkDeviceSize estimatedSize = EstimateMemory();
+	MemoryManager::GetInstance()->AllocMemory(EMemoryContextType::StaggingTextures, estimatedSize);
+
+	for (unsigned int i = 0; i < m_updateTextureCreators.size(); ++i)
+		m_updateTextureCreators[i]->Prepare();
 
     VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
 
-    std::vector<VkImageMemoryBarrier> imgBarries(m_updateWrappers.size());
-    std::vector<VkBufferMemoryBarrier> buffBarriers(m_updateWrappers.size());
+	std::vector<VkImageMemoryBarrier> imgBarries(m_updateTextureCreators.size());
+	std::vector<VkBufferMemoryBarrier> buffBarriers(m_updateTextureCreators.size());
+	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::StaggingTextures);
 
-    for(unsigned int i = 0; i < m_updateWrappers.size(); ++i)
+	MappedMemory* memMap = MemoryManager::GetInstance()->GetMappedMemory(EMemoryContextType::StaggingTextures);
+	for (unsigned int i = 0; i < m_updateTextureCreators.size(); ++i)
     {
-        AddBufferBarier(buffBarriers[i], m_updateWrappers[i]->GetBuffer(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-        AddImageBarrier(imgBarries[i], m_updateWrappers[i]->GetImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+		m_updateTextureCreators[i]->CopyLocalData(memMap);
+		buffBarriers[i] = m_updateTextureCreators[i]->GetBuffer()->CreateMemoryBarrier(VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+		imgBarries[i] = m_updateTextureCreators[i]->GetImage()->CreateMemoryBarrier(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
     vk::CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 
         (uint32_t)buffBarriers.size(), buffBarriers.data(), (uint32_t)imgBarries.size(), imgBarries.data());
 
-    for(unsigned int i = 0; i < m_updateWrappers.size(); ++i)
-    {
-        m_updateWrappers[i]->AddCopyCommand();
-        AddImageBarrier(imgBarries[i], m_updateWrappers[i]->GetImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 
-            VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+	MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::StaggingTextures);
 
-        m_freeWrappers.push_back(m_updateWrappers[i]);
+	for (unsigned int i = 0; i < m_updateTextureCreators.size(); ++i)
+    {
+		m_updateTextureCreators[i]->AddCopyCommand();
+		imgBarries[i] = m_updateTextureCreators[i]->GetImage()->CreateMemoryBarrier(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+		m_freeTextureCreators.push_back(m_updateTextureCreators[i]);
     }
 
     vk::CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, (uint32_t)imgBarries.size(), imgBarries.data());
-
-    m_updateWrappers.clear();
+	m_updateTextureCreators.clear();
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//CWrapper
+//TextureCreator
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-CWrapper::CWrapper(CTexture* text, const SImageData& imgData, bool ownData)
+TextureCreator::TextureCreator(CTexture* text, const SImageData& imgData, bool ownData)
+	: m_texture(text)
+	, m_data(imgData)
+	, m_ownData(ownData)
+	, m_staggingBuffer(nullptr)
 {
-    m_ownData = ownData;
-    m_data = imgData;
-    m_textureImage = text->m_textImage;
-
-    AllocBufferMemory(m_dataBuffer, m_dataMemory, m_data.GetDataSize(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-
-    unsigned char* data = nullptr;
-    VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_dataMemory, 0, VK_WHOLE_SIZE, 0, (void**)&data));
-
-    memcpy(data, m_data.data, m_data.GetDataSize());
-
-    vk::UnmapMemory(vk::g_vulkanContext.m_device, m_dataMemory);
 }
 
-VkImage& CWrapper::GetImage()
+TextureCreator::~TextureCreator()
 {
-    return m_textureImage;
+	VkDevice dev = vk::g_vulkanContext.m_device;
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::StaggingTextures, m_staggingBuffer);
+	
+	if (m_ownData)
+		delete[] m_data.data;
 }
 
-VkBuffer& CWrapper::GetBuffer()
+ImageHandle* TextureCreator::GetImage()
 {
-    return m_dataBuffer;
+    return m_texture->m_image;
 }
 
-void CWrapper::AddCopyCommand()
+BufferHandle* TextureCreator::GetBuffer()
+{
+	return m_staggingBuffer;
+}
+
+VkDeviceSize TextureCreator::GetDataSize()
+{
+	return m_data.GetDataSize();
+}
+
+void TextureCreator::AddCopyCommand()
 {
     VkCommandBuffer cmdBuff =  vk::g_vulkanContext.m_mainCommandBuffer;
 
@@ -179,29 +200,28 @@ void CWrapper::AddCopyCommand()
     copy.imageExtent = extent;
     copy.imageSubresource = subResourceLayers;
 
-    vk::CmdCopyBufferToImage(cmdBuff, m_dataBuffer, m_textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+
+	ImageHandle* textureImg = m_texture->m_image;
+	vk::CmdCopyBufferToImage(cmdBuff, m_staggingBuffer->Get(), textureImg->Get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 }
 
-CWrapper::~CWrapper()
+void TextureCreator::Prepare()
 {
-    VkDevice dev = vk::g_vulkanContext.m_device;
-    vk::FreeMemory(dev, m_dataMemory, nullptr);
-    vk::DestroyBuffer(dev, m_dataBuffer, nullptr);
+	m_staggingBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::StaggingTextures, m_data.GetDataSize(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+}
 
-    if (m_ownData)
-        delete [] m_data.data;
+void TextureCreator::CopyLocalData(MappedMemory* memMap)
+{
+	void* dst = memMap->GetPtr<void*>(m_staggingBuffer);
+	memcpy(dst, (void*)m_data.data, m_data.GetDataSize());
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//CWrapper
+//CTexture
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 
 CTexture::CTexture(const SImageData& image, bool ownData)
-    : m_textImage(VK_NULL_HANDLE)
-    , m_textMemory(VK_NULL_HANDLE)
-    , m_textImgView(VK_NULL_HANDLE)
-
+	: m_image(nullptr)
 {
     CreateTexture(image, ownData);
 }
@@ -216,9 +236,9 @@ VkDescriptorImageInfo& CTexture::GetTextureDescriptor()
     return m_textureInfo;
 }
 
-void CTexture::FinalizeTexture()
+VkImageView  CTexture::GetImageView() const
 {
-   
+	return m_image->GetView();
 }
 
 CTexture::~CTexture()
@@ -226,9 +246,7 @@ CTexture::~CTexture()
     VkDevice dev = vk::g_vulkanContext.m_device;
 
     vk::DestroySampler(dev, m_textSampler, nullptr);
-    vk::DestroyImageView(dev, m_textImgView, nullptr);
-    vk::DestroyImage(dev, m_textImage, nullptr);
-    vk::FreeMemory(dev, m_textMemory, nullptr);
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::Textures, m_image);
 
 }
 
@@ -263,47 +281,16 @@ void CTexture::CreateTexture(const SImageData& imageData, bool ownData)
     imgTextInfo.pQueueFamilyIndices = NULL;
     imgTextInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    unsigned int totalSize = imageData.GetDataSize();
-
-    VULKAN_ASSERT(vk::CreateImage(dev, &imgTextInfo, nullptr, &m_textImage));
-
-    AllocImageMemory(imgTextInfo, m_textImage, m_textMemory, imageData.fileName);
-
-    VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_1D;
-    if (type == VK_IMAGE_TYPE_2D)
-        viewType = VK_IMAGE_VIEW_TYPE_2D;
-    else if(type == VK_IMAGE_TYPE_3D)
-        viewType = VK_IMAGE_VIEW_TYPE_3D;
-
-    VkImageViewCreateInfo imgViewInfo;
-    cleanStructure(imgViewInfo);
-    imgViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    imgViewInfo.pNext = nullptr;
-    imgViewInfo.flags = 0;
-    imgViewInfo.viewType = viewType;
-    imgViewInfo.image = m_textImage;
-    imgViewInfo.format = format;
-    imgViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
-    imgViewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
-    imgViewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
-    imgViewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
-    imgViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    imgViewInfo.subresourceRange.baseMipLevel = 0;
-    imgViewInfo.subresourceRange.levelCount = 1;
-    imgViewInfo.subresourceRange.baseArrayLayer = 0;
-    imgViewInfo.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
-
-    VULKAN_ASSERT(vk::CreateImageView(dev, &imgViewInfo, nullptr, &m_textImgView));
+	m_image = MemoryManager::GetInstance()->CreateImage(EMemoryContextType::Textures, imgTextInfo, imageData.fileName);
 
     CreateLinearSampler(m_textSampler);
-
-    SetObjectDebugName(m_textImgView, std::string("View_") + imageData.fileName); //this doesn't create anything ??
+    SetObjectDebugName(m_image->GetView(), std::string("View_") + imageData.fileName); //this doesn't create anything ??
 
     m_textureInfo.sampler = m_textSampler;
-    m_textureInfo.imageView = m_textImgView;
+	m_textureInfo.imageView = m_image->GetView();
     m_textureInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-    CTextureManager::GetInstance()->AddTextureWrapper(new CWrapper(this, imageData, ownData));
+    CTextureManager::GetInstance()->RegisterTextureForCreation(new TextureCreator(this, imageData, ownData));
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////

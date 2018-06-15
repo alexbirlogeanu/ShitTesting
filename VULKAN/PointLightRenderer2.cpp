@@ -1,6 +1,7 @@
 #include "PointLightRenderer2.h"
 
 #include <random>
+#include "MemoryManager.h"
 
 struct PointLightParams
 {
@@ -47,9 +48,8 @@ PointLightRenderer2::PointLightRenderer2(VkRenderPass renderPass)
 	, m_tileShadingDescLayout(VK_NULL_HANDLE)
 	, m_resolveDescLayout(VK_NULL_HANDLE)
 	, m_resolveDescSet(VK_NULL_HANDLE)
-	, m_lightImage(VK_NULL_HANDLE)
-	, m_lightImageView(VK_NULL_HANDLE)
-	, m_lightImageMemory(VK_NULL_HANDLE)
+	, m_lightImage(nullptr)
+	, m_debugImage(nullptr)
 	, m_allocatedLights(0)
 {
 	PerspectiveMatrix(m_proj);
@@ -66,14 +66,8 @@ PointLightRenderer2::~PointLightRenderer2()
 	vk::DestroyDescriptorSetLayout(dev, m_tileShadingDescLayout, nullptr);
 	vk::DestroyDescriptorSetLayout(dev, m_resolveDescLayout, nullptr);
 
-	vk::DestroyImageView(dev, m_lightImageView, nullptr);
-	vk::DestroyImage(dev, m_lightImage, nullptr);
-	vk::FreeMemory(dev, m_lightImageMemory, nullptr);
-
-	vk::DestroyImageView(dev, m_debugImageView, nullptr);
-	vk::DestroyImage(dev, m_debugImage, nullptr);
-	vk::FreeMemory(dev, m_debugImageMemory, nullptr);
-	
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::Framebuffers, m_lightImage);
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::Framebuffers, m_debugImage);
 }
 
 void PointLightRenderer2::Init()
@@ -84,8 +78,8 @@ void PointLightRenderer2::Init()
 	AllocDescriptorSets(m_descriptorPool, m_tileShadingDescLayout, &m_tileShadingDescSet);
 	AllocDescriptorSets(m_descriptorPool, m_resolveDescLayout, &m_resolveDescSet);
 
-	CreateLightImage(m_lightImage, m_lightImageView, m_lightImageMemory);
-	CreateLightImage(m_debugImage, m_debugImageView, m_debugImageMemory);
+	m_lightImage = CreateLightImage();
+	m_debugImage = CreateLightImage();
 
 	m_tileShadingPipeline.SetComputeShaderFile("tileshading.comp");
 	m_tileShadingPipeline.CreatePipelineLayout(m_tileShadingDescLayout);
@@ -201,7 +195,7 @@ void PointLightRenderer2::ReallocLightsBuffer()
 	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, 1, &wDesc, 0, nullptr);
 }
 
-void PointLightRenderer2::CreateLightImage(VkImage& img, VkImageView& view, VkDeviceMemory& memory)
+ImageHandle* PointLightRenderer2::CreateLightImage()
 {
 	VkImageCreateInfo imgCrtInfo;
 	cleanStructure(imgCrtInfo);
@@ -221,28 +215,8 @@ void PointLightRenderer2::CreateLightImage(VkImage& img, VkImageView& view, VkDe
 	imgCrtInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	imgCrtInfo.queueFamilyIndexCount = 0;
 	imgCrtInfo.pQueueFamilyIndices = NULL;
-
-	AllocImageMemory(imgCrtInfo, img, memory, "TileShadingOutImage");
-
-	VkImageViewCreateInfo imgViewCrtInfo;
-	cleanStructure(imgViewCrtInfo);
-	imgViewCrtInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	imgViewCrtInfo.pNext = nullptr;
-	imgViewCrtInfo.flags = 0;
-	imgViewCrtInfo.image = img;
-	imgViewCrtInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-	imgViewCrtInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	imgViewCrtInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-	imgViewCrtInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-	imgViewCrtInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-	imgViewCrtInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-	imgViewCrtInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	imgViewCrtInfo.subresourceRange.baseMipLevel = 0;
-	imgViewCrtInfo.subresourceRange.levelCount = 1;
-	imgViewCrtInfo.subresourceRange.baseArrayLayer = 0;
-	imgViewCrtInfo.subresourceRange.layerCount = 1;
-
-	VULKAN_ASSERT(vk::CreateImageView(vk::g_vulkanContext.m_device, &imgViewCrtInfo, nullptr, &view));
+	
+	return MemoryManager::GetInstance()->CreateImage(EMemoryContextType::Framebuffers, imgCrtInfo, "TileShadingOutImage");
 }
 
 void PointLightRenderer2::PrepareLightImage()
@@ -254,8 +228,8 @@ void PointLightRenderer2::PrepareLightImage()
 
 	//layout transition
 	VkImageMemoryBarrier preClearBarrier[2];
-	AddImageBarrier(preClearBarrier[0], m_lightImage, currentLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, currentAcces, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-	AddImageBarrier(preClearBarrier[1], m_debugImage, currentLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, currentAcces, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+	preClearBarrier[0] = m_lightImage->CreateMemoryBarrier(currentLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, currentAcces, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+	preClearBarrier[1] = m_debugImage->CreateMemoryBarrier(currentLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, currentAcces, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 	vk::CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
 		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 2, preClearBarrier);
 
@@ -270,13 +244,13 @@ void PointLightRenderer2::PrepareLightImage()
 	range.levelCount = 1;
 	range.layerCount = VK_REMAINING_ARRAY_LAYERS;
 
-	vk::CmdClearColorImage(cmdBuffer, m_lightImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clrValue, 1, &range);
-	vk::CmdClearColorImage(cmdBuffer, m_debugImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clrValue, 1, &range);
+	vk::CmdClearColorImage(cmdBuffer, m_lightImage->Get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clrValue, 1, &range); //clear color maybe ??
+	vk::CmdClearColorImage(cmdBuffer, m_debugImage->Get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clrValue, 1, &range);
 
 	VkImageMemoryBarrier preWriteBarrier[2];
-	AddImageBarrier(preWriteBarrier[0], m_lightImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+	preWriteBarrier[0] = m_lightImage->CreateMemoryBarrier(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
 		VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-	AddImageBarrier(preWriteBarrier[1], m_debugImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+	preWriteBarrier[1] = m_debugImage->CreateMemoryBarrier(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
 		VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 
 	vk::CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 2, preWriteBarrier);
@@ -323,14 +297,14 @@ void PointLightRenderer2::UpdateResourceTable()
 
 void PointLightRenderer2::UpdateGraphicInterface()
 {
-	VkDescriptorImageInfo lightImageInfo = CreateDescriptorImageInfo(Sampler, m_lightImageView, VK_IMAGE_LAYOUT_GENERAL);
-	VkDescriptorImageInfo debugImageInfo = CreateDescriptorImageInfo(Sampler, m_debugImageView, VK_IMAGE_LAYOUT_GENERAL);
-	VkDescriptorImageInfo albedoImageInfo = CreateDescriptorImageInfo(Sampler, g_commonResources.GetAs<VkImageView>(EResourceType_AlbedoImageView), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	VkDescriptorImageInfo specularImageInfo = CreateDescriptorImageInfo(Sampler, g_commonResources.GetAs<VkImageView>(EResourceType_SpecularImageView), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	VkDescriptorImageInfo normalImageInfo = CreateDescriptorImageInfo(Sampler, g_commonResources.GetAs<VkImageView>(EResourceType_NormalsImageView), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	VkDescriptorImageInfo positionImageInfo = CreateDescriptorImageInfo(Sampler, g_commonResources.GetAs<VkImageView>(EResourceType_PositionsImageView), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	VkDescriptorImageInfo depthImageInfo = CreateDescriptorImageInfo(Sampler, g_commonResources.GetAs<VkImageView>(EResourceType_DepthBufferImageView), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-	VkDescriptorImageInfo resolveLightImgInfo = CreateDescriptorImageInfo(Sampler, m_lightImageView, VK_IMAGE_LAYOUT_GENERAL);
+	VkDescriptorImageInfo lightImageInfo = CreateDescriptorImageInfo(Sampler, m_lightImage->GetView(), VK_IMAGE_LAYOUT_GENERAL);
+	VkDescriptorImageInfo debugImageInfo = CreateDescriptorImageInfo(Sampler, m_debugImage->GetView(), VK_IMAGE_LAYOUT_GENERAL);
+	VkDescriptorImageInfo albedoImageInfo = CreateDescriptorImageInfo(Sampler, g_commonResources.GetAs<ImageHandle*>(EResourceType_AlbedoImage)->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkDescriptorImageInfo specularImageInfo = CreateDescriptorImageInfo(Sampler, g_commonResources.GetAs<ImageHandle*>(EResourceType_SpecularImage)->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkDescriptorImageInfo normalImageInfo = CreateDescriptorImageInfo(Sampler, g_commonResources.GetAs<ImageHandle*>(EResourceType_NormalsImage)->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkDescriptorImageInfo positionImageInfo = CreateDescriptorImageInfo(Sampler, g_commonResources.GetAs<ImageHandle*>(EResourceType_PositionsImage)->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkDescriptorImageInfo depthImageInfo = CreateDescriptorImageInfo(Sampler, g_commonResources.GetAs<ImageHandle*>(EResourceType_DepthBufferImage)->GetView(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+	VkDescriptorImageInfo resolveLightImgInfo = CreateDescriptorImageInfo(Sampler, m_lightImage->GetView(), VK_IMAGE_LAYOUT_GENERAL);
 
 	std::vector<VkWriteDescriptorSet> wDesc;
 	wDesc.push_back(InitUpdateDescriptor(m_tileShadingDescSet, 0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &lightImageInfo));

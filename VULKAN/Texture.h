@@ -6,8 +6,13 @@
 #include <vector>
 #include <string>
 #include "Utils.h"
+#include "Singleton.h"
 
 #define TEXTDIR "text/"
+
+class ImageHandle;
+class CTexture;
+class BufferHandle;
 
 struct SImageData
 {
@@ -45,45 +50,43 @@ struct SImageData
 void Read2DTextureData(SImageData& img, const std::string& filename, bool isSRGB = true);
 void ReadLUTTextureData(SImageData& img, const std::string& filename, bool isSRGB = true);
 
-class CWrapper;
+class TextureCreator;
 
-class CTextureManager
+class CTextureManager : public Singleton<CTextureManager>
 {
+	friend class Singleton<CTextureManager>;
 public:
-    virtual ~CTextureManager();
-
-    static CTextureManager* GetInstance();
-    void AddTextureWrapper(CWrapper* text);
+	void RegisterTextureForCreation(TextureCreator* text);
 
     void Update();
 private:
     CTextureManager();
+	virtual ~CTextureManager();
 
+	VkDeviceSize EstimateMemory();
 private:
-    static CTextureManager ms_instance;
-
-    std::vector<CWrapper*>  m_updateWrappers;
-    std::vector<CWrapper*>  m_freeWrappers;
+	std::vector<TextureCreator*>  m_updateTextureCreators;
+	std::vector<TextureCreator*>  m_freeTextureCreators;
 };
-class CTexture;
-class CWrapper
+
+class TextureCreator
 {
+	friend class CTexture;
 public:
-    VkImage&    GetImage();
-    VkBuffer&   GetBuffer() ;
+	virtual ~TextureCreator();
 
-    void            AddCopyCommand();
-    virtual ~CWrapper();
-    //void            CleanUp();
+    ImageHandle*		GetImage();
+	BufferHandle*		GetBuffer();
+	VkDeviceSize		GetDataSize();
+
+	void				Prepare(); //kinda shitty
+    void				AddCopyCommand();
+	void				CopyLocalData(MappedMemory* memMap);
 private:
-    friend class CTexture;
-
-    CWrapper(CTexture* text, const SImageData& imgData, bool ownData);
-    
-
-    VkImage                 m_textureImage;
-    VkBuffer                m_dataBuffer;
-    VkDeviceMemory          m_dataMemory;
+	TextureCreator(CTexture* text, const SImageData& imgData, bool ownData);
+private:
+	CTexture*				m_texture;
+	BufferHandle*			m_staggingBuffer;
 
     SImageData              m_data;
     bool                    m_ownData;
@@ -91,28 +94,20 @@ private:
 
 class CTexture
 {
+	friend class TextureCreator;
 public:
     CTexture(const SImageData& image, bool ownData = false);
     ~CTexture();
 
     const VkDescriptorImageInfo& GetTextureDescriptor() const;
     VkDescriptorImageInfo& GetTextureDescriptor();
-
-    void FinalizeTexture();
-
-    VkImageView  GetImageView() const { return m_textImgView; }
-
+	VkImageView  GetImageView() const;
 protected:
-    friend class CWrapper;
-
     //void CleanUp();
     void CreateTexture(const SImageData& imageData, bool ownData);
 protected:
-    VkImage                 m_textImage;
-    VkImageView             m_textImgView;
-    VkDeviceMemory          m_textMemory;
+	ImageHandle*			m_image;
     VkSampler               m_textSampler;
-
     VkDescriptorImageInfo   m_textureInfo;
 };
 
