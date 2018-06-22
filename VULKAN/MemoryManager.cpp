@@ -36,6 +36,13 @@ VkBufferMemoryBarrier BufferHandle::CreateMemoryBarrier(VkAccessFlags srcAccess,
 	return barrier;
 }
 
+
+VkDescriptorBufferInfo BufferHandle::GetDescriptor() const
+{
+	VkDescriptorBufferInfo descriptor{ m_vkHandle, m_offset, m_size };
+	return descriptor;
+}
+
 void BufferHandle::FreeResources()
 {
 	if (m_parent == nullptr)
@@ -397,6 +404,7 @@ MemoryManager::MemoryManager()
 	m_memoryContexts[(unsigned int)EMemoryContextType::DeviceLocalBuffer]->AllocateMemory(30 << 20, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	m_memoryContexts[(unsigned int)EMemoryContextType::Framebuffers]->AllocateMemory(256 << 20, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	m_memoryContexts[(unsigned int)EMemoryContextType::Textures]->AllocateMemory(256 << 20, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	m_memoryContexts[(unsigned int)EMemoryContextType::UniformBuffers]->AllocateMemory(64 << 20, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 }
 
 MemoryManager::~MemoryManager()
@@ -416,6 +424,16 @@ BufferHandle* MemoryManager::CreateBuffer(EMemoryContextType context, VkDeviceSi
 	
 	TRAP(false && "Trying to create a buffer in an image memory context!");
 	return nullptr;
+}
+
+BufferHandle* MemoryManager::CreateBuffer(EMemoryContextType context, std::vector<VkDeviceSize> sizes, VkBufferUsageFlags usage)
+{
+	VkDeviceSize totalSize = 0;
+	VkDeviceSize minAllign = vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment;
+	for (auto size : sizes)
+		totalSize += (size / minAllign + 1) * minAllign;
+
+	return CreateBuffer(context, totalSize, usage);
 }
 
 ImageHandle* MemoryManager::CreateImage(EMemoryContextType context, const VkImageCreateInfo& imgInfo, const std::string& debugName)

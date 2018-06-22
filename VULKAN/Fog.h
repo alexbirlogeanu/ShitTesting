@@ -4,6 +4,7 @@
 #include "VulkanLoader.h"
 
 class Mesh;
+class BufferHandle;
 class CFogRenderer : public CRenderer
 {
 public:
@@ -12,7 +13,7 @@ public:
 
     virtual void Init() override;
     virtual void Render() override;
-
+	virtual void PreRender() override;
 protected:
     virtual void CreateDescriptorSetLayout() override;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>&, unsigned int& maxSets) override;
@@ -22,8 +23,7 @@ private:
     VkDescriptorSet             m_descriptorSet;
     VkSampler                   m_sampler;
 
-    VkBuffer                    m_fogParamsBuffer;
-    VkDeviceMemory              m_fogParamsMemory;
+    BufferHandle*               m_fogParamsBuffer;
 
     CGraphicPipeline			m_pipline;
     Mesh*                       m_quad;

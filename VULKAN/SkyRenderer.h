@@ -34,6 +34,7 @@ public:
 
     virtual void Init() override;
     virtual void Render() override;
+	virtual void PreRender() override;
 
     void SetSunTexture(CTexture* t) { m_sunTexture = t; UpdateSunDescriptors(); }
     bool RegisterPick(unsigned int key);
@@ -74,11 +75,8 @@ protected:
     VkDescriptorSetLayout       m_sunDescriptorSetLayout;
     VkDescriptorSetLayout       m_radialBlurSetLayout;
 
-    VkBuffer                    m_sunParamsBuffer;
-    VkDeviceMemory              m_sunParamsMemory;
-
-    VkBuffer                    m_radialBlurParamsBuffer;
-    VkDeviceMemory              m_radialBlurParamsMemory;
+    BufferHandle*               m_sunParamsBuffer;
+	BufferHandle*               m_radialBlurParamsBuffer;
 
     VkDescriptorSet             m_blurVDescSet;
     VkDescriptorSet             m_blurHDescSet;

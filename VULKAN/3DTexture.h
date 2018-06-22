@@ -16,6 +16,7 @@
 class Mesh;
 class CTexture;
 class ImageHandle;
+class BufferHandle;
 class C3DTextureRenderer : public CRenderer //give a proper name
 {
 public:
@@ -24,6 +25,7 @@ public:
 
     virtual void Init() override;
     virtual void Render() override;
+	virtual void PreRender() override;
 
     VkImageView GetOutTexture() const { return m_outTexture->GetView(); } //TODO rename function
 protected:
@@ -61,8 +63,8 @@ private:
 
     CTexture*                   m_patternTexture;
     
-    VkBuffer                    m_uniformBuffer;
-    VkDeviceMemory              m_uniformMemory;
+    BufferHandle*               m_uniformBuffer;
+    //VkDeviceMemory              m_uniformMemory;
 
     CComputePipeline            m_generatePipeline;
     VkDescriptorSetLayout       m_generateDescLayout;
@@ -79,6 +81,7 @@ public:
 
     virtual void Init() override;
     virtual void Render() override;
+	virtual void PreRender() override;
 protected:
     virtual void CreateDescriptorSetLayout() override;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override;
@@ -97,8 +100,7 @@ private:
     VkDescriptorSetLayout   m_volumetricDescLayout;
     VkDescriptorSet         m_volumetricDescSet;
 
-    VkBuffer                m_uniformBuffer;
-    VkDeviceMemory          m_uniformMemory;
+    BufferHandle*           m_uniformBuffer;
 
     VkSampler               m_sampler;
     Mesh*                   m_cube;

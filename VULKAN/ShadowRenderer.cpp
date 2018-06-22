@@ -19,7 +19,6 @@ struct ShadowMapParams
 ShadowMapRenderer::ShadowMapRenderer(VkRenderPass renderPass, const std::vector<Object*>& shadowCasters)
     : CRenderer(renderPass, "ShadowmapRenderPass")
     , m_instanceBuffer(VK_NULL_HANDLE)
-    , m_instaceMemory(VK_NULL_HANDLE)
 {
     m_nodes.reserve(shadowCasters.size());
     for (auto caster : shadowCasters)
@@ -30,10 +29,7 @@ ShadowMapRenderer::ShadowMapRenderer(VkRenderPass renderPass, const std::vector<
 
 ShadowMapRenderer::~ShadowMapRenderer()
 {
-    VkDevice dev = vk::g_vulkanContext.m_device;
-
-    vk::FreeMemory(dev, m_instaceMemory, nullptr);
-    vk::DestroyBuffer(dev, m_instanceBuffer, nullptr);
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_instanceBuffer);
 }
 
 void ShadowMapRenderer::Init()
@@ -120,28 +116,20 @@ void ShadowMapRenderer::InitNodesDescriptorSet()
 
 void ShadowMapRenderer::InitNodesMemory()
 {
-    VkDeviceSize memOffset = vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment; 
-    TRAP(memOffset > sizeof(ShadowMapParams) && "Change mem offset");
-    AllocBufferMemory(m_instanceBuffer, m_instaceMemory,uint32_t( m_nodes.size() * memOffset), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-
+	m_instanceBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, std::vector<VkDeviceSize>(m_nodes.size(), sizeof(ShadowMapParams)), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
     for (unsigned int i = 0; i < m_nodes.size(); ++i)
     {
-        m_nodes[i].offset = i * memOffset;
+        m_nodes[i].buffer = m_instanceBuffer->CreateSubbuffer(sizeof(ShadowMapParams));
     }
 }
 
 void ShadowMapRenderer::UpdateShaderParams()
 {
-    void* memPtr = nullptr;
-    VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_instaceMemory, 0, VK_WHOLE_SIZE, 0, &memPtr));
-
     for (auto& node : m_nodes)
     {
-        ShadowMapParams* params = (ShadowMapParams*)((char*)memPtr + node.offset);
+        ShadowMapParams* params = node.buffer->GetPtr<ShadowMapParams*>();
         params->MVP = m_shadowViewProj * node.obj->GetModelMatrix();
     }
-
-    vk::UnmapMemory(vk::g_vulkanContext.m_device, m_instaceMemory);
 }
 
 void ShadowMapRenderer::UpdateGraphicInterface()
@@ -154,11 +142,27 @@ void ShadowMapRenderer::UpdateGraphicInterface()
 
     for (auto& node : m_nodes)
     {
-        buffInfos.push_back(CreateDescriptorBufferInfo(m_instanceBuffer, node.offset, sizeof(ShadowMapParams)));
+        buffInfos.push_back(node.buffer->GetDescriptor());
         wDesc.push_back(InitUpdateDescriptor(node.descSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfos.back()));
     }
 
     vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
+}
+
+void ShadowMapRenderer::PreRender()
+{
+	glm::vec3 lightDir(directionalLight.GetDirection());
+	glm::vec3 eye = ms_camera.GetPos() - 1.0f * lightDir;
+
+	glm::vec3 right = glm::cross(lightDir, glm::vec3(0.0f, 1.0f, 0.0f));
+	glm::mat4 view = glm::lookAt(eye, ms_camera.GetPos(), glm::cross(lightDir, right));
+	glm::mat4 proj;
+	ComputeProjMatrix(proj, view);
+
+	//= glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.1f, 25.0f);
+	m_shadowViewProj = proj * view;
+
+	UpdateShaderParams();
 }
 
 void ShadowMapRenderer::Render()
@@ -169,20 +173,6 @@ void ShadowMapRenderer::Render()
     VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
 
     vk::CmdBindPipeline(cmd, m_pipeline.GetBindPoint(), m_pipeline.Get());
-
-    glm::vec3 lightDir (directionalLight.GetDirection());
-    glm::vec3 eye = ms_camera.GetPos() - 1.0f * lightDir;
-
-    glm::vec3 right = glm::cross(lightDir, glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 view = glm::lookAt(eye, ms_camera.GetPos(), glm::cross(lightDir, right));
-    glm::mat4 proj;
-    ComputeProjMatrix(proj, view);
-
-    //= glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.1f, 25.0f);
-    m_shadowViewProj = proj * view;
-    
-    UpdateShaderParams();
-
     for (auto& node : m_nodes)
     {
         vk::CmdBindDescriptorSets(cmd, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, 1, &node.descSet, 0, nullptr); //try to bind just once
@@ -228,7 +218,6 @@ CShadowResolveRenderer::CShadowResolveRenderer(VkRenderPass renderpass)
     , m_depthSampler(VK_NULL_HANDLE)
     , m_descriptorLayout(VK_NULL_HANDLE)
     , m_descriptorSet(VK_NULL_HANDLE)
-    , m_uniformMemory(VK_NULL_HANDLE)
     , m_uniformBuffer(VK_NULL_HANDLE)
     , m_linearSampler(VK_NULL_HANDLE)
     , m_nearSampler(VK_NULL_HANDLE)
@@ -254,8 +243,7 @@ CShadowResolveRenderer::~CShadowResolveRenderer()
 #ifdef USE_SHADOW_BLUR
     vk::DestroyDescriptorSetLayout(dev, m_blurSetLayout, nullptr);
 #endif
-    vk::FreeMemory(dev, m_uniformMemory, nullptr);
-    vk::DestroyBuffer(dev, m_uniformBuffer, nullptr);
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_uniformBuffer);
 
     delete m_PCFDistrText;
     delete m_blockerDistrText;
@@ -293,8 +281,7 @@ void CShadowResolveRenderer::Init()
 
     VULKAN_ASSERT(vk::CreateSampler(vk::g_vulkanContext.m_device, &samplerDepthCreateInfo, nullptr, &m_depthSampler));
 
-    AllocBufferMemory(m_uniformBuffer, m_uniformMemory, sizeof(ShadowResolveParameters), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-
+	m_uniformBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(ShadowResolveParameters), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
     m_quad = CreateFullscreenQuad();
 
     unsigned int width = m_framebuffer->GetWidth();
@@ -320,9 +307,13 @@ void CShadowResolveRenderer::Init()
 #endif
 }
 
+void CShadowResolveRenderer::PreRender()
+{
+	UpdateShaderParams();
+}
+
 void CShadowResolveRenderer::Render()
 {
-    UpdateShaderParams();
     StartRenderPass();
     VkCommandBuffer cmdBuff = vk::g_vulkanContext.m_mainCommandBuffer;
     vk::CmdBindPipeline(cmdBuff, m_pipeline.GetBindPoint(), m_pipeline.Get());
@@ -349,12 +340,10 @@ void CShadowResolveRenderer::UpdateShaderParams()
 {
     glm::mat4 shadowProj = g_commonResources.GetAs<glm::mat4>(EResourceType_ShadowProjViewMat);
 
-    ShadowResolveParameters* params = nullptr;
-    VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_uniformMemory, 0, VK_WHOLE_SIZE,0, (void**)&params));
+    ShadowResolveParameters* params = m_uniformBuffer->GetPtr<ShadowResolveParameters*>();
     params->ShadowProjMatrix = shadowProj;
     params->LightDirection = directionalLight.GetDirection();
     params->CameraPosition = glm::vec4(ms_camera.GetPos(), 1.0f);
-    vk::UnmapMemory(vk::g_vulkanContext.m_device, m_uniformMemory);
 }
 
 void CShadowResolveRenderer::UpdateGraphicInterface()
@@ -366,7 +355,7 @@ void CShadowResolveRenderer::UpdateGraphicInterface()
     VkDescriptorImageInfo normalInfo = CreateDescriptorImageInfo(m_nearSampler, normalImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     VkDescriptorImageInfo posInfo = CreateDescriptorImageInfo(m_nearSampler, positionImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     VkDescriptorImageInfo shadowhInfo = CreateDescriptorImageInfo(m_depthSampler, shadowMapImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    VkDescriptorBufferInfo constInfo = CreateDescriptorBufferInfo(m_uniformBuffer);
+	VkDescriptorBufferInfo constInfo = m_uniformBuffer->GetDescriptor();
     VkDescriptorImageInfo shadowText = CreateDescriptorImageInfo(m_nearSampler, shadowMapImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     VkDescriptorImageInfo blockerDistText = CreateDescriptorImageInfo(m_nearSampler, m_blockerDistrText->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     VkDescriptorImageInfo pcfDistText = CreateDescriptorImageInfo(m_nearSampler, m_PCFDistrText->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);

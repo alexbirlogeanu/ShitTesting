@@ -6,7 +6,6 @@
 #include "MeshLoader.h"
 #include "MemoryManager.h"
 
-void AllocBufferMemory(VkBuffer& buffer, VkDeviceMemory& memory, uint32_t size, VkBufferUsageFlags usage);
 
 ////////////////////////////////////////////////////////////////////////////////////////
 //TransferMeshInfo

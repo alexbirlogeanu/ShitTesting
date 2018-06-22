@@ -42,8 +42,7 @@ void PointLight::Fill(PointLightParams& params, const glm::mat4& view) const //t
 
 PointLightRenderer2::PointLightRenderer2(VkRenderPass renderPass)
 	: CRenderer(renderPass, "DeferredTileShadingPass")
-	, m_lightsBuffer(VK_NULL_HANDLE)
-	, m_lightsMemory(VK_NULL_HANDLE)
+	, m_lightsBuffer(nullptr)
 	, m_tileShadingDescSet(VK_NULL_HANDLE)
 	, m_tileShadingDescLayout(VK_NULL_HANDLE)
 	, m_resolveDescLayout(VK_NULL_HANDLE)
@@ -60,8 +59,7 @@ PointLightRenderer2::~PointLightRenderer2()
 {
 	VkDevice dev = vk::g_vulkanContext.m_device;
 
-	vk::FreeMemory(dev, m_lightsMemory, nullptr);
-	vk::DestroyBuffer(dev, m_lightsBuffer, nullptr);
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_lightsBuffer);
 
 	vk::DestroyDescriptorSetLayout(dev, m_tileShadingDescLayout, nullptr);
 	vk::DestroyDescriptorSetLayout(dev, m_resolveDescLayout, nullptr);
@@ -110,9 +108,13 @@ void PointLightRenderer2::Init()
 	
 }
 
-void PointLightRenderer2::Render()
+void PointLightRenderer2::PreRender()
 {
 	UpdateLightsBuffer();
+}
+
+void PointLightRenderer2::Render()
+{
 	BeginMarkerSection("DeferredTileShading");
 	PrepareLightImage();
 	VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
@@ -154,8 +156,7 @@ void PointLightRenderer2::UpdateLightsBuffer()
 		ReallocLightsBuffer();
 
 	//update view matrix and all the lights
-	void* ptr = nullptr;
-	VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_lightsMemory, 0, VK_WHOLE_SIZE, 0, &ptr));
+	void* ptr = m_lightsBuffer->GetPtr<void*>();
 	//first must to update the global params
 	GlobalParams* gParams = (GlobalParams*)ptr;
 	gParams->InvProjectionMatrix = glm::inverse(m_proj);
@@ -171,25 +172,21 @@ void PointLightRenderer2::UpdateLightsBuffer()
 	{
 		m_lights[i].Fill(lightsStart[i], view);
 	}
-
-	vk::UnmapMemory(vk::g_vulkanContext.m_device, m_lightsMemory);
 }
 
 void PointLightRenderer2::ReallocLightsBuffer()
 {
-	if (m_lightsBuffer != VK_NULL_HANDLE)
+	if (m_lightsBuffer != nullptr)
 	{
-		TRAP(m_lightsMemory != VK_NULL_HANDLE);
 		VkDevice dev = vk::g_vulkanContext.m_device;
-		vk::FreeMemory(dev, m_lightsMemory, nullptr);
-		vk::DestroyBuffer(dev, m_lightsBuffer, nullptr);
+		MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_lightsBuffer);
 
 	}
 
-	uint32_t reqSize = sizeof(GlobalParams) + (uint32_t)m_lights.capacity() * sizeof(PointLightParams); /*this is the number of active lights(look in tileshading.comp shader)*/
-	AllocBufferMemory(m_lightsBuffer, m_lightsMemory, reqSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-
-	VkDescriptorBufferInfo lightsBufferInfo = CreateDescriptorBufferInfo(m_lightsBuffer);
+	std::vector<VkDeviceSize> sizes((uint32_t)m_lights.capacity(), sizeof(PointLightParams));
+	sizes.push_back(sizeof(GlobalParams));
+	m_lightsBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+	VkDescriptorBufferInfo lightsBufferInfo = m_lightsBuffer->GetDescriptor();
 	VkWriteDescriptorSet wDesc = InitUpdateDescriptor(m_tileShadingDescSet, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &lightsBufferInfo);
 
 	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, 1, &wDesc, 0, nullptr);

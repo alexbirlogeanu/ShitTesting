@@ -9,7 +9,6 @@ CSunRenderer::CSunRenderer(VkRenderPass renderPass)
     , m_radialBlurSetLayout(VK_NULL_HANDLE)
     , m_sunDescriptorSetLayout(VK_NULL_HANDLE)
     , m_sunDescriptorSet(VK_NULL_HANDLE)
-    , m_sunParamsMemory(VK_NULL_HANDLE)
     , m_sunParamsBuffer(VK_NULL_HANDLE)
     , m_radialBlurParamsBuffer(VK_NULL_HANDLE)
     , m_blurHDescSet(VK_NULL_HANDLE)
@@ -37,11 +36,7 @@ CSunRenderer::~CSunRenderer()
     vk::DestroyDescriptorSetLayout(dev, m_sunDescriptorSetLayout, nullptr);
     vk::DestroySampler(dev, m_sampler, nullptr);
 
-    vk::FreeMemory(dev, m_sunParamsMemory, nullptr);
-    vk::DestroyBuffer(dev, m_sunParamsBuffer, nullptr);
-
-    vk::FreeMemory(dev, m_radialBlurParamsMemory, nullptr);
-    vk::DestroyBuffer(dev, m_radialBlurParamsBuffer, nullptr);
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_sunParamsBuffer->GetRootParent()); //i dont like this style. 
 
     //delete m_quad;
 }
@@ -57,8 +52,10 @@ void CSunRenderer::Init()
     AllocDescriptorSets(m_descriptorPool, m_blurSetLayout, &m_blurHDescSet);
     AllocDescriptorSets(m_descriptorPool, m_radialBlurSetLayout, &m_blurRadialDescSet);
 
-    AllocBufferMemory(m_sunParamsBuffer, m_sunParamsMemory, sizeof(SSunParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-    AllocBufferMemory(m_radialBlurParamsBuffer, m_radialBlurParamsMemory, sizeof(SRadialBlurParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	VkDeviceSize totalSize = sizeof(SSunParams) + sizeof(SRadialBlurParams);
+	BufferHandle* bigBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, { sizeof(SSunParams), sizeof(SRadialBlurParams) }, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	m_sunParamsBuffer = bigBuffer->CreateSubbuffer(sizeof(SSunParams));
+	m_radialBlurParamsBuffer = bigBuffer->CreateSubbuffer(sizeof(SRadialBlurParams));
 
     unsigned int width = m_framebuffer->GetWidth();
     unsigned int height = m_framebuffer->GetHeight();
@@ -78,7 +75,6 @@ void CSunRenderer::Init()
         pipeline.CreatePipelineLayout(layout);
         pipeline.Init(this, m_renderPass, subpass);
     };
-
    
     initPipeline(m_blurVPipeline, ESunPass_BlurV, "screenquad.vert", "vblur.frag", m_blurSetLayout);
     initPipeline(m_blurHPipeline, ESunPass_BlurH, "screenquad.vert", "hblur.frag", m_blurSetLayout);
@@ -96,10 +92,13 @@ void CSunRenderer::Init()
     m_quad = CreateFullscreenQuad();
 }
 
+void CSunRenderer::PreRender()
+{
+	UpdateShaderParams();
+}
+
 void CSunRenderer::Render()
 {
-    UpdateShaderParams();
-
     StartRenderPass();
     VkCommandBuffer cmdBuf = vk::g_vulkanContext.m_mainCommandBuffer;
     auto renderPipeline = [&](CGraphicPipeline& pipline, VkDescriptorSet& set) {
@@ -157,13 +156,9 @@ void CSunRenderer::UpdateGraphicInterface()
 	depthImg.imageView = depthBuffer->GetView();
     depthImg.sampler = m_neareastSampler;
 
-    VkDescriptorBufferInfo rbBuff;
-    rbBuff.buffer = m_radialBlurParamsBuffer;
-    rbBuff.offset = 0;
-    rbBuff.range = VK_WHOLE_SIZE;
+	VkDescriptorBufferInfo rbBuff = m_radialBlurParamsBuffer->GetDescriptor();
 
     std::vector<VkWriteDescriptorSet> wDesc;
-    
     wDesc.push_back(InitUpdateDescriptor(m_blurVDescSet, 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &wSuntImg));
     wDesc.push_back(InitUpdateDescriptor(m_blurHDescSet, 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &wBlurVImg));
     wDesc.push_back(InitUpdateDescriptor(m_blurRadialDescSet, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &wBlurHImg));
@@ -297,11 +292,7 @@ void CSunRenderer::CreateDescriptorSetLayout()
 
 void CSunRenderer::UpdateSunDescriptors()
 {
-    VkDescriptorBufferInfo wBuffer;
-    cleanStructure(wBuffer);
-    wBuffer.buffer = m_sunParamsBuffer;
-    wBuffer.offset = 0;
-    wBuffer.range = VK_WHOLE_SIZE;
+    VkDescriptorBufferInfo wBuffer = m_sunParamsBuffer->GetDescriptor();
 
     VkDescriptorImageInfo wImg = m_sunTexture->GetTextureDescriptor();
 
@@ -322,9 +313,7 @@ void CSunRenderer::UpdateShaderParams()
     //proj = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.1f, 50.0f);
     ConvertToProjMatrix(proj);
 
-    SSunParams* sunParams = nullptr;
-
-    VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_sunParamsMemory, 0, VK_WHOLE_SIZE, 0, (void**)&sunParams));
+    SSunParams* sunParams = m_sunParamsBuffer->GetPtr<SSunParams*>();
     sunParams->Scale = glm::vec4(m_sunScale, 0.0f, fbWidth, fbHeight);
     sunParams->LightDir = -directionalLight.GetDirection();
     sunParams->LightColor = directionalLight.GetLightIradiance();
@@ -333,21 +322,18 @@ void CSunRenderer::UpdateShaderParams()
     sunParams->ProjMatrix = proj;
     sunParams->CameraRight = glm::vec4(ms_camera.GetRightVector(), 0.0f);
     sunParams->CameraUp = glm::vec4(ms_camera.GetUpVector(), 0.0f);
-    vk::UnmapMemory(vk::g_vulkanContext.m_device, m_sunParamsMemory);
 
     static const float farDist = 20.0f;
     glm::vec4 sunPos = proj * ms_camera.GetViewMatrix() * glm::vec4(glm::vec3(-directionalLight.GetDirection()) * farDist, 1.0f);
     sunPos = sunPos / sunPos.w;
 
-    SRadialBlurParams* rbParams = nullptr;
-    VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_radialBlurParamsMemory, 0, VK_WHOLE_SIZE, 0, (void**)&rbParams));
+    SRadialBlurParams* rbParams = m_radialBlurParamsBuffer->GetPtr<SRadialBlurParams*>();
     rbParams->ProjSunPos = sunPos;
     rbParams->LightDensity = glm::vec4(m_lightShaftDensity);
     rbParams->LightDecay = glm::vec4(m_lightShaftDecay);
     rbParams->LightExposure = glm::vec4(m_lightShaftExposure);
     rbParams->SampleWeight = glm::vec4(m_lightShaftWeight);
     rbParams->ShaftSamples = glm::vec4(m_lightShaftSamples);
-    vk::UnmapMemory(vk::g_vulkanContext.m_device, m_radialBlurParamsMemory);
 
     m_renderSun = glm::all(glm::greaterThanEqual(glm::vec3(sunPos), glm::vec3(-1.5f))) && glm::all(glm::lessThanEqual(glm::vec3(sunPos), glm::vec3(1.5f)));
 }

@@ -10,7 +10,7 @@
 #include <string>
 
 #define MAX_PARTICLES_PER_SYSTEM 100
-
+class BufferHandle;
 class CParticle
 {
 public:
@@ -173,6 +173,7 @@ public:
 
     void Render() override;
     virtual void Init() override;
+	virtual void PreRender() override;
 
     void ToggleSim() { m_simPaused = !m_simPaused; }
 
@@ -214,11 +215,8 @@ protected:
     VkPipelineLayout                    m_computePipelineLayout;
     CGraphicPipeline                           m_graphicPipeline;
 
-    VkBuffer                            m_updateParticlesGlobalBuffer;
-    VkDeviceMemory                      m_updateParticlesGlobalMemory;
-
-    VkBuffer                            m_renderParticlesGlobalBuffer;
-    VkDeviceMemory                      m_renderParticlesGlobalMemory;
+    BufferHandle*                       m_updateParticlesGlobalBuffer;
+	BufferHandle*						m_renderParticlesGlobalBuffer;
 
     Mesh*                               m_quad;
 

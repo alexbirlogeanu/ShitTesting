@@ -483,10 +483,8 @@ CUIRenderer::CUIRenderer(VkRenderPass renderPass)
     : CRenderer(renderPass, "UIRenderPass")
     , m_sampler(VK_NULL_HANDLE)
     , m_uiItemDescLayout(VK_NULL_HANDLE)
-    , m_uiItemUniformBuffer(VK_NULL_HANDLE)
-    , m_uiItemUniformMemory(VK_NULL_HANDLE)
-    , m_commonUniformBuffer(VK_NULL_HANDLE)
-    , m_commonUniformMemory(VK_NULL_HANDLE)
+    , m_uiItemUniformBuffer(nullptr)
+    , m_commonUniformBuffer(nullptr)
     , m_commonDescSetLayout(VK_NULL_HANDLE)
     , m_commonDescSet(VK_NULL_HANDLE)
     , m_usedFont(nullptr)
@@ -496,36 +494,36 @@ CUIRenderer::CUIRenderer(VkRenderPass renderPass)
 
 CUIRenderer::~CUIRenderer()
 {
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_commonUniformBuffer->GetRootParent());
+}
+
+void CUIRenderer::PreRender()
+{
+	if (m_needUpdateCommon)
+		UpdateCommonDescSet();
+
+	UpdateCommonParams();
+	{
+		for (unsigned int i = 0; i < m_uiNodes.size(); ++i)
+		{
+			if (m_uiNodes[i].IsValid())
+			{
+				glm::uvec2 pos = m_uiNodes[i].uiItem->GetPosition();
+				UiItemsShaderParams& params = m_uiNodes[i].uiParams;
+				if (params.IsDirty(pos))
+				{
+					params.ScreenPosition.x = (float)pos.x;
+					params.ScreenPosition.y = (float)pos.y;
+
+					memcpy(m_uiNodes[i].buffer->GetPtr<UiItemsShaderParams*>(), &params, sizeof(UiItemsShaderParams));
+				}
+			}
+		}
+	}
 }
 
 void CUIRenderer::Render()
 {
-    if(m_needUpdateCommon)
-        UpdateCommonDescSet();
-
-    UpdateCommonParams();
-    {
-        void* ptr;
-        VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_uiItemUniformMemory, 0, VK_WHOLE_SIZE, 0, &ptr));
-        for(unsigned int i = 0; i < m_uiNodes.size(); ++i)
-        {
-            if(m_uiNodes[i].IsValid())
-            {
-                glm::uvec2 pos = m_uiNodes[i].uiItem->GetPosition();
-                UiItemsShaderParams& params = m_uiNodes[i].uiParams;
-                if(params.IsDirty(pos))
-                {
-                    params.ScreenPosition.x = (float)pos.x;
-                    params.ScreenPosition.y = (float)pos.y;
-
-                    memcpy((unsigned char*)ptr + m_uiNodes[i].buffOffset, &params, sizeof(UiItemsShaderParams));
-                }
-            }
-        }
-
-        vk::UnmapMemory(vk::g_vulkanContext.m_device, m_uiItemUniformMemory);
-    }
-
     StartRenderPass();
     VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
     vk::CmdBindPipeline(cmdBuffer, m_textElemPipeline.GetBindPoint(), m_textElemPipeline.Get());
@@ -661,11 +659,12 @@ void CUIRenderer::Init()
         AllocDescriptorSets(m_descriptorPool, layouts, m_uiItemDescSet);
 
     }
-
-    AllocBufferMemory(m_commonUniformBuffer, m_commonUniformMemory, sizeof(CommonShaderParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-    uint64_t memAllign = vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment;
-    TRAP(sizeof(UiItemsShaderParams) < memAllign);
-    AllocBufferMemory(m_uiItemUniformBuffer, m_uiItemUniformMemory, uint32_t(MAXUIITEMS * memAllign), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	uint64_t memAllign = vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment;
+	std::vector<VkDeviceSize> sizes(MAXUIITEMS, memAllign);
+	sizes.push_back(sizeof(CommonShaderParams));
+	BufferHandle* memoryBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizes, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	m_commonUniformBuffer = memoryBuffer->CreateSubbuffer(sizeof(CommonShaderParams));
+	m_uiItemUniformBuffer = memoryBuffer->CreateSubbuffer(uint32_t(MAXUIITEMS * memAllign));
 
     CreateNearestSampler(m_sampler);
     UpdateUIItemsDescSet();
@@ -720,13 +719,9 @@ void CUIRenderer::UpdateUIItemsDescSet()
     for(unsigned int i = 0; i < m_uiNodes.size(); ++i)
     {
         m_uiNodes[i].descSet = m_uiItemDescSet[i];
-        m_uiNodes[i].buffOffset = i * memAllign;
-
-        cleanStructure(wBufferInfo[i]);
-        wBufferInfo[i].buffer = m_uiItemUniformBuffer;
-        wBufferInfo[i].offset = i * memAllign;
-        wBufferInfo[i].range = sizeof(UiItemsShaderParams);
-
+		m_uiNodes[i].buffer = m_uiItemUniformBuffer->CreateSubbuffer(sizeof(UiItemsShaderParams));
+		
+		wBufferInfo[i] = m_uiNodes[i].buffer->GetDescriptor();
         wDescSets[i] = InitUpdateDescriptor( m_uiItemDescSet[i], 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &wBufferInfo[i]);
     }
 
@@ -738,11 +733,7 @@ void CUIRenderer::UpdateUIItemsDescSet()
      TRAP(m_needUpdateCommon);
      TRAP(m_usedFont);
 
-     VkDescriptorBufferInfo wBufferInfo;
-     cleanStructure(wBufferInfo);
-     wBufferInfo.buffer = m_commonUniformBuffer;
-     wBufferInfo.offset = 0;
-     wBufferInfo.range = sizeof(CommonShaderParams);
+	 VkDescriptorBufferInfo wBufferInfo = m_commonUniformBuffer->GetDescriptor();
 
      VkDescriptorImageInfo wImageInfo;
      cleanStructure(wImageInfo);
@@ -762,16 +753,10 @@ void CUIRenderer::UpdateUIItemsDescSet()
 
 void CUIRenderer::UpdateCommonParams()
 {
-    void* ptr;
-    CommonShaderParams params;
-    params.ScreenSize.x = (float)WIDTH;
-    params.ScreenSize.y = (float)HEIGHT;
-    params.ProjViewMatrix = m_projMatrix * ms_camera.GetViewMatrix();
-
-    VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_commonUniformMemory, 0, VK_WHOLE_SIZE, 0, &ptr));
-    memcpy(ptr, &params, sizeof(params));
-    vk::UnmapMemory(vk::g_vulkanContext.m_device, m_commonUniformMemory);
-
+    CommonShaderParams* params = m_commonUniformBuffer->GetPtr<CommonShaderParams*>();
+    params->ScreenSize.x = (float)WIDTH;
+    params->ScreenSize.y = (float)HEIGHT;
+    params->ProjViewMatrix = m_projMatrix * ms_camera.GetViewMatrix();
 }
 //////////////////////////////////////////////////////////////////////////
 //CUIManager

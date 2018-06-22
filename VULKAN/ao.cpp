@@ -35,10 +35,8 @@ enum Bindings
 CAORenderer::CAORenderer(VkRenderPass renderPass)
     : CRenderer(renderPass, "AmbientOcclussionRenderPass")
     , m_quad(nullptr)
-    , m_constParamsBuffer(VK_NULL_HANDLE)
-    , m_constParamsMemory(VK_NULL_HANDLE)
-    , m_varParamsBuffer(VK_NULL_HANDLE)
-    , m_varParamsMemory(VK_NULL_HANDLE)
+    , m_constParamsBuffer(nullptr)
+    , m_varParamsBuffer(nullptr)
     , m_sampler(VK_NULL_HANDLE)
     , m_constDescSetLayout(VK_NULL_HANDLE)
     , m_varDescSetLayout(VK_NULL_HANDLE)
@@ -50,11 +48,8 @@ CAORenderer::~CAORenderer()
 {
     VkDevice dev = vk::g_vulkanContext.m_device;
 
-    vk::FreeMemory(dev, m_constParamsMemory, nullptr);
-    vk::DestroyBuffer(dev, m_constParamsBuffer, nullptr);
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_constParamsBuffer->GetRootParent()); //free the parrent buffer, that frees the memory for varParamBuffer too
 
-    vk::FreeMemory(dev, m_varParamsMemory, nullptr);
-    vk::DestroyBuffer(dev, m_varParamsBuffer, nullptr);
 
     vk::DestroySampler(dev, m_sampler, nullptr);
 
@@ -71,8 +66,13 @@ void CAORenderer::Init()
 
     AllocDescriptors();
 
-    AllocBufferMemory(m_constParamsBuffer, m_constParamsMemory, sizeof(SSAOConstParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-    AllocBufferMemory(m_varParamsBuffer, m_varParamsMemory, sizeof(SSAOVarParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	//Alloc Memory
+	{
+		BufferHandle* bigBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, { sizeof(SSAOConstParams), sizeof(SSAOVarParams) }, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+		m_constParamsBuffer = bigBuffer->CreateSubbuffer(sizeof(SSAOConstParams));
+		m_varParamsBuffer = bigBuffer->CreateSubbuffer(sizeof(SSAOVarParams));
+	}
+
 
     InitSSAOParams();
 
@@ -113,10 +113,13 @@ void CAORenderer::Init()
     m_vblurPipeline.Init(this, m_renderPass, ESSAOPass_VBlur);
 }
 
+void CAORenderer::PreRender()
+{
+	UpdateParams();
+}
+
 void CAORenderer::Render()
 {
-    UpdateParams();
-
     StartRenderPass();
     VkCommandBuffer cmdBuff = vk::g_vulkanContext.m_mainCommandBuffer;
 
@@ -165,16 +168,8 @@ void CAORenderer::UpdateGraphicInterface()
 	depthImgInfo.imageView = g_commonResources.GetAs<ImageHandle*>(EResourceType_DepthBufferImage)->GetView();
     depthImgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-    VkDescriptorBufferInfo constBuffInfo;
-    constBuffInfo.buffer = m_constParamsBuffer;
-    constBuffInfo.offset = 0;
-    constBuffInfo.range = VK_WHOLE_SIZE;
-
-    VkDescriptorBufferInfo varBuffInfo;
-    varBuffInfo.buffer = m_varParamsBuffer;
-    varBuffInfo.offset = 0;
-    varBuffInfo.range = VK_WHOLE_SIZE;
-
+    VkDescriptorBufferInfo constBuffInfo = m_constParamsBuffer->GetDescriptor();
+    VkDescriptorBufferInfo varBuffInfo = m_varParamsBuffer->GetDescriptor();
     VkDescriptorImageInfo blurImgInfo;
     blurImgInfo.sampler = m_sampler;
     blurImgInfo.imageView =  m_framebuffer->GetColorImageView(0);
@@ -280,8 +275,7 @@ void CAORenderer::AllocDescriptors()
     std::mt19937 generator (seed);
     std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
 
-    SSAOConstParams* mem = nullptr;
-    VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_constParamsMemory, 0, VK_WHOLE_SIZE, 0, (void**)&mem));
+	SSAOConstParams* mem = m_constParamsBuffer->GetPtr<SSAOConstParams*>();
 
     for(unsigned int i = 0; i < 64; ++i)
     {
@@ -310,8 +304,6 @@ void CAORenderer::AllocDescriptors()
     }
 
     memcpy(mem->Noise, m_noise.data(), sizeof(mem->Noise));
-
-    vk::UnmapMemory(vk::g_vulkanContext.m_device, m_constParamsMemory);
  }
 
  void CAORenderer::UpdateParams()
@@ -320,9 +312,7 @@ void CAORenderer::AllocDescriptors()
      PerspectiveMatrix(projMat);
      ConvertToProjMatrix(projMat);
 
-     SSAOVarParams* params;
-     VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_varParamsMemory, 0, VK_WHOLE_SIZE, 0, (void**)&params));
+	 SSAOVarParams* params = m_varParamsBuffer->GetPtr<SSAOVarParams*>();
      params->ProjMatrix = projMat;
      params->ViewMatrix = ms_camera.GetViewMatrix();
-     vk::UnmapMemory(vk::g_vulkanContext.m_device, m_varParamsMemory);
  }

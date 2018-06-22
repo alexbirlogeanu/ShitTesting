@@ -6,7 +6,9 @@
 #include <vector>
 
 class ImageHandle;
+class BufferHandle;
 struct PointLightParams;
+
 class PointLight
 {
 public:
@@ -28,8 +30,9 @@ public:
 	PointLightRenderer2(VkRenderPass renderPass);
 	virtual ~PointLightRenderer2();
 
-	virtual void Init(); //this is an anti pattern. Fix it
-	virtual void Render();
+	virtual void Init() override; //this is an anti pattern. Fix it
+	virtual void Render() override;
+	virtual void PreRender() override;
 
 	void InitializeLightGrid(); //this method is for testing. then you should create a way to add point lights to the renderer
 protected:
@@ -47,8 +50,7 @@ private:
 	void PrepareLightImage();
 
 private:
-	VkBuffer					m_lightsBuffer;
-	VkDeviceMemory				m_lightsMemory;
+	BufferHandle*				m_lightsBuffer;
 
 	ImageHandle*				m_lightImage;
 	ImageHandle*				m_debugImage;

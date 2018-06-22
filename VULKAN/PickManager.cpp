@@ -33,8 +33,7 @@ CPickable::~CPickable()
 
 CPickRenderer::CPickRenderer(VkRenderPass renderPass)
     : CRenderer(renderPass, "PickingRenderPass")
-    , m_uniformBuffer(VK_NULL_HANDLE)
-    , m_uniformMemory(VK_NULL_HANDLE)
+    , m_uniformBuffer(nullptr)
     , m_pickedNode(nullptr)
     , m_bbMesh(nullptr)
     , m_mouseCoords(glm::uvec2(-1, -1))
@@ -52,6 +51,8 @@ CPickRenderer::~CPickRenderer()
     VkDevice dev = vk::g_vulkanContext.m_device;
     delete m_bbMesh;
 
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_uniformBuffer);
+
     vk::DestroyDescriptorSetLayout(dev, m_descriptorSetLayout, nullptr);
 }
 
@@ -60,9 +61,7 @@ void CPickRenderer::Init()
     CRenderer::Init();
 
     VkDeviceSize minOffsetAlign = vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment;
-    TRAP(sizeof(SPickParams) < minOffsetAlign);
-    AllocBufferMemory(m_uniformBuffer, m_uniformMemory, uint32_t(MAXPICKABLES * minOffsetAlign), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-
+	m_uniformBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, std::vector<VkDeviceSize>(MAXPICKABLES, sizeof(SPickParams)), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
     TRAP(PICKBUFFERFORMAT == VK_FORMAT_R8_UINT && "Set the coresponding size");
     VkDeviceSize size = WIDTH * HEIGHT * sizeof(unsigned char);
     AllocBufferMemory(m_copyBuffer, m_copyMemory, (uint32_t)size, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -94,10 +93,13 @@ void CPickRenderer::Init()
     m_bbPipeline.Init(this, m_renderPass, 1);
 }
 
+void CPickRenderer::PreRender()
+{
+	UpdateObjects();
+}
+
 void CPickRenderer::Render()
 {
-    UpdateObjects();
-
     VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
 
     StartRenderPass();
@@ -154,15 +156,11 @@ void CPickRenderer::AddNode(CPickable* p)
 
     TRAP(i < m_memoryPool.size());
     m_memoryPool.set(i);
-    VkDeviceSize minOffsetAlign = vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment;
-    node.offset = i * minOffsetAlign;
+    
+	node.buffer = m_uniformBuffer->CreateSubbuffer(sizeof(SPickParams));
     node.Set = AllocateDescSet();
 
-    VkDescriptorBufferInfo buffInfo;
-    cleanStructure(buffInfo);
-    buffInfo.buffer = m_uniformBuffer;
-    buffInfo.offset = node.offset;
-    buffInfo.range = sizeof(SPickParams);
+	VkDescriptorBufferInfo buffInfo = node.buffer->GetDescriptor();
 
     VkWriteDescriptorSet wDesc;
     wDesc = InitUpdateDescriptor(node.Set, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfo);
@@ -173,20 +171,21 @@ void CPickRenderer::AddNode(CPickable* p)
 
 void CPickRenderer::RemoveNode(CPickable* p)
 {
-    auto it = std::find_if(m_nodes.begin(), m_nodes.end(), [p](const SNode& el)
-    {
-        return el.Pickable == p;
-    });
+	TRAP(false && "Dont use this function");
+    //auto it = std::find_if(m_nodes.begin(), m_nodes.end(), [p](const SNode& el)
+    //{
+    //    return el.Pickable == p;
+    //});
 
-    if (it != m_nodes.end())
-    {
-        SNode node = *it; //node to remove
-        VkDeviceSize minOffsetAlign = vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment;
-        unsigned int i = uint32_t(node.offset / minOffsetAlign);
-        m_memoryPool.reset(i);
-        vk::FreeDescriptorSets(vk::g_vulkanContext.m_device, m_descriptorPool, 1, &node.Set);
-        m_nodes.erase(it);
-    }
+    //if (it != m_nodes.end())
+    //{
+    //    SNode node = *it; //node to remove
+    //    VkDeviceSize minOffsetAlign = vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment;
+    //    unsigned int i = uint32_t(node.offset / minOffsetAlign);
+    //    m_memoryPool.reset(i);
+    //    vk::FreeDescriptorSets(vk::g_vulkanContext.m_device, m_descriptorPool, 1, &node.Set);
+    //    m_nodes.erase(it);
+    //}
 }
 
 void CPickRenderer::CreateDescriptorSetLayout()
@@ -233,19 +232,17 @@ void CPickRenderer::UpdateObjects()
     unsigned char* memPtr = nullptr;
     glm::mat4 projViewMatrix = m_projection * ms_camera.GetViewMatrix();
 
-    vk::MapMemory(vk::g_vulkanContext.m_device, m_uniformMemory, 0, VK_WHOLE_SIZE, 0, (void**)&memPtr);
     for(unsigned int i = 0; i < m_nodes.size(); ++i)
     {
         CPickable* p = m_nodes[i].Pickable;
         BoundingBox bb = p->GetBoundingBox();
 
-        SPickParams* params = (SPickParams*)(memPtr + m_nodes[i].offset);
+		SPickParams* params = m_nodes[i].buffer->GetPtr<SPickParams*>();
         params->ID = glm::uvec4(p->GetId());
         params->BBMin = glm::vec4(bb.Min, 1.0f);
         params->BBMax = glm::vec4(bb.Max, 1.0f);
         params->MVPMatrix = projViewMatrix * p->GetModelMatrix();
     }
-    vk::UnmapMemory(vk::g_vulkanContext.m_device, m_uniformMemory);
 }
 
 void CPickRenderer::CreateBBMesh()

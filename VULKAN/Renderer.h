@@ -350,6 +350,7 @@ public:
 
     virtual void Init(); //this is an anti pattern. Fix it
     virtual void Render() = 0;
+	virtual void PreRender(){};
 
     void StartRenderPass();
     void EndRenderPass();
@@ -362,6 +363,7 @@ public:
 
     static void ReloadAll();
     static void UpdateAll();
+	static void PrepareAll();
 protected:
     virtual void CreateDescriptorSetLayout()=0;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)=0;

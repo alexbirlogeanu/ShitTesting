@@ -694,6 +694,16 @@ void CRenderer::UpdateAll()
         (*it)->UpdateGraphicInterface();
 }
 
+void CRenderer::PrepareAll()
+{
+	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::UniformBuffers);
+
+	for (auto renderer : ms_Renderers)
+		renderer->PreRender();
+
+	MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::UniformBuffers);
+}
+
 void CRenderer::Init()
 {
     std::vector<VkDescriptorPoolSize> poolSize;

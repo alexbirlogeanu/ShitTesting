@@ -12,8 +12,7 @@ C3DTextureRenderer::C3DTextureRenderer (VkRenderPass renderPass)
     , m_width(512)
     , m_height(512)
     , m_depth(TEXTURE3DLAYERS)
-    , m_uniformBuffer(VK_NULL_HANDLE)
-    , m_uniformMemory(VK_NULL_HANDLE)
+    , m_uniformBuffer(nullptr)
     , m_needGenerateTexture(true)
 {
 }
@@ -25,9 +24,7 @@ C3DTextureRenderer::~C3DTextureRenderer()
     vk::DestroyDescriptorSetLayout(dev, m_generateDescLayout, nullptr);
 
 	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::Textures, m_outTexture);
-
-    vk::FreeMemory(dev, m_uniformMemory, nullptr);
-    vk::DestroyBuffer(dev, m_uniformBuffer, nullptr);
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_uniformBuffer);
 
     delete m_patternTexture;
 }
@@ -38,7 +35,7 @@ void C3DTextureRenderer::Init()
     AllocateOuputTexture();
 
     AllocDescriptorSets(m_descriptorPool, m_generateDescLayout, &m_generateDescSet);
-    AllocBufferMemory(m_uniformBuffer, m_uniformMemory, sizeof(FogParameters), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	m_uniformBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(FogParameters), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
     FillParams();
 
@@ -54,7 +51,7 @@ void C3DTextureRenderer::Init()
     m_generatePipeline.Init(this, VK_NULL_HANDLE, -1); //compute pipelines dont need render pass .. need to change CPipeline
 
     VkDescriptorImageInfo imgInfo = CreateDescriptorImageInfo(VK_NULL_HANDLE, m_outTexture->GetView(), VK_IMAGE_LAYOUT_GENERAL);
-    VkDescriptorBufferInfo bufInfo = CreateDescriptorBufferInfo(m_uniformBuffer);
+	VkDescriptorBufferInfo bufInfo = m_uniformBuffer->GetDescriptor();
     std::vector<VkWriteDescriptorSet> wDescs;
     wDescs.push_back(InitUpdateDescriptor(m_generateDescSet, 0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &imgInfo));
     wDescs.push_back(InitUpdateDescriptor(m_generateDescSet, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &m_patternTexture->GetTextureDescriptor()));
@@ -62,12 +59,16 @@ void C3DTextureRenderer::Init()
     vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDescs.size(), wDescs.data(), 0, nullptr);
 }
 
+void C3DTextureRenderer::PreRender()
+{
+	UpdateParams();
+}
+
 void C3DTextureRenderer::Render()
 {
     if (m_needGenerateTexture)
     {
         BeginMarkerSection("GenerateShitty3DTexture");
-        UpdateParams();
         PrepareTexture();
         VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
         vk::CmdBindPipeline(cmdBuffer, m_generatePipeline.GetBindPoint(), m_generatePipeline.Get());
@@ -209,10 +210,8 @@ void C3DTextureRenderer::UpdateParams()
     float timeSec = float(now - startTime) / 1000;
     m_parameters.Globals.z = timeSec;
 
-    FogParameters* params = nullptr;
-    vk::MapMemory(vk::g_vulkanContext.m_device, m_uniformMemory, 0, VK_WHOLE_SIZE, 0, (void**)&params);
+	FogParameters* params = m_uniformBuffer->GetPtr<FogParameters*>();
     memcpy(params, &m_parameters, sizeof(FogParameters));
-    vk::UnmapMemory(vk::g_vulkanContext.m_device, m_uniformMemory);
 }
 
 void C3DTextureRenderer::CopyTexture()
@@ -237,8 +236,7 @@ CVolumetricRenderer::CVolumetricRenderer(VkRenderPass renderPass)
     , m_volumeDescSet(VK_NULL_HANDLE)
     , m_volumetricDescSet(VK_NULL_HANDLE)
     , m_sampler(VK_NULL_HANDLE)
-    , m_uniformBuffer(VK_NULL_HANDLE)
-    , m_uniformMemory(VK_NULL_HANDLE)
+    , m_uniformBuffer(nullptr)
     , m_cube(nullptr)
 {
 }
@@ -250,8 +248,7 @@ CVolumetricRenderer::~CVolumetricRenderer()
     vk::DestroyDescriptorSetLayout(dev, m_volumeDescLayout, nullptr);
     vk::DestroySampler(dev, m_sampler, nullptr);
 
-    vk::FreeMemory(dev, m_uniformMemory, nullptr);
-    vk::DestroyBuffer(dev, m_uniformBuffer, nullptr);
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_uniformBuffer);
 }
 
 void CVolumetricRenderer::Init()
@@ -262,7 +259,7 @@ void CVolumetricRenderer::Init()
     AllocDescriptorSets(m_descriptorPool, m_volumetricDescLayout, &m_volumetricDescSet);
     
     m_cube = CreateUnitCube();
-    AllocBufferMemory(m_uniformBuffer, m_uniformMemory, sizeof(SVolumeParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	m_uniformBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(SVolumeParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
     CreateCullPipeline(m_frontCullPipeline, VK_CULL_MODE_FRONT_BIT);
     CreateCullPipeline(m_backCullPipeline, VK_CULL_MODE_BACK_BIT);
@@ -290,9 +287,13 @@ void CVolumetricRenderer::Init()
     m_volumetricPipeline.Init(this, m_renderPass, 2);
 }
 
+void CVolumetricRenderer::PreRender()
+{
+	UpdateShaderParams();
+}
+
 void CVolumetricRenderer::Render()
 {
-    UpdateShaderParams();
     VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
     StartRenderPass();
     
@@ -328,7 +329,7 @@ void CVolumetricRenderer::UpdateGraphicInterface()
 	ImageHandle* texture3D = g_commonResources.GetAs<ImageHandle*>(EResourceType_VolumetricImage);
 	ImageHandle* deptht = g_commonResources.GetAs<ImageHandle*>(EResourceType_DepthBufferImage);
 
-    VkDescriptorBufferInfo uniformInfo = CreateDescriptorBufferInfo(m_uniformBuffer);
+    VkDescriptorBufferInfo uniformInfo = m_uniformBuffer->GetDescriptor();
 	VkDescriptorImageInfo text3DInfo = CreateDescriptorImageInfo(m_sampler, texture3D->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	VkDescriptorImageInfo depthInfo = CreateDescriptorImageInfo(m_sampler, deptht->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     VkDescriptorImageInfo frontInfo = CreateDescriptorImageInfo(m_sampler, m_framebuffer->GetColorImageView(0), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -408,10 +409,8 @@ void CVolumetricRenderer::UpdateShaderParams()
     modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 0.0f, -3.0f));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(s, s, s));
 
-    SVolumeParams* params = nullptr;
-    VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_uniformMemory, 0, VK_WHOLE_SIZE, 0, (void**)&params));
+	SVolumeParams* params = m_uniformBuffer->GetPtr<SVolumeParams*>();
     params->ModelMatrix = modelMatrix;
     params->ProjMatrix = proj;
     params->ViewMatrix = ms_camera.GetViewMatrix();
-    vk::UnmapMemory(vk::g_vulkanContext.m_device, m_uniformMemory);
 }

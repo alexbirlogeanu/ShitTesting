@@ -5,6 +5,7 @@
 #include "Mesh.h"
 #include <vector>
 #include "glm/glm.hpp"
+#include "MemoryManager.h"
 
 struct SFogParams
 {
@@ -17,14 +18,15 @@ CFogRenderer::CFogRenderer(VkRenderPass renderpass)
     , m_descriptorLayout(VK_NULL_HANDLE)
     , m_sampler(VK_NULL_HANDLE)
     , m_quad(nullptr)
-    , m_fogParamsBuffer(VK_NULL_HANDLE)
-    , m_fogParamsMemory(VK_NULL_HANDLE)
+    , m_fogParamsBuffer(nullptr)
 {
 }
 
 CFogRenderer::~CFogRenderer()
 {
     VkDevice dev = vk::g_vulkanContext.m_device;
+
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_fogParamsBuffer);
 
     vk::DestroyDescriptorSetLayout(dev, m_descriptorLayout, nullptr);
     vk::DestroySampler(dev, m_sampler, nullptr);
@@ -35,7 +37,7 @@ void CFogRenderer::Init()
     CRenderer::Init();
 
     AllocDescriptorSets(m_descriptorPool, m_descriptorLayout, &m_descriptorSet);
-    AllocBufferMemory(m_fogParamsBuffer, m_fogParamsMemory, sizeof(SFogParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	m_fogParamsBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(SFogParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
     m_pipline.SetVertexInputState(Mesh::GetVertexDesc());
     m_pipline.SetDepthTest(false);
@@ -59,17 +61,16 @@ void CFogRenderer::Init()
     m_quad = CreateFullscreenQuad();
 }
 
+void CFogRenderer::PreRender()
+{
+	VkDevice dev = vk::g_vulkanContext.m_device;
+	SFogParams* params = m_fogParamsBuffer->GetPtr<SFogParams*>();
+	params->ViewMatrix = ms_camera.GetViewMatrix();
+}
+
 void CFogRenderer::Render()
 {
-    //update shader params
-    {
-        VkDevice dev = vk::g_vulkanContext.m_device;
-        SFogParams* params;
-        VULKAN_ASSERT(vk::MapMemory(dev, m_fogParamsMemory, 0, VK_WHOLE_SIZE, 0, (void**)&params));
-        params->ViewMatrix = ms_camera.GetViewMatrix();
-        vk::UnmapMemory(dev, m_fogParamsMemory);
-    }
-
+    
     StartRenderPass();
     VkCommandBuffer cmdBuff = vk::g_vulkanContext.m_mainCommandBuffer;
     vk::CmdBindPipeline(cmdBuff, m_pipline.GetBindPoint(), m_pipline.Get());
@@ -89,11 +90,7 @@ void CFogRenderer::UpdateGraphicInterface()
 	imgInfo.imageView = positionImage->GetView();
     imgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-    VkDescriptorBufferInfo bufInfo;
-    bufInfo.buffer = m_fogParamsBuffer;
-    bufInfo.offset = 0;
-    bufInfo.range = VK_WHOLE_SIZE;
-
+    VkDescriptorBufferInfo bufInfo = m_fogParamsBuffer->GetDescriptor();
     std::vector<VkWriteDescriptorSet> wDesc;
 
     wDesc.push_back(InitUpdateDescriptor(m_descriptorSet, 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &imgInfo));

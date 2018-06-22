@@ -355,9 +355,7 @@ public:
     CLightRenderer(VkRenderPass renderPass)
         : CRenderer(renderPass, "LightRenderPass")
         , m_sampler(VK_NULL_HANDLE)
-        , m_shaderUniformBuffer(VK_NULL_HANDLE)
-        , m_shaderUniformMemory(VK_NULL_HANDLE)
-        , m_memPtr(nullptr)
+        , m_shaderUniformBuffer(nullptr)
         , m_depthSampler(VK_NULL_HANDLE)
         , m_descriptorSetLayout(VK_NULL_HANDLE)
         , m_descriptorSet(VK_NULL_HANDLE)
@@ -368,11 +366,7 @@ public:
     {
         VkDevice dev = vk::g_vulkanContext.m_device;
         vk::DestroySampler(dev, m_sampler, nullptr);
-
-        vk::UnmapMemory(dev, m_shaderUniformMemory);
-        vk::FreeMemory(dev, m_shaderUniformMemory, nullptr);
-        vk::DestroyBuffer(dev, m_shaderUniformBuffer, nullptr);
-
+		MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_shaderUniformBuffer);
         vk::DestroyDescriptorSetLayout(dev, m_descriptorSetLayout, nullptr);
     }
 
@@ -391,8 +385,6 @@ public:
 
     virtual void Render()
     {
-        UpdateShaderParams();
-
         VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
         StartRenderPass();
         vk::CmdBindPipeline(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.Get());
@@ -403,15 +395,13 @@ public:
         EndRenderPass();
     }
 
-    void UpdateShaderParams()
+	void PreRender() override
     {
-        LightShaderParams newParams;
-        newParams.dirLight = directionalLight.GetDirection();
-        newParams.cameraPos = glm::vec4(ms_camera.GetPos(), 1);
-        newParams.lightIradiance = directionalLight.GetLightIradiance();
-        newParams.lightIradiance[3] = directionalLight.GetLightIntensity();
-
-        memcpy(m_memPtr, &newParams, sizeof(LightShaderParams));
+        LightShaderParams* newParams = m_shaderUniformBuffer->GetPtr<LightShaderParams*>();
+        newParams->dirLight = directionalLight.GetDirection();
+        newParams->cameraPos = glm::vec4(ms_camera.GetPos(), 1);
+        newParams->lightIradiance = directionalLight.GetLightIradiance();
+        newParams->lightIradiance[3] = directionalLight.GetLightIntensity();
     }
 
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override
@@ -431,8 +421,7 @@ public:
 
         CreateNearestSampler(m_depthSampler);
 
-        AllocBufferMemory(m_shaderUniformBuffer, m_shaderUniformMemory, sizeof(LightShaderParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-        VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_shaderUniformMemory, 0, sizeof(LightShaderParams), 0, &m_memPtr));
+		m_shaderUniformBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(LightShaderParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
         m_pipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN);
         m_pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 2);
@@ -480,11 +469,7 @@ protected:
         writeSets[0].descriptorCount = descSize; //this is a little risky. There is no array of sampler in shader. this just work
         writeSets[0].pImageInfo = imgInfo;
 
-        VkDescriptorBufferInfo buffInfo;
-        buffInfo.buffer = m_shaderUniformBuffer;
-        buffInfo.offset = 0;
-        buffInfo.range = sizeof(LightShaderParams);   
-
+        VkDescriptorBufferInfo buffInfo = m_shaderUniformBuffer->GetDescriptor();
         writeSets[1] = InitUpdateDescriptor(m_descriptorSet, GBuffer_InputCnt, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfo);
 
         VkDescriptorImageInfo shadowMapDesc;
@@ -537,13 +522,11 @@ protected:
     VkSampler                       m_sampler;
     VkSampler                       m_depthSampler;
 
-    VkBuffer                        m_shaderUniformBuffer;
-    VkDeviceMemory                  m_shaderUniformMemory;
+    BufferHandle*                   m_shaderUniformBuffer;
 
     VkDescriptorSetLayout           m_descriptorSetLayout;
     VkDescriptorSet                 m_descriptorSet;
 
-    void*                           m_memPtr;
     CGraphicPipeline                m_pipeline;
 };
 
@@ -555,7 +538,6 @@ public:
         , m_quadMesh(nullptr)
         , m_skyTexture(nullptr)
         , m_boxParamsBuffer(VK_NULL_HANDLE)
-        , m_boxParamsMemory(VK_NULL_HANDLE)
         , m_boxDescriptorSet(VK_NULL_HANDLE)
         , m_boxDescriptorSetLayout(VK_NULL_HANDLE)
         , m_sampler(VK_NULL_HANDLE)
@@ -567,16 +549,14 @@ public:
     virtual ~CSkyRenderer()
     {
         VkDevice dev = vk::g_vulkanContext.m_device;
-        vk::FreeMemory(dev, m_boxParamsMemory, nullptr);
-        vk::DestroyBuffer(dev, m_boxParamsBuffer, nullptr);
-
         vk::DestroyDescriptorSetLayout(dev, m_boxDescriptorSetLayout, nullptr);
+
+		MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_boxParamsBuffer);
     }
 
     virtual void Render()
     {
         TRAP(m_skyTexture);
-        UpdateShaderParams();
         VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
         StartRenderPass();
 
@@ -605,8 +585,7 @@ public:
         AllocDescriptorSets(m_descriptorPool, m_boxDescriptorSetLayout, &m_boxDescriptorSet);
         AllocDescriptorSets(m_descriptorPool, m_sunDescriptorSetLayout, &m_sunDescriptorSet);
 
-        AllocBufferMemory(m_boxParamsBuffer, m_boxParamsMemory, sizeof(SSkyParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-       
+		m_boxParamsBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(SSkyParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
         m_quadMesh = CreateFullscreenQuad();
 
         m_boxPipeline.SetVertexShaderFile("skybox.vert");
@@ -698,28 +677,19 @@ private:
         }
     }
 
-    void UpdateShaderParams()
+    void PreRender()
     {
-        SSkyParams newParams;
-        newParams.CameraDir = glm::vec4(ms_camera.GetFrontVector(), 0.0f);
-        newParams.CameraUp = glm::vec4(ms_camera.GetUpVector(), 0.0f);
-        newParams.CameraRight = glm::vec4(ms_camera.GetRightVector(), 0.0f);
-        newParams.Frustrum = glm::vec4(glm::radians(75.0f), 16.0f/9.0f, 100.0f, 0.0f);
-        newParams.DirLightColor = directionalLight.GetLightIradiance();
-
-        void* ptr;
-        VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_boxParamsMemory, 0, VK_WHOLE_SIZE, 0, &ptr));
-        memcpy(ptr, &newParams, sizeof(SSkyParams));
-        vk::UnmapMemory(vk::g_vulkanContext.m_device, m_boxParamsMemory);
+        SSkyParams* newParams = m_boxParamsBuffer->GetPtr<SSkyParams*>();
+        newParams->CameraDir = glm::vec4(ms_camera.GetFrontVector(), 0.0f);
+        newParams->CameraUp = glm::vec4(ms_camera.GetUpVector(), 0.0f);
+        newParams->CameraRight = glm::vec4(ms_camera.GetRightVector(), 0.0f);
+        newParams->Frustrum = glm::vec4(glm::radians(75.0f), 16.0f/9.0f, 100.0f, 0.0f);
+        newParams->DirLightColor = directionalLight.GetLightIradiance();
     }
 
     void UpdateDescriptors()
     {
-        VkDescriptorBufferInfo wBuffer;
-        cleanStructure(wBuffer);
-        wBuffer.buffer = m_boxParamsBuffer;
-        wBuffer.offset = 0;
-        wBuffer.range = sizeof(SSkyParams); //WARNING!!
+        VkDescriptorBufferInfo wBuffer = m_boxParamsBuffer->GetDescriptor();
 
         //VkDescriptorImageInfo wImage = m_cubeMapText->GetCubeMapDescriptor();
         VkDescriptorImageInfo wImage = m_skyTexture->GetTextureDescriptor();
@@ -735,8 +705,7 @@ private:
 private:
     Mesh* m_quadMesh;
 
-    VkBuffer            m_boxParamsBuffer;
-    VkDeviceMemory      m_boxParamsMemory;
+    BufferHandle*       m_boxParamsBuffer;
 
     CTexture*           m_skyTexture;
     //CTexture*           m_sunTexture;
@@ -1151,6 +1120,8 @@ CApplication::CApplication()
     CPickManager::CreateInstance();
     ObjectFactory::LoadXml("scene.xml");
 
+	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::UniformBuffers);
+
     SetupDeferredRendering();
     SetupAORendering();
 	SetupDirectionalLightingRendering();
@@ -1167,6 +1138,8 @@ CApplication::CApplication()
     SetupVolumetricRendering();
     
     GetPickManager()->Setup();
+
+	MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::UniformBuffers);
 
     CreateSynchronizationHelpers();
     srand((unsigned int)time(NULL));
@@ -2563,6 +2536,8 @@ void CApplication::Render()
     vk::WaitForFences(vk::g_vulkanContext.m_device, 1, &m_aquireImageFence,VK_TRUE, UINT64_MAX);
     vk::ResetFences(vk::g_vulkanContext.m_device, 1, &m_aquireImageFence);
     
+	CRenderer::PrepareAll();
+
     StartCommandBuffer();
 
     CTextureManager::GetInstance()->Update();

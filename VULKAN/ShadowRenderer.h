@@ -21,6 +21,7 @@ public:
 
     void Init() override;
     void Render() override;
+	void PreRender() override;
 protected:
     void UpdateResourceTable() override;
     void CreateDescriptorSetLayout() override;
@@ -38,18 +39,18 @@ private:
     {
         Object*             obj;
         VkDescriptorSet     descSet;
-        VkDeviceSize        offset;
+        BufferHandle*		buffer;
 
         Node()
             : obj(nullptr)
             , descSet(VK_NULL_HANDLE)
-            , offset(0)
+            , buffer(nullptr)
         {}
 
         Node (Object* o)
             : obj(o)
             , descSet(VK_NULL_HANDLE)
-            , offset(0)
+            , buffer(nullptr)
         {}
     };
 
@@ -58,8 +59,7 @@ private:
     CGraphicPipeline                m_pipeline;
     VkDescriptorSetLayout           m_descriptorSetLayout;
 
-    VkBuffer                        m_instanceBuffer;
-    VkDeviceMemory                  m_instaceMemory;
+    BufferHandle*                   m_instanceBuffer;
     std::vector<Node>               m_nodes;
 };
 
@@ -72,7 +72,7 @@ public:
 
     virtual void Init() override;
     virtual void Render() override;
-
+	virtual void PreRender() override;
 
 private:
     virtual void CreateDescriptorSetLayout() override;
@@ -97,8 +97,7 @@ private:
     VkDescriptorSetLayout   m_descriptorLayout;
     VkDescriptorSet         m_descriptorSet;
 
-    VkDeviceMemory          m_uniformMemory;
-    VkBuffer                m_uniformBuffer;
+    BufferHandle*           m_uniformBuffer;
 
     CTexture*               m_blockerDistrText;
     CTexture*               m_PCFDistrText;

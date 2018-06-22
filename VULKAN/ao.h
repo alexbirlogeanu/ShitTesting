@@ -16,7 +16,7 @@ enum ESSAOPass
 };
 
 class Mesh;
-
+class BufferHandle;
 class CAORenderer : public CRenderer
 {
 public:
@@ -25,7 +25,7 @@ public:
 
     virtual void Init() override;
     virtual void Render() override;
-
+	virtual void PreRender() override;
     //VkImageView GetOuput() { return m_framebuffer->GetColorImageView(0); }
 
 protected:
@@ -39,10 +39,8 @@ protected:
     virtual void UpdateResourceTable() override;
 private:
     //buffers
-    VkBuffer                m_constParamsBuffer;
-    VkDeviceMemory          m_constParamsMemory;
-    VkBuffer                m_varParamsBuffer;
-    VkDeviceMemory          m_varParamsMemory;
+    BufferHandle*           m_constParamsBuffer;
+	BufferHandle*           m_varParamsBuffer;
 
     VkSampler               m_sampler;
 

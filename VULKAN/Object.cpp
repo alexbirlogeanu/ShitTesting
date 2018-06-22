@@ -354,8 +354,7 @@ ObjectRenderer::ObjectRenderer(VkRenderPass renderPass, const std::vector<Object
     : CRenderer(renderPass, "SolidRenderPass")
     , m_numOfObjects((unsigned int)objects.size())
     , m_objectDescLayout(VK_NULL_HANDLE)
-    , m_instaceDataMemory(VK_NULL_HANDLE)
-    , m_instanceDataBuffer(VK_NULL_HANDLE)
+    , m_instanceDataBuffer(nullptr)
     , m_sampler(VK_NULL_HANDLE)
 {
     for (unsigned int i = 0; i < (unsigned int)objects.size(); ++i)
@@ -377,14 +376,11 @@ ObjectRenderer::~ObjectRenderer()
     }
 
     VkDevice dev = vk::g_vulkanContext.m_device;
-    vk::FreeMemory(dev, m_instaceDataMemory, nullptr);
-    vk::DestroyBuffer(dev, m_instanceDataBuffer, nullptr);
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_instanceDataBuffer);
 }
 
 void ObjectRenderer::Render()
 {
-    UpdateShaderParams();
-
     VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
     StartRenderPass();
 
@@ -403,6 +399,11 @@ void ObjectRenderer::Render()
     }
 
     EndRenderPass();
+}
+
+void ObjectRenderer::PreRender()
+{
+	UpdateShaderParams();
 }
 
 void ObjectRenderer::Init()
@@ -461,7 +462,7 @@ void ObjectRenderer::UpdateGraphicInterface()
     {
         for (auto& node : batch.nodes)
         {
-            buffInfos.push_back(CreateDescriptorBufferInfo(m_instanceDataBuffer, node.offset, sizeof(ObjectShaderParams)));
+            buffInfos.push_back(node.buffer->GetDescriptor());
             CTexture* albedo = node.obj->GetAlbedoTexture();
             wDesc.push_back(InitUpdateDescriptor(node.descriptorSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfos.back()));
             TRAP(albedo);
@@ -497,18 +498,14 @@ void ObjectRenderer::InitDescriptorNodes()
 
 void ObjectRenderer::InitMemoryOffsetNodes()
 {
-    VkDeviceSize memOffset = vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment;
-    TRAP(memOffset > sizeof(ObjectShaderParams) && "Change mem offset");
-    AllocBufferMemory(m_instanceDataBuffer, m_instaceDataMemory, m_numOfObjects * (uint32_t)memOffset, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	m_instanceDataBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, std::vector<VkDeviceSize>(m_numOfObjects, sizeof(ObjectShaderParams)), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
     VkDeviceSize currentOffset = 0;
     for (auto& batch : m_batches)
     {
         std::vector<Node>& nodes = batch.nodes;
-        for (unsigned int i = 0; i < nodes.size(); ++i, currentOffset += memOffset)
-        {
-            nodes[i].offset = currentOffset;
-        }
+		for (unsigned int i = 0; i < nodes.size(); ++i)
+            nodes[i].buffer = m_instanceDataBuffer->CreateSubbuffer(sizeof(ObjectShaderParams));
     }
 }
 
@@ -526,7 +523,6 @@ void ObjectRenderer::SetupPipeline(const std::string& vertex, const std::string&
 void ObjectRenderer::UpdateShaderParams()
 {
     void* memPtr = nullptr;
-    VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_instaceDataMemory, 0, VK_WHOLE_SIZE, 0, &memPtr));
     glm::mat4 projView = m_projMatrix * ms_camera.GetViewMatrix();
 
     for (auto& batch : m_batches)
@@ -536,7 +532,7 @@ void ObjectRenderer::UpdateShaderParams()
             Object* obj = node.obj;
             glm::mat4 model = obj->GetModelMatrix();
 
-            ObjectShaderParams* params = (ObjectShaderParams*)((char*)memPtr + node.offset);
+			ObjectShaderParams* params = node.buffer->GetPtr<ObjectShaderParams*>();
             params->Mvp = projView * model;
             params->WorldMatrix = model;
             params->MaterialProp = obj->GetMaterialProperties();
@@ -544,7 +540,6 @@ void ObjectRenderer::UpdateShaderParams()
         }
     }
 
-    vk::UnmapMemory(vk::g_vulkanContext.m_device, m_instaceDataMemory);
 }
 
 //////////////////////////////////////////////////////////////////////////

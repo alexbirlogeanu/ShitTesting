@@ -149,6 +149,7 @@ public:
 
     virtual void Render() override;
     virtual void Init() override;
+	virtual void PreRender() override;
 protected:
     virtual void CreateDescriptorSetLayout() override;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override;
@@ -168,18 +169,18 @@ private:
     {
         Object*             obj;
         VkDescriptorSet     descriptorSet;
-        VkDeviceSize        offset; //offset used in global buffer
+		BufferHandle*       buffer;
 
         Node()
             : obj(nullptr)
             , descriptorSet(VK_NULL_HANDLE)
-            , offset(0)
+            , buffer(nullptr)
         {}
 
         Node(Object* o)
             : obj(o)
             , descriptorSet(VK_NULL_HANDLE)
-            , offset(0)
+            , buffer(nullptr)
         {}
     };
 
@@ -195,8 +196,7 @@ private:
 
     //vulkan Render shit
     VkDescriptorSetLayout               m_objectDescLayout;
-    VkBuffer                            m_instanceDataBuffer;
-    VkDeviceMemory                      m_instaceDataMemory;
+    BufferHandle*                       m_instanceDataBuffer;
     VkSampler                           m_sampler;
 
     std::array<Batch, (unsigned int)ObjectType::Count>  m_batches;

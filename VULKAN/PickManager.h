@@ -13,6 +13,7 @@
 #define MAXPICKABLES 16
 #include "Mesh.h"
 
+class BufferHandle;
 class CPickable
 {
 public:
@@ -46,6 +47,7 @@ public:
 
     virtual void Init() override;
     virtual void Render() override;
+	virtual void PreRender() override;
 
     void AddNode(CPickable* p);
     void RemoveNode(CPickable* p);
@@ -67,7 +69,7 @@ protected:
     {
         CPickable*      Pickable;
         VkDescriptorSet Set;
-        VkDeviceSize    offset;
+        BufferHandle*   buffer;
     };
     friend class CPickManager;
 
@@ -90,8 +92,7 @@ private:
 
     //memory management
     std::bitset<MAXPICKABLES>   m_memoryPool;
-    VkBuffer                    m_uniformBuffer;
-    VkDeviceMemory              m_uniformMemory;
+    BufferHandle*               m_uniformBuffer;
 };
 class CUIManager;
 class CUIText;

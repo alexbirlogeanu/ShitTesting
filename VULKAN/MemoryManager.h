@@ -19,6 +19,7 @@ enum class EMemoryContextType
 	Framebuffers, //device local memory
 	Textures, //device local memory
 	StaggingTextures, //device local for stagging textures
+	UniformBuffers,
 	Count
 };
 
@@ -99,10 +100,12 @@ protected:
 		if ((m_alignment != 0) && (m_freeOffset % m_alignment != 0))
 			offset += m_alignment - (m_freeOffset % m_alignment);
 
-		TRAP(offset + size <= m_size && "Not enough memory for this sub Allocation");
-		HandleType* hSubAlloc = new HandleType(parent, size, m_alignment, offset);
-
 		m_freeOffset = offset + size;
+
+		VkDeviceSize absoluteOffest = (m_parent) ? m_parent->GetOffset() : 0; //probably i will forget why is this way
+		TRAP(offset + size <= m_size && "Not enough memory for this sub Allocation");
+		HandleType* hSubAlloc = new HandleType(parent, size, m_alignment, absoluteOffest + offset);
+
 		m_subDivisions.push_back(hSubAlloc);
 		return hSubAlloc;
 	}
@@ -122,7 +125,7 @@ class BufferHandle : public HandleImpl<VkBuffer>
 public:
 	BufferHandle* CreateSubbuffer(VkDeviceSize size);
 	VkBufferMemoryBarrier CreateMemoryBarrier(VkAccessFlags srcAccess, VkAccessFlags dstAccess);
-
+	VkDescriptorBufferInfo GetDescriptor() const;
 protected:
 	virtual void FreeResources() override;
 private:
@@ -258,7 +261,10 @@ class MemoryManager : public Singleton<MemoryManager>
 {
 	friend class Singleton<MemoryManager>;
 public:
+	//use this function if dont want to suballocate
 	BufferHandle* CreateBuffer(EMemoryContextType context, VkDeviceSize size, VkBufferUsageFlags usage);
+	//use this function when you want to suballocate. This method will calculate a total size for you
+	BufferHandle* CreateBuffer(EMemoryContextType context, std::vector<VkDeviceSize> sizes, VkBufferUsageFlags usage);
 	ImageHandle* CreateImage(EMemoryContextType context, const VkImageCreateInfo& imgInfo, const std::string& debugName = std::string());
 
 	void FreeHandle(EMemoryContextType context, Handle* handle);
@@ -268,9 +274,6 @@ public:
 
 	bool MapMemoryContext(EMemoryContextType context); //TODO change to return the new mapped memory
 	void UnmapMemoryContext(EMemoryContextType context);
-
-	//MappedMemory* GetMappedMemory(EMemoryContextType context);
-
 protected:
 	MemoryManager();
 	virtual ~MemoryManager();

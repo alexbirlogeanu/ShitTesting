@@ -252,7 +252,7 @@ void CParticleSystem::UpdateDescriptorSets()
 void CParticleSystem::Init()
 {
     unsigned int totalSize = m_maxParticles * sizeof(CParticle);
-    AllocBufferMemory(m_particlesBuffer, m_particlesMemory, totalSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    AllocBufferMemory(m_particlesBuffer, m_particlesMemory, totalSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT); //this buffer should be device local
 
     TRAP(!m_updateShaderFile.empty());
     TRAP(CreateShaderModule(m_updateShaderFile, m_updateShader));
@@ -277,12 +277,11 @@ CParticlesRenderer::CParticlesRenderer(VkRenderPass renderPass)
     , m_needUpdate(true)
     , m_quad(nullptr)
     , m_simPaused(false)
-    , m_updateParticlesGlobalBuffer(VK_NULL_HANDLE)
+    , m_updateParticlesGlobalBuffer(nullptr)
     , m_computeGlobalDescLayout(VK_NULL_HANDLE)
     , m_computeSpecificDescLayout(VK_NULL_HANDLE)
     , m_computeGlobalDescriptor(VK_NULL_HANDLE)
-    , m_renderParticlesGlobalBuffer(VK_NULL_HANDLE)
-    , m_renderParticlesGlobalMemory(VK_NULL_HANDLE)
+    , m_renderParticlesGlobalBuffer(nullptr)
 {
     PerspectiveMatrix(m_projMatrix);
     ConvertToProjMatrix(m_projMatrix);
@@ -293,11 +292,7 @@ CParticlesRenderer::~CParticlesRenderer()
     VkDevice dev = vk::g_vulkanContext.m_device;
     vk::DestroyDescriptorPool(vk::g_vulkanContext.m_device, m_descriptorPool, nullptr);
 
-    vk::FreeMemory(dev, m_updateParticlesGlobalMemory, nullptr);
-    vk::DestroyBuffer(dev, m_updateParticlesGlobalBuffer, nullptr);
-
-    vk::FreeMemory(dev, m_renderParticlesGlobalMemory, nullptr);
-    vk::DestroyBuffer(dev, m_renderParticlesGlobalBuffer, nullptr);
+	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_renderParticlesGlobalBuffer->GetRootParent());
 
     vk::DestroyDescriptorSetLayout(dev, m_computeGlobalDescLayout, nullptr);
     vk::DestroyDescriptorSetLayout(dev, m_computeSpecificDescLayout, nullptr);
@@ -306,17 +301,18 @@ CParticlesRenderer::~CParticlesRenderer()
         delete m_particleSystems[i];
 }
 
+void CParticlesRenderer::PreRender()
+{
+	UpdateShaderParams();
+}
+
 void CParticlesRenderer::Render()
 {
     if(m_needUpdate)
         UpdateDescSets();
 
-    UpdateShaderParams();
-
     VkCommandBuffer buffer = vk::g_vulkanContext.m_mainCommandBuffer;
     VkBufferMemoryBarrier computeDoneBarrier[5];
-    
-   
 
     for(unsigned int i = 0; i < m_particleSystems.size(); ++i)
     {
@@ -375,9 +371,10 @@ void CParticlesRenderer::Init()
 
     CreateComputeLayouts();
     CreateComputeDescriptors();
-
-    AllocBufferMemory(m_updateParticlesGlobalBuffer, m_updateParticlesGlobalMemory, sizeof(SUpdateGlobalParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-    AllocBufferMemory(m_renderParticlesGlobalBuffer, m_renderParticlesGlobalMemory, sizeof(SParticlesParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	
+	BufferHandle* mainBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, { sizeof(SUpdateGlobalParams), sizeof(SParticlesParams) }, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	m_updateParticlesGlobalBuffer = mainBuffer->CreateSubbuffer(sizeof(SUpdateGlobalParams));
+	m_renderParticlesGlobalBuffer = mainBuffer->CreateSubbuffer(sizeof(SParticlesParams));
 
     SVertex vertices[] = {
         SVertex(glm::vec3(-1.0f, 1.0f, 0.0f), glm::vec2(0.0f, 0.0f)),
@@ -524,10 +521,7 @@ void CParticlesRenderer::CreateComputeLayouts()
 void CParticlesRenderer::UpdateDescSets()
 {
     {
-        VkDescriptorBufferInfo uniformDescInfo;
-        uniformDescInfo.buffer = m_updateParticlesGlobalBuffer;
-        uniformDescInfo.offset = 0;
-        uniformDescInfo.range = VK_WHOLE_SIZE;
+		VkDescriptorBufferInfo uniformDescInfo = m_updateParticlesGlobalBuffer->GetDescriptor();;
 
         std::vector<VkWriteDescriptorSet> wDesc;
         wDesc.resize(1);
@@ -544,10 +538,7 @@ void CParticlesRenderer::UpdateDescSets()
     }
 
     {
-        VkDescriptorBufferInfo uniformDescInfo;
-        uniformDescInfo.buffer = m_renderParticlesGlobalBuffer;
-        uniformDescInfo.offset = 0;
-        uniformDescInfo.range = VK_WHOLE_SIZE;
+        VkDescriptorBufferInfo uniformDescInfo = m_renderParticlesGlobalBuffer->GetDescriptor();
 
         VkWriteDescriptorSet wDesc;
         cleanStructure(wDesc);
@@ -569,22 +560,17 @@ void CParticlesRenderer::UpdateShaderParams()
     float dt = 1 / 60.0f; //NICE
     glm::mat4 projViewMatrix = m_projMatrix * ms_camera.GetViewMatrix();
     {
-        SUpdateGlobalParams* params = nullptr;
-        VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_updateParticlesGlobalMemory, 0, sizeof(SUpdateGlobalParams), 0, (void**)&params));
+		SUpdateGlobalParams* params = m_updateParticlesGlobalBuffer->GetPtr<SUpdateGlobalParams*>();
         params->Params = glm::vec4(dt, 0.0f, 0.0f, 0.0f);
         params->ProjViewMatrix = projViewMatrix;
-        vk::UnmapMemory(vk::g_vulkanContext.m_device, m_updateParticlesGlobalMemory);
     }
 
     {
-        SParticlesParams* p = nullptr;
-        VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_renderParticlesGlobalMemory, 0, sizeof(SParticlesParams), 0, (void**)&p));
+        SParticlesParams* p = m_renderParticlesGlobalBuffer->GetPtr<SParticlesParams*>();
         p->CameraPos = glm::vec4(ms_camera.GetPos(), 1.0f);
         p->CameraUp = glm::vec4(ms_camera.GetUpVector(), 0.0f);
         p->CameraRight = glm::vec4(ms_camera.GetRightVector(), 0.0f);
         p->ProjViewMatrix = projViewMatrix;
-
-        vk::UnmapMemory(vk::g_vulkanContext.m_device, m_renderParticlesGlobalMemory);
     }
 }
 

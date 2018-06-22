@@ -255,11 +255,12 @@ class CUIRenderer : public CRenderer
 public:
     CUIRenderer(VkRenderPass renderPass);
     virtual ~CUIRenderer();
-
+	
+	virtual void Init() override;
     virtual void Render() override;
-    void SetFont(CFont2* font);
+	virtual void PreRender() override;
     
-    virtual void Init() override;
+	void SetFont(CFont2* font);
 private:
     virtual void CreateDescriptorSetLayout() override;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets);
@@ -297,7 +298,7 @@ private:
     {
         CUIText*                uiItem;
         UiItemsShaderParams     uiParams;
-        uint64_t                buffOffset;
+        BufferHandle*           buffer;
         VkDescriptorSet         descSet;
 
         UINode() 
@@ -314,17 +315,15 @@ private:
     VkDescriptorSet                 m_commonDescSet;
     VkSampler                       m_sampler;
 
-    VkBuffer                        m_uiItemUniformBuffer;
-    VkDeviceMemory                  m_uiItemUniformMemory;
+    BufferHandle*                   m_uiItemUniformBuffer;
 
-    VkBuffer                        m_commonUniformBuffer;
-    VkDeviceMemory                  m_commonUniformMemory;
+    BufferHandle*                   m_commonUniformBuffer;
 
     std::array<UINode, MAXUIITEMS>  m_uiNodes;
-    CGraphicPipeline                       m_textElemPipeline;
+    CGraphicPipeline                m_textElemPipeline;
 
     std::vector<CUIVector*>         m_uiVectors;            
-    CGraphicPipeline                       m_vectorElemPipeline;
+    CGraphicPipeline                m_vectorElemPipeline;
 
     glm::mat4                       m_projMatrix;
 
