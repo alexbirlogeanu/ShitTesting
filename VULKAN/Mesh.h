@@ -32,7 +32,6 @@ struct BoundingBox
     }
 };
 class Mesh;
-class MappedMemory;
 class BufferHandle;
 class MeshManager : public Singleton<MeshManager>
 {
@@ -100,7 +99,7 @@ public:
 private:
     void Create();
     void CreateBoundigBox();
-	void CopyLocalData(MappedMemory* mapMemory, BufferHandle* stagginVertexBuffer, BufferHandle* staggingIndexBuffer);
+	void CopyLocalData(BufferHandle* stagginVertexBuffer, BufferHandle* staggingIndexBuffer);
 private:
 
     std::vector<SVertex>			m_vertexes;

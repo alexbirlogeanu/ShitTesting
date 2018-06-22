@@ -81,7 +81,7 @@ public:
 
 	void				Prepare(); //kinda shitty
     void				AddCopyCommand();
-	void				CopyLocalData(MappedMemory* memMap);
+	void				CopyLocalData();
 private:
 	TextureCreator(CTexture* text, const SImageData& imgData, bool ownData);
 private:

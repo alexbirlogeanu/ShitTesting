@@ -113,10 +113,9 @@ void CTextureManager::Update()
 	std::vector<VkBufferMemoryBarrier> buffBarriers(m_updateTextureCreators.size());
 	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::StaggingTextures);
 
-	MappedMemory* memMap = MemoryManager::GetInstance()->GetMappedMemory(EMemoryContextType::StaggingTextures);
 	for (unsigned int i = 0; i < m_updateTextureCreators.size(); ++i)
     {
-		m_updateTextureCreators[i]->CopyLocalData(memMap);
+		m_updateTextureCreators[i]->CopyLocalData();
 		buffBarriers[i] = m_updateTextureCreators[i]->GetBuffer()->CreateMemoryBarrier(VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 		imgBarries[i] = m_updateTextureCreators[i]->GetImage()->CreateMemoryBarrier(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
     }
@@ -210,9 +209,9 @@ void TextureCreator::Prepare()
 	m_staggingBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::StaggingTextures, m_data.GetDataSize(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 }
 
-void TextureCreator::CopyLocalData(MappedMemory* memMap)
+void TextureCreator::CopyLocalData()
 {
-	void* dst = memMap->GetPtr<void*>(m_staggingBuffer);
+	void* dst = m_staggingBuffer->GetPtr<void*>();
 	memcpy(dst, (void*)m_data.data, m_data.GetDataSize());
 }
 

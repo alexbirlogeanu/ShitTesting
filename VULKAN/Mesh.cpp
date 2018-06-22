@@ -101,11 +101,8 @@ void MeshManager::Update()
 		}
 
 		MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::StaggingBuffer);
-		MappedMemory* memoryMap = MemoryManager::GetInstance()->GetMappedMemory(EMemoryContextType::StaggingBuffer);
 		for (auto info : m_transferInProgress)
-		{
-			info.m_mesh->CopyLocalData(memoryMap, info.m_stagginVertexBuffer, info.m_staggingIndexBuffer);
-		}
+			info.m_mesh->CopyLocalData(info.m_stagginVertexBuffer, info.m_staggingIndexBuffer);
 
 		MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::StaggingBuffer);
 		std::vector<VkBufferMemoryBarrier> copyBarriers;
@@ -220,10 +217,10 @@ unsigned int Mesh::GetIndicesMemorySize() const
 	return m_indices.size() * sizeof(unsigned int);
 }
 
-void Mesh::CopyLocalData(MappedMemory* mapMemory, BufferHandle* stagginVertexBuffer, BufferHandle* staggingIndexBuffer)
+void Mesh::CopyLocalData(BufferHandle* stagginVertexBuffer, BufferHandle* staggingIndexBuffer)
 {
-	void* vertexMem = mapMemory->GetPtr<void*>(stagginVertexBuffer); //for debug purpose only
-	void* indexMem = mapMemory->GetPtr<void*>(staggingIndexBuffer);
+	void* vertexMem = stagginVertexBuffer->GetPtr<void*>(); //for debug purpose only
+	void* indexMem = staggingIndexBuffer->GetPtr<void*>();
 	memcpy(vertexMem, m_vertexes.data(), GetVerticesMemorySize());
 	memcpy(indexMem, m_indices.data(), GetIndicesMemorySize());
 }

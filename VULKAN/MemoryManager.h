@@ -22,6 +22,7 @@ enum class EMemoryContextType
 	Count
 };
 
+class MemoryContext;
 class Handle
 {
 	friend class MemoryContext;
@@ -30,12 +31,16 @@ public:
 	VkDeviceSize GetOffset() const { return m_offset; }
 	Handle* GetRootParent() { return ((m_parent)? m_parent->GetRootParent() : this); }
 
+	template<class RetType>
+	RetType GetPtr();
+
 protected:
-	Handle(VkDeviceSize size, VkDeviceSize alignment)
+	Handle(VkDeviceSize size, VkDeviceSize alignment, MemoryContext* context)
 		: m_size(size)
 		, m_alignment(alignment)
 		, m_offset(0)
 		, m_parent(nullptr)
+		, m_memoryContext(context)
 	{
 	}
 
@@ -44,12 +49,14 @@ protected:
 		, m_alignment(alignment)
 		, m_offset(offset)
 		, m_parent(parrent)
+		, m_memoryContext(parrent->m_memoryContext)
 	{
 
 	}
 	virtual ~Handle()
 	{
 	}
+
 	virtual void FreeResources()=0;
 protected:
 	VkDeviceSize				m_size;
@@ -57,7 +64,7 @@ protected:
 	VkDeviceSize				m_alignment; //if alignment is 0, then is not considered when suballocate
 	Handle*						m_parent;
 
-	EMemoryContextType			m_memoryContext;
+	MemoryContext*				m_memoryContext;
 };
 
 template<class VkType>
@@ -67,8 +74,8 @@ public:
 	const VkType& Get() const { return m_vkHandle; }
 
 protected:
-	HandleImpl(VkType handle, VkDeviceSize size, VkDeviceSize alignment)
-		: Handle(size, alignment)
+	HandleImpl(VkType handle, VkDeviceSize size, VkDeviceSize alignment, MemoryContext* context)
+		: Handle(size, alignment, context)
 		, m_vkHandle(handle)
 	{
 
@@ -83,10 +90,7 @@ protected:
 	{
 		for (unsigned int i = 0; i < m_subDivisions.size(); ++i)
 			delete m_subDivisions[i];
-	}
-
-	void SetMemoryContext(EMemoryContextType type) { m_memoryContext = type; }
-	
+	}	
 
 	template<class HandleType>
 	HandleType* SubAllocate(HandleType* parent, VkDeviceSize size)
@@ -97,7 +101,6 @@ protected:
 
 		TRAP(offset + size <= m_size && "Not enough memory for this sub Allocation");
 		HandleType* hSubAlloc = new HandleType(parent, size, m_alignment, offset);
-		hSubAlloc->SetMemoryContext(m_memoryContext);
 
 		m_freeOffset = offset + size;
 		m_subDivisions.push_back(hSubAlloc);
@@ -119,10 +122,11 @@ class BufferHandle : public HandleImpl<VkBuffer>
 public:
 	BufferHandle* CreateSubbuffer(VkDeviceSize size);
 	VkBufferMemoryBarrier CreateMemoryBarrier(VkAccessFlags srcAccess, VkAccessFlags dstAccess);
+
 protected:
 	virtual void FreeResources() override;
 private:
-	BufferHandle(VkBuffer handle, VkDeviceSize size, VkDeviceSize alignment);
+	BufferHandle(VkBuffer handle, VkDeviceSize size, VkDeviceSize alignment, MemoryContext* context);
 	BufferHandle(BufferHandle* parent, VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize offset);
 	virtual ~BufferHandle(){}
 
@@ -142,7 +146,7 @@ public:
 	VkFormat GetFormat() const { return m_format; }
 	const VkExtent3D GetDimensions() const { return m_dimensions; }
 protected:
-	ImageHandle(VkImage vkHandle, VkDeviceSize size, VkDeviceSize alignment, const VkImageCreateInfo& imgInfo);
+	ImageHandle(VkImage vkHandle, VkDeviceSize size, VkDeviceSize alignment, const VkImageCreateInfo& imgInfo, MemoryContext* context);
 	ImageHandle(ImageHandle* parent, VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize offset); //dont implement yet
 	ImageHandle(const ImageHandle&);
 	ImageHandle& operator=(const ImageHandle);
@@ -194,8 +198,7 @@ public:
 	bool IsBufferMemory() const;
 
 	bool IsMapped() const { return m_mappedMemory != nullptr; }
-
-	MappedMemory* GetMappedMemory() const { return (IsMapped())? m_mappedMemory : nullptr; }
+	MappedMemory* GetMappedMemory() const { return (IsMapped()) ? m_mappedMemory : nullptr; }
 private:
 	struct Chunk
 	{
@@ -243,6 +246,14 @@ T MappedMemory::GetPtr(Handle* handle)
 	return (T)bufferMemPtr;
 }
 
+template<class RetType>
+RetType Handle::GetPtr()
+{
+	MappedMemory* mapMem = m_memoryContext->GetMappedMemory();
+	TRAP(mapMem && "This memory for this handle is not mapped!!");
+	return mapMem->GetPtr<RetType>(this);
+}
+
 class MemoryManager : public Singleton<MemoryManager>
 {
 	friend class Singleton<MemoryManager>;
@@ -258,7 +269,7 @@ public:
 	bool MapMemoryContext(EMemoryContextType context); //TODO change to return the new mapped memory
 	void UnmapMemoryContext(EMemoryContextType context);
 
-	MappedMemory* GetMappedMemory(EMemoryContextType context);
+	//MappedMemory* GetMappedMemory(EMemoryContextType context);
 
 protected:
 	MemoryManager();
@@ -267,7 +278,7 @@ protected:
 	MemoryManager(const MemoryManager&);
 	MemoryManager& operator= (const MemoryManager&);
 
-	
 private:
 	std::array<MemoryContext*, (size_t)EMemoryContextType::Count>	m_memoryContexts;
 };
+

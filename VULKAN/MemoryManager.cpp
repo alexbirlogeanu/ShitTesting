@@ -5,8 +5,8 @@
 ///////////////////////////////////////////////////////////////////////////////////
 //BufferHandle
 ///////////////////////////////////////////////////////////////////////////////////
-BufferHandle::BufferHandle(VkBuffer handle, VkDeviceSize size, VkDeviceSize alignment)
-	: HandleImpl<VkBuffer>(handle, size, alignment)
+BufferHandle::BufferHandle(VkBuffer handle, VkDeviceSize size, VkDeviceSize alignment, MemoryContext* context)
+	: HandleImpl<VkBuffer>(handle, size, alignment, context)
 {
 
 }
@@ -46,8 +46,8 @@ void BufferHandle::FreeResources()
 //ImageHandle
 ///////////////////////////////////////////////////////////////////////////////////
 
-ImageHandle::ImageHandle(VkImage vkHandle, VkDeviceSize size, VkDeviceSize alignment, const VkImageCreateInfo& imgInfo)
-	: HandleImpl<VkImage>(vkHandle, size, alignment)
+ImageHandle::ImageHandle(VkImage vkHandle, VkDeviceSize size, VkDeviceSize alignment, const VkImageCreateInfo& imgInfo, MemoryContext* context)
+	: HandleImpl<VkImage>(vkHandle, size, alignment, context)
 	, m_view(VK_NULL_HANDLE)
 	, m_format(imgInfo.format)
 	, m_dimensions(imgInfo.extent)
@@ -336,8 +336,7 @@ BufferHandle* MemoryContext::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags 
 	else
 		alignment = 0; // for index and vertex buffers. It seems that these buffers dont have to be aligned when we suballocate
 
-	BufferHandle* hBufferHandle = new BufferHandle(buffer, size, alignment);
-	hBufferHandle->SetMemoryContext(m_contextType);
+	BufferHandle* hBufferHandle = new BufferHandle(buffer, size, alignment, this);
 
 	m_allocatedChunks.emplace(hBufferHandle, memoryChunk);
 
@@ -357,13 +356,10 @@ ImageHandle* MemoryContext::CreateImage(const VkImageCreateInfo& crtInfo, const 
 	TRAP(imgMemIndex == m_memoryTypeIndex && "Memory req for this image is not in the same heap");
 	
 	Chunk memoryChunk = GetFreeChunk(memReq.size, memReq.alignment);
-
 	//bind image to memory
 	VULKAN_ASSERT(vk::BindImageMemory(dev, image, m_memory, memoryChunk.m_offset));
 
-	ImageHandle* hImageHandle = new ImageHandle(image, memReq.size, memReq.alignment, crtInfo);
-	hImageHandle->SetMemoryContext(m_contextType);
-	
+	ImageHandle* hImageHandle = new ImageHandle(image, memReq.size, memReq.alignment, crtInfo, this);
 	m_allocatedChunks.emplace(hImageHandle, memoryChunk);
 
 	if (!debugName.empty())
@@ -450,6 +446,7 @@ void MemoryManager::FreeMemory(EMemoryContextType context)
 bool MemoryManager::MapMemoryContext(EMemoryContextType context)
 {
 	MemoryContext* memContext = m_memoryContexts[(unsigned int)context];
+	TRAP(memContext->CanMapMemory() && "Memory context cannot be mapped!!");
 	if (!memContext->CanMapMemory()) //this is not mappable
 		return false;
 
@@ -461,9 +458,3 @@ void MemoryManager::UnmapMemoryContext(EMemoryContextType context)
 	m_memoryContexts[(unsigned int)context]->UnmapMemory();
 }
 
-MappedMemory* MemoryManager::GetMappedMemory(EMemoryContextType context)
-{
-	MappedMemory* mapMem = m_memoryContexts[(unsigned int)context]->GetMappedMemory();
-	TRAP(mapMem && " Memory context is not mapped or cannot be mapped!");
-	return mapMem;
-}
