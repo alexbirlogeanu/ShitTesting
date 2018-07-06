@@ -331,7 +331,7 @@ BufferHandle* MemoryContext::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags 
 
 	uint32_t buffMemIndex = vk::SVUlkanContext::GetMemTypeIndex(memReq.memoryTypeBits, m_memoryFlags);
 	TRAP(buffMemIndex == m_memoryTypeIndex && "Memory req for this buffer is not in the same heap");
-	std::cout << "For buffer " << buffer << " in context memory " << (unsigned int)m_contextType << " buffer memory index: " << buffMemIndex << " with memory index: " << m_memoryTypeIndex << std::endl;
+	//std::cout << "For buffer " << buffer << " in context memory " << (unsigned int)m_contextType << " buffer memory index: " << buffMemIndex << " with memory index: " << m_memoryTypeIndex << std::endl;
 
 	Chunk memoryChunk = GetFreeChunk(memReq.size, memReq.alignment);
 

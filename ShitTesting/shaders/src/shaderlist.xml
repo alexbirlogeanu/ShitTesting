@@ -49,4 +49,5 @@
 	<shader shaderfile="spv.generateVolumeTexture.comp" out="generateVolumeTexture.comp" />
 	<shader shaderfile="spv.splitVolumeTexture.comp" out="splitVolumeTexture.comp" />
 	<shader shaderfile="spv.tileshading.comp" out="tileshading.comp" />
+	<shader shaderfile="spv.ssr.frag" out="ssr.frag" />
 </shaderlist>

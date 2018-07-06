@@ -36,6 +36,7 @@
 #include "ShadowRenderer.h"
 #include "Object.h"
 #include "PointLightRenderer2.h"
+#include "ScreenSpaceReflectionRenderer.h"
 #include "MemoryManager.h"
 
 #define OUT_FORMAT VK_FORMAT_R16G16B16A16_SFLOAT
@@ -918,6 +919,7 @@ private:
     void SetupFogRendering();
     void Setup3DTextureRendering();
     void SetupVolumetricRendering();
+	void SetupScreenSpaceReflectionsRendering();
 
     void CreateDeferredRenderPass(const FramebufferDescription& fbDesc);
     void CreateAORenderPass(const FramebufferDescription& fbDesc);
@@ -934,6 +936,7 @@ private:
     void CreateFogRenderPass(const FramebufferDescription& fbDesc);
     void Create3DTextureRenderPass(const FramebufferDescription& fbDesc);
     void CreateVolumetricRenderPass(const FramebufferDescription& fbDesc);
+	void CreateSSRRenderPass(const FramebufferDescription& fbDesc);
 
     void CreateCommandBuffer();
   
@@ -993,6 +996,7 @@ private:
     VkRenderPass                m_fogRenderPass;
     VkRenderPass                m_3DtextureRenderPass;
     VkRenderPass                m_volumetricRenderPass;
+	VkRenderPass				m_ssrRenderPass;
 
     VkQueue                     m_queue;
 
@@ -1034,7 +1038,7 @@ private:
     PostProcessRenderer*        m_postProcessRenderer;
     CSunRenderer*               m_sunRenderer;
     CUIRenderer*                m_uiRenderer;
-
+	ScreenSpaceReflectionsRenderer*	m_ssrRenderer;
     CUIManager*                 m_uiManager;
 
     //bool                        m_pickRecorded;
@@ -1069,6 +1073,7 @@ CApplication::CApplication()
     , m_fogRenderPass(VK_NULL_HANDLE)
     , m_3DtextureRenderPass(VK_NULL_HANDLE)
     , m_volumetricRenderPass(VK_NULL_HANDLE)
+	, m_ssrRenderPass(VK_NULL_HANDLE)
     , m_swapChain(VK_NULL_HANDLE)
     , m_surface(VK_NULL_HANDLE)
     , m_queue(VK_NULL_HANDLE)
@@ -1096,6 +1101,7 @@ CApplication::CApplication()
     , m_postProcessRenderer(nullptr)
     , m_sunRenderer(nullptr)
     , m_uiRenderer(nullptr)
+	, m_ssrRenderer(nullptr)
     , m_uiManager(nullptr)
     , m_screenshotRequested(false)
     , m_centerCursor(true)
@@ -1136,7 +1142,8 @@ CApplication::CApplication()
     SetupFogRendering();
     Setup3DTextureRendering();
     SetupVolumetricRendering();
-    
+	SetupScreenSpaceReflectionsRendering();
+
     GetPickManager()->Setup();
 
 	MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::UniformBuffers);
@@ -1162,6 +1169,7 @@ CApplication::~CApplication()
 	delete m_pointLightRenderer2;
     delete m_particlesRenderer;
     delete m_uiRenderer;
+	delete m_ssrRenderer;
     delete m_postProcessRenderer;
     delete m_sunRenderer;
     delete m_shadowRenderer;
@@ -1192,6 +1200,7 @@ CApplication::~CApplication()
     vk::DestroyRenderPass(dev, m_fogRenderPass, nullptr);
     vk::DestroyRenderPass(dev, m_3DtextureRenderPass, nullptr);
     vk::DestroyRenderPass(dev, m_volumetricRenderPass, nullptr);
+	vk::DestroyRenderPass(dev, m_ssrRenderPass, nullptr);
 
 	CTextureManager::DestroyInstance();
 	MeshManager::DestroyInstance();
@@ -1999,6 +2008,23 @@ void CApplication::SetupParticleRendering()
     m_volumetricRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
     m_volumetricRenderer->Init();
  }
+ 
+ void CApplication::SetupScreenSpaceReflectionsRendering()
+ {
+	 unsigned int resolution = 1;
+	 FramebufferDescription fbDesc;
+	 fbDesc.Begin(2);
+	 fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "SSROutput");
+	 fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "SSRDebug");
+
+	 fbDesc.End();
+
+	 CreateSSRRenderPass(fbDesc);
+	 m_ssrRenderer = new ScreenSpaceReflectionsRenderer(m_ssrRenderPass);
+	 m_ssrRenderer->CreateFramebuffer(fbDesc, WIDTH / resolution, HEIGHT / resolution);
+	 m_ssrRenderer->Init();
+ }
+
 
 void CApplication::CreateShadowRenderPass(const FramebufferDescription& fbDesc)
 {
@@ -2330,6 +2356,26 @@ void CApplication::CreateVolumetricRenderPass(const FramebufferDescription& fbDe
     NewRenderPass(&m_volumetricRenderPass, ad, subpasses, dependecies);
 }
 
+void CApplication::CreateSSRRenderPass(const FramebufferDescription& fbDesc)
+{
+	std::vector<VkAttachmentDescription> ad;
+	ad.resize(fbDesc.m_colorAttachments.size());
+	for (unsigned int i = 0; i < ad.size(); ++i)
+		AddAttachementDesc(ad[i], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[i].format);
+
+	std::vector<VkAttachmentReference> atRef;
+	atRef.push_back(CreateAttachmentReference(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
+	atRef.push_back(CreateAttachmentReference(1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
+
+	std::vector<VkSubpassDescription> subpasses;
+	subpasses.push_back(CreateSubpassDesc(atRef.data(), 2));
+
+	std::vector<VkSubpassDependency> dependencies;
+	dependencies.push_back(CreateSubpassDependency(VK_SUBPASS_EXTERNAL, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
+
+	NewRenderPass(&m_ssrRenderPass, ad, subpasses, dependencies);
+}
+
 void CApplication::CreateCommandBuffer()
 {
     VkCommandPoolCreateInfo cmdPoolCi;
@@ -2638,6 +2684,8 @@ void CApplication::WaitForFinalImageToComplete()
 void CApplication::RenderPostProcess()
 {
     VkCommandBuffer buff = vk::g_vulkanContext.m_mainCommandBuffer;
+
+	m_ssrRenderer->Render();
 
     m_postProcessRenderer->UpdateShaderParams();
     m_postProcessRenderer->StartRenderPass();

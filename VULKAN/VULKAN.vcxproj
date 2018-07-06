@@ -133,6 +133,7 @@
     <ClInclude Include="Object.h" />
     <ClInclude Include="PointLightRenderer2.h" />
     <ClInclude Include="ResourceTable.h" />
+    <ClInclude Include="ScreenSpaceReflectionRenderer.h" />
     <ClInclude Include="Singleton.h" />
     <ClInclude Include="SkyRenderer.h" />
     <ClInclude Include="Camera.h" />
@@ -160,6 +161,7 @@
     <ClCompile Include="MeshLoader.cpp" />
     <ClCompile Include="Object.cpp" />
     <ClCompile Include="PointLightRenderer2.cpp" />
+    <ClCompile Include="ScreenSpaceReflectionRenderer.cpp" />
     <ClCompile Include="SkyRenderer.cpp" />
     <ClCompile Include="Fog.cpp" />
     <ClCompile Include="Lights.cpp" />
