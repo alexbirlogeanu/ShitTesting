@@ -245,8 +245,15 @@ void CPipeline::CreatePipelineLayout(const std::vector<VkDescriptorSetLayout>& l
     plci.flags = 0;
     plci.setLayoutCount = (uint32_t)layouts.size();
     plci.pSetLayouts = layouts.data();
+	plci.pushConstantRangeCount = (uint32_t)m_pushConstantRanges.size();
+	plci.pPushConstantRanges = (m_pushConstantRanges.empty()) ? nullptr : m_pushConstantRanges.data();
 
     VULKAN_ASSERT(vk::CreatePipelineLayout(vk::g_vulkanContext.m_device, &plci, nullptr, &m_pipelineLayout));
+}
+
+void CPipeline::AddPushConstant(VkPushConstantRange range)
+{
+	m_pushConstantRanges.push_back(range);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

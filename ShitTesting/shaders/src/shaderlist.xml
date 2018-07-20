@@ -31,6 +31,7 @@
 	<shader shaderfile="spv.ssao.frag" out="ssao.frag" />
 	<shader shaderfile="spv.hblur.frag" out="hblur.frag" />
 	<shader shaderfile="spv.vblur.frag" out="vblur.frag" />
+	<shader shaderfile="spv.gaussblur.frag" out="gaussblur.frag" />
 	<shader shaderfile="spv.lineardepth.frag" out="lineardepth.frag" />
 	<shader shaderfile="spv.fog.frag" out="fog.frag" />
 	<shader shaderfile="spv.sun.vert" out="sun.vert" />
@@ -50,4 +51,6 @@
 	<shader shaderfile="spv.splitVolumeTexture.comp" out="splitVolumeTexture.comp" />
 	<shader shaderfile="spv.tileshading.comp" out="tileshading.comp" />
 	<shader shaderfile="spv.ssr.frag" out="ssr.frag" />
+	<shader shaderfile="spv.ssr.comp" out="ssr.comp" />
+	<shader shaderfile="spv.ssrresolve.frag" out="ssrresolve.frag"/>
 </shaderlist>

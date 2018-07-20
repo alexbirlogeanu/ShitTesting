@@ -120,6 +120,7 @@ MappedMemory::~MappedMemory()
 MemoryContext::MemoryContext(EMemoryContextType type)
 	: m_memory(VK_NULL_HANDLE)
 	, m_totalSize(0)
+	, m_allocatedSize(0)
 	, m_memoryTypeIndex(-1)
 	, m_contextType(type)
 	, m_mappedMemory(nullptr)
@@ -346,6 +347,7 @@ BufferHandle* MemoryContext::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags 
 	BufferHandle* hBufferHandle = new BufferHandle(buffer, size, alignment, this);
 
 	m_allocatedChunks.emplace(hBufferHandle, memoryChunk);
+	m_allocatedSize += memReq.size;
 
 	return hBufferHandle;
 }
@@ -368,6 +370,7 @@ ImageHandle* MemoryContext::CreateImage(const VkImageCreateInfo& crtInfo, const 
 
 	ImageHandle* hImageHandle = new ImageHandle(image, memReq.size, memReq.alignment, crtInfo, this);
 	m_allocatedChunks.emplace(hImageHandle, memoryChunk);
+	m_allocatedSize += memReq.size;
 
 	if (!debugName.empty())
 		SetObjectDebugName(image, debugName);
@@ -384,7 +387,9 @@ void MemoryContext::FreeHandle(Handle* handle)
 		return;
 	}
 
-	FreeChunk(found->second);
+	Chunk chunk = found->second;
+	FreeChunk(chunk);
+	m_allocatedSize -= chunk.m_size;
 	m_allocatedChunks.erase(found);
 	handle->FreeResources();
 	delete handle;

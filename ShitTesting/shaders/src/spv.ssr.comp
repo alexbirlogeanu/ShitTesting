@@ -2,26 +2,25 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 
-layout(location=0) out vec4 ssrOutput;
-layout(location=1) out vec4 debug;
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
-layout(location=0) in vec4 uv;
-
+//input vars
 layout(set=0, binding=0) uniform SSRConstants_U
 {
-	vec4 ViewDirection;
+	vec4 ScreenInfo; //x = width, y = height, z = 1/width, w = 1/height
 	mat4 ViewMatrix;
 	mat4 ProjMatrix;
-	//TODO add InvProjMatrix
-	//TODO add ViewSpaceToScreenSpace
+	mat4 InvProjMatrix;
+	mat4 ViewSpaceToScreenSpace;
 };
 
 layout(set=0, binding=1) uniform sampler2D Normals_T;
 layout(set=0, binding=2) uniform sampler2D Positions_T;
-layout(set=0, binding=3) uniform sampler2D Color_T;
-layout(set=0, binding=4) uniform sampler2D Depth_T;
+layout(set=0, binding=3) uniform sampler2D Depth_T;
 
-mat4 InvProjMatrix;
+//output var
+layout(set=0, binding=4, rgba16f) writeonly uniform image2D ssrOutput;
+layout(set=0, binding=5, rgba16f) writeonly uniform image2D debug;
 
 float LiniarizeDepth(float z)
 {
@@ -52,10 +51,10 @@ float distanceSquared(vec2 A, vec2 B)
 vec4 GetPointInViewSpace(vec2 coords)
 {
 	vec4 viewSpacePoint = vec4(0.0f, 0.0f, 0.0f, 1.0f);
-	if (any(lessThan(coords, vec2(0.0f, 0.0f))) || any(greaterThan(coords, vec2(1280.0f, 720.0f))))
+	if (any(lessThan(coords, vec2(0.0f, 0.0f))) || any(greaterThan(coords, ScreenInfo.xy)))
 		return viewSpacePoint;
 	float depth = InvLiniarizeDepth(texelFetch(Depth_T, ivec2(coords), 0).r);
-	coords /= vec2(1280.0f, 720.0f);
+	coords *= ScreenInfo.zw;
 	coords = coords * 2.0f - 1.0f;
 	viewSpacePoint = InvProjMatrix * vec4(coords, depth, 1.0f);
 	viewSpacePoint /= viewSpacePoint.w;
@@ -75,6 +74,8 @@ bool TraceViewSpaceRay(	vec3 rayOrigin,
 						out vec2 hitCoords
 						)
 {
+	ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+	
 	hitCoords = vec2(-1.0f, -1.0f);
 	float deltaStep = maxDistance / maxSteps;
 	
@@ -97,7 +98,8 @@ bool TraceViewSpaceRay(	vec3 rayOrigin,
 		}
 		pointVS += deltaStep * rayDir;
 	}
-	debug = vec4(hitCoords, stepCount, 1.0f);
+
+	imageStore(debug, pixel, vec4(hitCoords, stepCount, 1.0f));
 	
 	return !(OutsideOfScreenSpace(hitCoords.x) || OutsideOfScreenSpace(hitCoords.y));
 }
@@ -110,9 +112,11 @@ bool TraceScreenSpaceRay
 	float jitter,
 	float maxSteps,
 	float maxDistance,
+	out float hitDepth,
 	out vec2 hitCoords
    )
 {
+	ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
 	float nearPlane = -0.01f;
 	
 	float rayLength = (rayOrigin.z + maxDistance * rayDir.z > nearPlane) ? (nearPlane - rayOrigin.z) / rayDir.z : maxDistance;
@@ -203,43 +207,50 @@ bool TraceScreenSpaceRay
 			break;
 	}
 	//debug = vec4(hitCoords, stepCount, stepCount);	
-	
-	debug = vec4(rayDir, stepCount);
-	//return !(OutsideOfScreenSpace(hitCoords.x) || OutsideOfScreenSpace(hitCoords.y));
+	hitDepth = sceneZMax;
+	imageStore(debug, pixel, vec4(rayDir, stepCount));
 	return IntersectDepthBuffer(sceneZMax, rayZMin, rayZMax);
+}
+
+const float stride = 2.0f;
+const float jitter = 1.0f;
+
+vec2 GetTextureCoords()
+{
+	vec2 sampleDims = ScreenInfo.xy / vec2(gl_NumWorkGroups.xy * gl_WorkGroupSize.xy);
+	vec2 pixelPos = sampleDims * vec2(gl_GlobalInvocationID.xy);
+	pixelPos += sampleDims / 2.0f; //get the center pixel of the kernel
+	
+	return floor(pixelPos) /  ScreenInfo.xy;
 }
 
 void main()
 {
-	InvProjMatrix = inverse(ProjMatrix);
+	vec2 uv = GetTextureCoords();
 	float maxSteps = 64.0f;
 	float maxDistance = 7.5f;
-	
-	vec3 normalWS = texelFetch(Normals_T, ivec2(gl_FragCoord.xy), 0).xyz;
-	if (all(equal(normalWS, vec3(0.0f, 0.0f, 0.0f))))
-		discard;
-		
-	vec3 posVS = (ViewMatrix * texelFetch(Positions_T, ivec2(gl_FragCoord.xy), 0)).xyz;
-	vec3 normalVS = normalize(vec3(ViewMatrix * vec4(normalWS, 0.0f)));
-	
-	vec3 rayDir = normalize(reflect(normalize(posVS), normalVS));
-	
+	bool hit = false;
 	vec2 hitCoords;
-	//bool hit = TraceViewSpaceRay(posVS, rayDir, maxSteps, maxDistance, hitCoords);
-	float stride = 2.0f;
-	float jitter = 1.0f;
-	float width = 1280.0f;
-	float height = 720.0f;
-	mat4 screenSpace = mat4(vec4(width * 0.5f, 0.0f, 0.0f, 0.0f),
-							vec4(0.0f, height * 0.5f, 0.0f, 0.0f),
-							vec4(0.0f, 0.0f, 1.0f, 0.0f),
-							vec4(width * 0.5, height * 0.5f, 0.0f, 1.0f));
+	vec4 out_value;
 	
-	mat4 viewToScreenSpace = screenSpace * ProjMatrix;
-	bool hit = TraceScreenSpaceRay(posVS, rayDir, viewToScreenSpace, stride, jitter, maxSteps, maxDistance, hitCoords);
-
-	ssrOutput = vec4(0.0f, 0.0f, 0.0f, 1.0f);
-	if (hit)
-		ssrOutput = texelFetch(Color_T, ivec2(hitCoords), 0);
+	vec3 normalWS = texture(Normals_T, uv).xyz;
+	if (!all(equal(normalWS, vec3(0.0f, 0.0f, 0.0f))))
+	{
+		vec3 posVS = (ViewMatrix * texture(Positions_T, uv)).xyz; //can cache texture access in the shared memory?
+		vec3 viewDir = normalize(posVS);
+		vec3 normalVS = normalize(vec3(ViewMatrix * vec4(normalWS, 0.0f)));
+		vec3 rayDir = normalize(reflect(viewDir, normalVS));
+		float hitDepth = 0.0f;
+		
+		//bool hit = TraceViewSpaceRay(posVS, rayDir, maxSteps, maxDistance, hitCoords);
+		hit = TraceScreenSpaceRay(posVS, rayDir, ViewSpaceToScreenSpace, stride, jitter, maxSteps, maxDistance, hitDepth, hitCoords);
+		
+		out_value = vec4(hitCoords, hitDepth, dot(rayDir, viewDir));
+	}
+	
+	if (!hit)
+		out_value = vec4(-1.0f, -1.0f, 0.0f, 0.0f);
+	
+	imageStore(ssrOutput, ivec2(gl_GlobalInvocationID.xy), out_value);
 	//debug = vec4(normalVS, 0.0f);
 }

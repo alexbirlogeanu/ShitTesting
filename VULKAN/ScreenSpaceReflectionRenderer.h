@@ -23,15 +23,41 @@ private:
 	virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override;
 
 	void CreatePipelines();
+	void CreateBlurPipelines(CGraphicPipeline& pipeline, bool isVertical);
+
+	void CreateImages();
+	void ClearImages();
 private:
-	CGraphicPipeline		m_ssrPipeline; //try to use compute for this
+	CComputePipeline		m_ssrPipeline;
+	CGraphicPipeline		m_blurHPipeline;
+	CGraphicPipeline		m_blurVPipeline;
+	CGraphicPipeline		m_ssrResolvePipeline;
+
+	//CGraphicPipeline		m_ssrPipeline; //try to use compute for this
 	BufferHandle*			m_ssrConstantsBuffer;
+	ImageHandle*			m_ssrOutputImage;
+	ImageHandle*			m_ssrDebugImage;
 
 	VkDescriptorSet			m_ssrDescSet;
 	VkDescriptorSetLayout	m_ssrDescLayout;
-	VkSampler				m_sampler;
+
+	VkDescriptorSet			m_blurVDescSet;
+	VkDescriptorSet			m_blurHDescSet;
+	VkDescriptorSetLayout	m_blurDescLayout;
+
+	VkDescriptorSet			m_resolveDescSet;
+	VkDescriptorSetLayout	m_resolveLayout;
+
+	VkSampler				m_ssrSampler;
+	VkSampler				m_resolveSampler;
+	VkSampler				m_linearSampler;
 
 	Mesh*					m_quad;
 	
 	glm::mat4				m_projMatrix;
+	glm::mat4				m_viewToScreenSpaceMatrix;
+
+	uint32_t				m_resolutionX;
+	uint32_t				m_resolutionY;
+	const uint32_t			m_cellSize;
 };

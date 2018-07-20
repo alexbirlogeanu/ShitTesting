@@ -210,6 +210,8 @@ public:
     void CreatePipelineLayout(VkDescriptorSetLayout layout);
     void CreatePipelineLayout(const std::vector<VkDescriptorSetLayout>& layouts);
 
+	void AddPushConstant(VkPushConstantRange range);
+
     VkPipeline Get() const { return m_pipeline; }
     VkPipelineLayout GetLayout() const { return m_pipelineLayout; }
 
@@ -224,6 +226,7 @@ protected:
     VkRenderPass                m_renderPass;
     unsigned int                m_subpassIndex;
 
+	std::vector<VkPushConstantRange> m_pushConstantRanges;
     bool                        m_initialized;
 };
 

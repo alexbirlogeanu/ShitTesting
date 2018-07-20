@@ -2011,17 +2011,18 @@ void CApplication::SetupParticleRendering()
  
  void CApplication::SetupScreenSpaceReflectionsRendering()
  {
-	 unsigned int resolution = 1;
 	 FramebufferDescription fbDesc;
-	 fbDesc.Begin(2);
+	 fbDesc.Begin(4);
 	 fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "SSROutput");
 	 fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "SSRDebug");
+	 fbDesc.AddColorAttachmentDesc(2, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "SSRLightBlurV");
+	 fbDesc.AddColorAttachmentDesc(3, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "SSRLightBlurH");
 
 	 fbDesc.End();
 
 	 CreateSSRRenderPass(fbDesc);
 	 m_ssrRenderer = new ScreenSpaceReflectionsRenderer(m_ssrRenderPass);
-	 m_ssrRenderer->CreateFramebuffer(fbDesc, WIDTH / resolution, HEIGHT / resolution);
+	 m_ssrRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT );
 	 m_ssrRenderer->Init();
  }
 
@@ -2363,15 +2364,24 @@ void CApplication::CreateSSRRenderPass(const FramebufferDescription& fbDesc)
 	for (unsigned int i = 0; i < ad.size(); ++i)
 		AddAttachementDesc(ad[i], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[i].format);
 
+	VkAttachmentReference blurHRef = CreateAttachmentReference(2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	VkAttachmentReference blurVRef = CreateAttachmentReference(3, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
 	std::vector<VkAttachmentReference> atRef;
 	atRef.push_back(CreateAttachmentReference(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
 	atRef.push_back(CreateAttachmentReference(1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
 
 	std::vector<VkSubpassDescription> subpasses;
+	subpasses.push_back(CreateSubpassDesc(&blurHRef, 1));
+	subpasses.push_back(CreateSubpassDesc(&blurVRef, 1));
 	subpasses.push_back(CreateSubpassDesc(atRef.data(), 2));
 
 	std::vector<VkSubpassDependency> dependencies;
 	dependencies.push_back(CreateSubpassDependency(VK_SUBPASS_EXTERNAL, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
+
+	dependencies.push_back(CreateSubpassDependency(0, 1, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
+
+	dependencies.push_back(CreateSubpassDependency(1, 2, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
 
 	NewRenderPass(&m_ssrRenderPass, ad, subpasses, dependencies);
 }

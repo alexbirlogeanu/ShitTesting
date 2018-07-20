@@ -223,6 +223,7 @@ private:
 
 	VkDeviceMemory										m_memory;
 	VkDeviceSize										m_totalSize;
+	VkDeviceSize										m_allocatedSize;
 	uint32_t											m_memoryTypeIndex;
 	MappedMemory*										m_mappedMemory;
 	VkMemoryPropertyFlags								m_memoryFlags;
