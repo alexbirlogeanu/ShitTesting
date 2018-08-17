@@ -7,7 +7,7 @@ layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 //input vars
 layout(set=0, binding=0) uniform SSRConstants_U
 {
-	vec4 ScreenInfo; //x = width, y = height, z = 1/width, w = 1/height
+	vec4 ScreenInfo; //x = width, y = height, z = framebuffer res x, w = framebuffer res y (ssr framebuffer)
 	mat4 ViewMatrix;
 	mat4 ProjMatrix;
 	mat4 InvProjMatrix;
@@ -54,7 +54,7 @@ vec4 GetPointInViewSpace(vec2 coords)
 	if (any(lessThan(coords, vec2(0.0f, 0.0f))) || any(greaterThan(coords, ScreenInfo.xy)))
 		return viewSpacePoint;
 	float depth = InvLiniarizeDepth(texelFetch(Depth_T, ivec2(coords), 0).r);
-	coords *= ScreenInfo.zw;
+	coords /= ScreenInfo.zw;
 	coords = coords * 2.0f - 1.0f;
 	viewSpacePoint = InvProjMatrix * vec4(coords, depth, 1.0f);
 	viewSpacePoint /= viewSpacePoint.w;
@@ -63,7 +63,7 @@ vec4 GetPointInViewSpace(vec2 coords)
 
 bool IntersectDepthBuffer(float z, float zmin, float zmax)
 {
-	float thickness = 0.05f;
+	float thickness = 0.15f;
 	return zmax >= (z - thickness) && zmin <= (z );
 }
 
@@ -212,12 +212,12 @@ bool TraceScreenSpaceRay
 	return IntersectDepthBuffer(sceneZMax, rayZMin, rayZMax);
 }
 
-const float stride = 2.0f;
-const float jitter = 1.0f;
+const float stride = 2.25f;
+const float jitter = 0.5f;
 
 vec2 GetTextureCoords()
 {
-	vec2 sampleDims = ScreenInfo.xy / vec2(gl_NumWorkGroups.xy * gl_WorkGroupSize.xy);
+	vec2 sampleDims = ScreenInfo.xy / ScreenInfo.zw;
 	vec2 pixelPos = sampleDims * vec2(gl_GlobalInvocationID.xy);
 	pixelPos += sampleDims / 2.0f; //get the center pixel of the kernel
 	
@@ -227,8 +227,8 @@ vec2 GetTextureCoords()
 void main()
 {
 	vec2 uv = GetTextureCoords();
-	float maxSteps = 64.0f;
-	float maxDistance = 7.5f;
+	float maxSteps = 64.0f; //try to set adecvate steps
+	float maxDistance = 12.0f;
 	bool hit = false;
 	vec2 hitCoords;
 	vec4 out_value;
@@ -252,5 +252,5 @@ void main()
 		out_value = vec4(-1.0f, -1.0f, 0.0f, 0.0f);
 	
 	imageStore(ssrOutput, ivec2(gl_GlobalInvocationID.xy), out_value);
-	//debug = vec4(normalVS, 0.0f);
+	//imageStore(debug, ivec2(gl_GlobalInvocationID.xy), vec4(uv, 1.0f, 1.0f));
 }

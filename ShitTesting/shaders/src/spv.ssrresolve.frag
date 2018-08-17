@@ -30,23 +30,26 @@ void main()
 		discard;
 	
 	vec4 ray = texture(SSRayTracing_T, uv.st);
+	float roughness = texelFetch(Specular_T, fragCoords, 0).x;
+	float fadeOnRoughness = clamp(1.0f - roughness, 0.0f, 1.0f);
 	if (ray.w <= 0.0f) //falback color
 	{
-		out_color = vec4(0.0f, 0.0f, 0.6f, 0.0f);
+		out_color = vec4(0.0f, 0.0f, 0.6f, fadeOnRoughness);
+		debug = vec4(0.5f, roughness, 0.0f, 1.0f);
 		return;
 	}
 	
-	float roughness = texelFetch(Specular_T, fragCoords, 0).x;
+	
 	vec3 positionVS = vec3(ViewMatrix * texelFetch(Position_T, fragCoords, 0));
 	vec3 lightColor = vec3(texelFetch(Light_T, ivec2(ray.st), 0));
 	vec3 viewDir = normalize(positionVS);
 	
-	float maxDistance = 7.5f;
+	float maxDistance = 12.0f;
 	float fadeOnDistance = 1.0f - clamp(abs(ray.z - positionVS.z) / maxDistance, 0.0f, 1.0f);
-	float fadeOnRoughness = 1.0f - roughness;
+	
 	float fadeOnPerpendicular = clamp(ray.w * 4.0f, 0.0f, 1.0f);
-	float totalFade = /* fadeOnDistance * */ fadeOnRoughness /* * fadeOnPerpendicular */;
+	float totalFade = fadeOnDistance * fadeOnRoughness /* * fadeOnPerpendicular */;
 	
 	out_color =  vec4(lightColor, totalFade);
-	debug = vec4(positionVS, fadeOnRoughness);
+	debug = out_color;
 }

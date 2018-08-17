@@ -2013,7 +2013,7 @@ void CApplication::SetupParticleRendering()
  {
 	 FramebufferDescription fbDesc;
 	 fbDesc.Begin(4);
-	 fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "SSROutput");
+	 fbDesc.AddColorAttachmentDesc(0, g_commonResources.GetAs<ImageHandle*>(EResourceType_FinalImage));
 	 fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "SSRDebug");
 	 fbDesc.AddColorAttachmentDesc(2, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "SSRLightBlurV");
 	 fbDesc.AddColorAttachmentDesc(3, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "SSRLightBlurH");
@@ -2361,7 +2361,8 @@ void CApplication::CreateSSRRenderPass(const FramebufferDescription& fbDesc)
 {
 	std::vector<VkAttachmentDescription> ad;
 	ad.resize(fbDesc.m_colorAttachments.size());
-	for (unsigned int i = 0; i < ad.size(); ++i)
+	AddAttachementDesc(ad[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[0].format, VK_ATTACHMENT_LOAD_OP_LOAD); //final image
+	for (unsigned int i = 1; i < ad.size(); ++i)
 		AddAttachementDesc(ad[i], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[i].format);
 
 	VkAttachmentReference blurHRef = CreateAttachmentReference(2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);

@@ -46,7 +46,7 @@ ScreenSpaceReflectionsRenderer::ScreenSpaceReflectionsRenderer(VkRenderPass rend
 	, m_ssrDebugImage(nullptr)
 	, m_cellSize(32)
 {
-	unsigned int divider = 2;
+	unsigned int divider = 1;
 	m_resolutionX = WIDTH / divider;
 	m_resolutionY = HEIGHT / divider;
 }
@@ -77,10 +77,7 @@ void ScreenSpaceReflectionsRenderer::Init()
 	AllocDescriptorSets(m_descriptorPool, m_blurDescLayout, &m_blurHDescSet);
 	AllocDescriptorSets(m_descriptorPool, m_resolveLayout, &m_resolveDescSet);
 
-	if (m_resolutionX == WIDTH && m_resolutionY == HEIGHT) //full resolution
-		CreateNearestSampler(m_ssrSampler);
-	else
-		CreateLinearSampler(m_ssrSampler); //for half resolution
+	CreateLinearSampler(m_ssrSampler);
 
 	CreateNearestSampler(m_resolveSampler);
 	CreateLinearSampler(m_linearSampler);
@@ -109,7 +106,7 @@ void ScreenSpaceReflectionsRenderer::PreRender()
 	consts->ProjMatrix = m_projMatrix;
 	consts->ViewMatrix = ms_camera.GetViewMatrix();
 	consts->InvProjMatrix = glm::inverse(m_projMatrix);
-	consts->ScreenInfo = glm::vec4(float(WIDTH), float(HEIGHT), 1.0f / float(WIDTH), 1.0f / float(HEIGHT));
+	consts->ScreenInfo = glm::vec4(float(WIDTH), float(HEIGHT), float(m_resolutionX), float(m_resolutionY));
 	consts->ViewSpaceToScreenSpace = m_viewToScreenSpaceMatrix;
 }
 
@@ -191,10 +188,19 @@ void ScreenSpaceReflectionsRenderer::CreatePipelines()
 	CreateBlurPipelines(m_blurHPipeline, false);
 	CreateBlurPipelines(m_blurVPipeline, true);
 
+	VkPipelineColorBlendAttachmentState mainBlendState;
+	cleanStructure(mainBlendState);
+	mainBlendState.blendEnable = VK_TRUE;
+	mainBlendState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
+	mainBlendState.colorBlendOp = VK_BLEND_OP_ADD;
+	mainBlendState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	mainBlendState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+
 	//
 	m_ssrResolvePipeline.SetVertexShaderFile("screenquad.vert");
 	m_ssrResolvePipeline.SetFragmentShaderFile("ssrresolve.frag");
-	m_ssrResolvePipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 2); //change blend state
+	m_ssrResolvePipeline.AddBlendState(mainBlendState);
+	m_ssrResolvePipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState());
 	m_ssrResolvePipeline.SetDepthTest(false);
 	m_ssrResolvePipeline.SetVertexInputState(Mesh::GetVertexDesc());
 	m_ssrResolvePipeline.SetViewport(m_framebuffer->GetWidth(), m_framebuffer->GetHeight());
@@ -299,7 +305,7 @@ void ScreenSpaceReflectionsRenderer::UpdateGraphicInterface()
 	VkDescriptorImageInfo ssrOut = CreateDescriptorImageInfo(m_ssrSampler, m_ssrOutputImage->GetView(), VK_IMAGE_LAYOUT_GENERAL);
 	VkDescriptorImageInfo ssrDebug = CreateDescriptorImageInfo(m_ssrSampler, m_ssrDebugImage->GetView(), VK_IMAGE_LAYOUT_GENERAL);
 	VkDescriptorImageInfo blurH = CreateDescriptorImageInfo(m_ssrSampler, m_framebuffer->GetColorImageView(2), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	VkDescriptorImageInfo blurFinal = CreateDescriptorImageInfo(m_linearSampler, m_framebuffer->GetColorImageView(3), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	VkDescriptorImageInfo blurFinal = CreateDescriptorImageInfo(m_ssrSampler, m_framebuffer->GetColorImageView(3), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	VkDescriptorImageInfo ssrRayTrace = CreateDescriptorImageInfo(m_resolveSampler, m_ssrOutputImage->GetView(), VK_IMAGE_LAYOUT_GENERAL);
 
 	VkDescriptorBufferInfo constants = m_ssrConstantsBuffer->GetDescriptor();
