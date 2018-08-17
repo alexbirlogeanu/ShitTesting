@@ -1018,6 +1018,6 @@ int main (int argc, char** argv)
 	ComplexTestSer ctload;
 	ctload.Serialize(&serializer);
 */
-	
     return 0;
 }
+

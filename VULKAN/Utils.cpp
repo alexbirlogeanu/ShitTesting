@@ -452,7 +452,7 @@ void CreateImageView(VkImageView& outImgView, const VkImage& img, const VkImageC
     ImgView.format = format;
     ImgView.subresourceRange.aspectMask = aspectFlags;
     ImgView.subresourceRange.layerCount = crtInfo.arrayLayers;
-    ImgView.subresourceRange.levelCount = 1;
+	ImgView.subresourceRange.levelCount = crtInfo.mipLevels;
     ImgView.subresourceRange.baseArrayLayer = 0;
     ImgView.subresourceRange.baseMipLevel = 0;
 
