@@ -34,7 +34,7 @@ void main()
 	float fadeOnRoughness = clamp(1.0f - roughness, 0.0f, 1.0f);
 	if (ray.w <= 0.0f) //falback color
 	{
-		out_color = vec4(0.0f, 0.0f, 0.6f, fadeOnRoughness);
+		out_color = vec4(0.0f, 0.0f, 0.6f, 0.0f);
 		debug = vec4(0.5f, roughness, 0.0f, 1.0f);
 		return;
 	}
