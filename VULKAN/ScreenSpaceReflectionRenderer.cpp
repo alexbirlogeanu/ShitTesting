@@ -47,8 +47,8 @@ ScreenSpaceReflectionsRenderer::ScreenSpaceReflectionsRenderer(VkRenderPass rend
 	, m_cellSize(32)
 {
 	unsigned int divider = 1;
-	m_resolutionX = WIDTH / divider;
-	m_resolutionY = HEIGHT / divider;
+	m_resolutionX = WIDTH * divider;
+	m_resolutionY = HEIGHT * divider;
 }
 
 ScreenSpaceReflectionsRenderer::~ScreenSpaceReflectionsRenderer()
@@ -93,7 +93,7 @@ void ScreenSpaceReflectionsRenderer::Init()
 	m_viewToScreenSpaceMatrix = glm::mat4(glm::vec4(WIDTH * 0.5f, 0.0f, 0.0f, 0.0f),
 								glm::vec4(0.0f, HEIGHT * 0.5f, 0.0f, 0.0f),
 								glm::vec4(0.0f, 0.0f, 1.0f, 0.0f),
-								glm::vec4(WIDTH * 0.5, HEIGHT * 0.5f, 0.0f, 1.0f));
+								glm::vec4(WIDTH * 0.5, HEIGHT * 0.5f, 0.0f, 1.0f)); //this is a to texture matrix, from -1, 1 -> [0, w], [0, h] respectively
 
 	m_viewToScreenSpaceMatrix = m_viewToScreenSpaceMatrix * m_projMatrix;
 

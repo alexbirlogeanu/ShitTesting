@@ -50,11 +50,11 @@ float distanceSquared(vec2 A, vec2 B)
 
 vec4 GetPointInViewSpace(vec2 coords)
 {
-	vec4 viewSpacePoint = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+	vec4 viewSpacePoint = vec4(0.0f, 0.0f, 1.0f, 1.0f);
 	if (any(lessThan(coords, vec2(0.0f, 0.0f))) || any(greaterThan(coords, ScreenInfo.xy)))
 		return viewSpacePoint;
 	float depth = InvLiniarizeDepth(texelFetch(Depth_T, ivec2(coords), 0).r);
-	coords /= ScreenInfo.zw;
+	coords /= ScreenInfo.xy;
 	coords = coords * 2.0f - 1.0f;
 	viewSpacePoint = InvProjMatrix * vec4(coords, depth, 1.0f);
 	viewSpacePoint /= viewSpacePoint.w;
@@ -156,10 +156,13 @@ bool TraceScreenSpaceRay
 	
 	vec3 dQ = (Q1 - Q0) * invdx;
 	float dK = (k1 - k0) * invdx;
+	float strideScale = 1.0f - min(1.0f, rayOrigin.z * -1.9f);
+	float newStride = stride;// * strideScale + 1.0f;
+	//newStride = max(1.0f, abs(delta.x) / maxSteps);
 	
-	dP *= stride;
-	dQ *= stride;
-	dK *= stride;
+	dP *= newStride;
+	dQ *= newStride;
+	dK *= newStride;
 	
 	P0 += dP * jitter;
 	Q0 += dQ * jitter;
@@ -208,11 +211,13 @@ bool TraceScreenSpaceRay
 	}
 	//debug = vec4(hitCoords, stepCount, stepCount);	
 	hitDepth = sceneZMax;
-	imageStore(debug, pixel, vec4(rayDir, stepCount));
+	float depth = InvLiniarizeDepth(texelFetch(Depth_T, pixel, 0).r);
+	//imageStore(debug, pixel, texelFetch(Depth_T, ivec2((permute)? P0.yx : P0.xy), 0));
+	imageStore(debug, pixel, vec4(newStride));
 	return IntersectDepthBuffer(sceneZMax, rayZMin, rayZMax);
 }
 
-const float stride = 2.25f;
+const float stride = 1.0f;
 const float jitter = 0.5f;
 
 vec2 GetTextureCoords()
@@ -227,8 +232,8 @@ vec2 GetTextureCoords()
 void main()
 {
 	vec2 uv = GetTextureCoords();
-	float maxSteps = 64.0f; //try to set adecvate steps
-	float maxDistance = 12.0f;
+	float maxSteps = 512.0f; //try to set adecvate steps
+	float maxDistance = 10.0f;
 	bool hit = false;
 	vec2 hitCoords;
 	vec4 out_value;
@@ -241,6 +246,7 @@ void main()
 		vec3 normalVS = normalize(vec3(ViewMatrix * vec4(normalWS, 0.0f)));
 		vec3 rayDir = normalize(reflect(viewDir, normalVS));
 		float hitDepth = 0.0f;
+		
 		
 		//bool hit = TraceViewSpaceRay(posVS, rayDir, maxSteps, maxDistance, hitCoords);
 		hit = TraceScreenSpaceRay(posVS, rayDir, ViewSpaceToScreenSpace, stride, jitter, maxSteps, maxDistance, hitDepth, hitCoords);
