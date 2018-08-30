@@ -34,7 +34,7 @@ MeshManager::TransferMeshInfo::TransferMeshInfo(Mesh* mesh)
 
 void MeshManager::TransferMeshInfo::BeginTransfer(VkCommandBuffer cmdBuffer)
 {
-	VkBufferCopy regions[2];
+	VkBufferCopy regions[2]; //i think we can use just a region and copy all the buffer
 	//copy vertexes
 	regions[0].size = m_stagginVertexBuffer->GetSize();
 	regions[0].srcOffset = m_stagginVertexBuffer->GetOffset();
@@ -224,6 +224,11 @@ void Mesh::CopyLocalData(BufferHandle* stagginVertexBuffer, BufferHandle* staggi
 	memcpy(indexMem, m_indices.data(), GetIndicesMemorySize());
 }
 
+void Mesh::CopyLocalData(void* vboMemory, void* iboMemory)
+{
+	memcpy(vboMemory, m_vertexes.data(), GetVerticesMemorySize());
+	memcpy(iboMemory, m_indices.data(), GetIndicesMemorySize());
+}
 
 void Mesh::Render(unsigned int numIndexes, unsigned int instances)
 {

@@ -362,6 +362,9 @@ ObjectRenderer::ObjectRenderer(VkRenderPass renderPass, const std::vector<Object
         unsigned int batchIndex = (unsigned int)objects[i]->GetType();
         std::vector<Node>& nodes = m_batches[batchIndex].nodes;
         nodes.push_back(Node(objects[i]));
+
+		if (objects[i]->GetType() == ObjectType::Solid)
+			m_solidBatch.AddMesh(objects[i]->GetMesh());
     }
 
     m_batches[(unsigned int)ObjectType::Solid].debugMarker = "Solid";
@@ -403,6 +406,15 @@ void ObjectRenderer::Render()
 
 void ObjectRenderer::PreRender()
 {
+	if (m_solidBatch.NeedReconstruct())
+	{
+		MemoryManager::GetInstance()->AllocMemory(EMemoryContextType::BatchStaggingBuffer, m_solidBatch.GetTotalBatchMemory());
+
+		m_solidBatch.Construct();
+
+		MemoryManager::GetInstance()->FreeMemory(EMemoryContextType::BatchStaggingBuffer);
+	}
+
 	UpdateShaderParams();
 }
 

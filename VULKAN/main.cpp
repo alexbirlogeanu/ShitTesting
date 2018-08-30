@@ -1216,17 +1216,6 @@ CApplication::~CApplication()
 
 void CApplication::Run()
 {
-	MemoryManager::GetInstance()->AllocMemory(EMemoryContextType::StaggingBuffer, 256 * 3);
-	BufferHandle* first = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::StaggingBuffer, 46, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-	BufferHandle* second = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::StaggingBuffer, 167, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-	BufferHandle* third = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::StaggingBuffer, 204, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::StaggingBuffer, first);
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::StaggingBuffer, third);
-
-	MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::StaggingBuffer, 200, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-	MemoryManager::GetInstance()->FreeMemory(EMemoryContextType::StaggingBuffer);
-
     bool isRunning = true;
     CreateResources();
     CreateQueryPools();
@@ -2610,7 +2599,7 @@ void CApplication::Render()
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 
         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
         0,
-        0, nullptr, 0, nullptr, 0, nullptr);
+        0, nullptr, 0, nullptr, 0, nullptr); //WHY??
 
     m_aoRenderer->Render();
     m_shadowResolveRenderer->Render();

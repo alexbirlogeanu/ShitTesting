@@ -4,6 +4,7 @@
 #include "PickManager.h"
 #include "Renderer.h"
 #include "VulkanLoader.h"
+#include "Batch.h"
 
 #include <string>
 #include <vector>
@@ -88,6 +89,8 @@ public:
     glm::mat4 GetModelMatrix();
     CTexture* GetAlbedoTexture() const { return m_albedoTexture; }
     CTexture* GetNormalMap() const { return m_normalMapTexture; }
+	Mesh* GetMesh() const { return m_mesh; }
+
     void Render();
     virtual void GetPickableDescription(std::vector<std::string>& texts) override;
     virtual bool ChangePickableProperties(unsigned int key) override;
@@ -184,7 +187,7 @@ private:
         {}
     };
 
-    struct Batch
+    struct SBatch
     {
         std::string         debugMarker;
         CGraphicPipeline    pipeline;
@@ -199,7 +202,8 @@ private:
     BufferHandle*                       m_instanceDataBuffer;
     VkSampler                           m_sampler;
 
-    std::array<Batch, (unsigned int)ObjectType::Count>  m_batches;
+	std::array<SBatch, (unsigned int)ObjectType::Count>  m_batches;
+	Batch													m_solidBatch;
 };
 
 class CScene

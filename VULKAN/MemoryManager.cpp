@@ -266,7 +266,7 @@ MemoryContext::Chunk MemoryContext::GetFreeChunk(VkDeviceSize size, VkDeviceSize
 	for (; found != m_chunks.end(); ++found)
 	{
 		if (found->m_size >= size)
-			break;
+			break; 
 	}
 	TRAP(found != m_chunks.end() && "No chunk found for allocation! Too fragmented or not enough memory"); //try to resolve the fragmentation problem
 	TRAP(found->m_offset % alignment == 0 && "Something is wrong! All chunks should be stay aligned!! Maybe size is not from MemoryRequirments struct");
@@ -406,10 +406,11 @@ MemoryManager::MemoryManager()
 		m_memoryContexts[i] = new MemoryContext((EMemoryContextType)i);
 	}
 
-	m_memoryContexts[(unsigned int)EMemoryContextType::DeviceLocalBuffer]->AllocateMemory(30 << 20, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	m_memoryContexts[(unsigned int)EMemoryContextType::DeviceLocalBuffer]->AllocateMemory(64 << 20, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	m_memoryContexts[(unsigned int)EMemoryContextType::Framebuffers]->AllocateMemory(256 << 20, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	m_memoryContexts[(unsigned int)EMemoryContextType::Textures]->AllocateMemory(256 << 20, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	m_memoryContexts[(unsigned int)EMemoryContextType::UniformBuffers]->AllocateMemory(64 << 20, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	m_memoryContexts[(unsigned int)EMemoryContextType::IndirectDrawCmdBuffer]->AllocateMemory(2 << 20, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 }
 
 MemoryManager::~MemoryManager()
@@ -433,12 +434,17 @@ BufferHandle* MemoryManager::CreateBuffer(EMemoryContextType context, VkDeviceSi
 
 BufferHandle* MemoryManager::CreateBuffer(EMemoryContextType context, std::vector<VkDeviceSize> sizes, VkBufferUsageFlags usage)
 {
+	return CreateBuffer(context, MemoryManager::ComputeTotalSize(sizes), usage);
+}
+
+VkDeviceSize MemoryManager::ComputeTotalSize(std::vector<VkDeviceSize> sizes)
+{
 	VkDeviceSize totalSize = 0;
 	VkDeviceSize minAllign = vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment;
 	for (auto size : sizes)
 		totalSize += (size / minAllign + 1) * minAllign;
 
-	return CreateBuffer(context, totalSize, usage);
+	return totalSize;
 }
 
 ImageHandle* MemoryManager::CreateImage(EMemoryContextType context, const VkImageCreateInfo& imgInfo, const std::string& debugName)

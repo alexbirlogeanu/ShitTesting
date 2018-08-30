@@ -15,11 +15,13 @@
 enum class EMemoryContextType
 {
 	DeviceLocalBuffer,
-	StaggingBuffer,
+	StaggingBuffer, //this is stagging for meshes. If the batch rendering is a success, this enum will be obsolete 
 	Framebuffers, //device local memory
 	Textures, //device local memory
 	StaggingTextures, //device local for stagging textures
 	UniformBuffers,
+	IndirectDrawCmdBuffer,
+	BatchStaggingBuffer,
 	Count
 };
 
@@ -275,6 +277,8 @@ public:
 
 	bool MapMemoryContext(EMemoryContextType context); //TODO change to return the new mapped memory
 	void UnmapMemoryContext(EMemoryContextType context);
+
+	static VkDeviceSize ComputeTotalSize(std::vector<VkDeviceSize> sizes);
 protected:
 	MemoryManager();
 	virtual ~MemoryManager();

@@ -95,11 +95,15 @@ public:
 	unsigned int MemorySizeNeeded() const;
 	unsigned int GetVerticesMemorySize() const;
 	unsigned int GetIndicesMemorySize() const;
+	uint32_t GetVertexCount() const { return (uint32_t)m_vertexes.size(); }
+	uint32_t GetIndexCount() const { return (uint32_t)m_indices.size(); }
+
+	void CopyLocalData(BufferHandle* stagginVertexBuffer, BufferHandle* staggingIndexBuffer);
+	void CopyLocalData(void* vboMemory, void* iboMemory);
 
 private:
     void Create();
     void CreateBoundigBox();
-	void CopyLocalData(BufferHandle* stagginVertexBuffer, BufferHandle* staggingIndexBuffer);
 private:
 
     std::vector<SVertex>			m_vertexes;
