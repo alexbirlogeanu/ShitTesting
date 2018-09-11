@@ -51,7 +51,7 @@ CPickRenderer::~CPickRenderer()
     VkDevice dev = vk::g_vulkanContext.m_device;
     delete m_bbMesh;
 
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_uniformBuffer);
+	MemoryManager::GetInstance()->FreeHandle(m_uniformBuffer);
 
     vk::DestroyDescriptorSetLayout(dev, m_descriptorSetLayout, nullptr);
 }

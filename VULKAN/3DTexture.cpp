@@ -23,8 +23,8 @@ C3DTextureRenderer::~C3DTextureRenderer()
 
     vk::DestroyDescriptorSetLayout(dev, m_generateDescLayout, nullptr);
 
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::Textures, m_outTexture);
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_uniformBuffer);
+	MemoryManager::GetInstance()->FreeHandle(m_outTexture);
+	MemoryManager::GetInstance()->FreeHandle(m_uniformBuffer);
 
     delete m_patternTexture;
 }
@@ -248,7 +248,7 @@ CVolumetricRenderer::~CVolumetricRenderer()
     vk::DestroyDescriptorSetLayout(dev, m_volumeDescLayout, nullptr);
     vk::DestroySampler(dev, m_sampler, nullptr);
 
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_uniformBuffer);
+	MemoryManager::GetInstance()->FreeHandle(m_uniformBuffer);
 }
 
 void CVolumetricRenderer::Init()

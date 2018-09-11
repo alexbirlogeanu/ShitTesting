@@ -494,7 +494,7 @@ CUIRenderer::CUIRenderer(VkRenderPass renderPass)
 
 CUIRenderer::~CUIRenderer()
 {
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_commonUniformBuffer->GetRootParent());
+	MemoryManager::GetInstance()->FreeHandle(m_commonUniformBuffer->GetRootParent());
 }
 
 void CUIRenderer::PreRender()

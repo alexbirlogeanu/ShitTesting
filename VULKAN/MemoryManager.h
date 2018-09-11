@@ -33,6 +33,7 @@ public:
 	VkDeviceSize GetSize() const { return m_size; }
 	VkDeviceSize GetOffset() const { return m_offset; }
 	Handle* GetRootParent() { return ((m_parent)? m_parent->GetRootParent() : this); }
+	MemoryContext* GetMemoryContext() { return m_memoryContext; }
 
 	template<class RetType>
 	RetType GetPtr();
@@ -104,7 +105,7 @@ protected:
 
 		m_freeOffset = offset + size;
 
-		VkDeviceSize absoluteOffest = (m_parent) ? m_parent->GetOffset() : 0; //probably i will forget why is this way
+		VkDeviceSize absoluteOffest = (m_parent) ? m_parent->GetOffset() : 0; //probably i will forget why is this way ?? I think is getRootParent offset, not parrent
 		TRAP(offset + size <= m_size && "Not enough memory for this sub Allocation");
 		HandleType* hSubAlloc = new HandleType(parent, size, m_alignment, absoluteOffest + offset);
 
@@ -270,7 +271,7 @@ public:
 	BufferHandle* CreateBuffer(EMemoryContextType context, std::vector<VkDeviceSize> sizes, VkBufferUsageFlags usage);
 	ImageHandle* CreateImage(EMemoryContextType context, const VkImageCreateInfo& imgInfo, const std::string& debugName = std::string());
 
-	void FreeHandle(EMemoryContextType context, Handle* handle);
+	void FreeHandle(Handle* handle);
 
 	void AllocMemory(EMemoryContextType type, VkDeviceSize size);
 	void FreeMemory(EMemoryContextType type);

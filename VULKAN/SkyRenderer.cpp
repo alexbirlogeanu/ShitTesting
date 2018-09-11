@@ -36,7 +36,7 @@ CSunRenderer::~CSunRenderer()
     vk::DestroyDescriptorSetLayout(dev, m_sunDescriptorSetLayout, nullptr);
     vk::DestroySampler(dev, m_sampler, nullptr);
 
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_sunParamsBuffer->GetRootParent()); //i dont like this style. 
+	MemoryManager::GetInstance()->FreeHandle( m_sunParamsBuffer->GetRootParent()); //i dont like this style. 
 
     //delete m_quad;
 }

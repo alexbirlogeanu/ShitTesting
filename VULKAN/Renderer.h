@@ -137,7 +137,7 @@ class CFrameBuffer
 		{
 			if (m_ownImage)
 			{
-				MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::Framebuffers, m_image);
+				MemoryManager::GetInstance()->FreeHandle(m_image);
 			}
 		}
 

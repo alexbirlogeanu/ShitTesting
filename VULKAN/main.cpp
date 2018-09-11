@@ -367,7 +367,7 @@ public:
     {
         VkDevice dev = vk::g_vulkanContext.m_device;
         vk::DestroySampler(dev, m_sampler, nullptr);
-		MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_shaderUniformBuffer);
+		MemoryManager::GetInstance()->FreeHandle(m_shaderUniformBuffer);
         vk::DestroyDescriptorSetLayout(dev, m_descriptorSetLayout, nullptr);
     }
 
@@ -552,7 +552,7 @@ public:
         VkDevice dev = vk::g_vulkanContext.m_device;
         vk::DestroyDescriptorSetLayout(dev, m_boxDescriptorSetLayout, nullptr);
 
-		MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_boxParamsBuffer);
+		MemoryManager::GetInstance()->FreeHandle(m_boxParamsBuffer);
     }
 
     virtual void Render()

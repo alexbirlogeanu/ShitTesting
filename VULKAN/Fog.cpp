@@ -26,7 +26,7 @@ CFogRenderer::~CFogRenderer()
 {
     VkDevice dev = vk::g_vulkanContext.m_device;
 
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_fogParamsBuffer);
+	MemoryManager::GetInstance()->FreeHandle(m_fogParamsBuffer);
 
     vk::DestroyDescriptorSetLayout(dev, m_descriptorLayout, nullptr);
     vk::DestroySampler(dev, m_sampler, nullptr);

@@ -59,13 +59,13 @@ PointLightRenderer2::~PointLightRenderer2()
 {
 	VkDevice dev = vk::g_vulkanContext.m_device;
 
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_lightsBuffer);
+	MemoryManager::GetInstance()->FreeHandle(m_lightsBuffer);
 
 	vk::DestroyDescriptorSetLayout(dev, m_tileShadingDescLayout, nullptr);
 	vk::DestroyDescriptorSetLayout(dev, m_resolveDescLayout, nullptr);
 
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::Framebuffers, m_lightImage);
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::Framebuffers, m_debugImage);
+	MemoryManager::GetInstance()->FreeHandle(m_lightImage);
+	MemoryManager::GetInstance()->FreeHandle( m_debugImage);
 }
 
 void PointLightRenderer2::Init()
@@ -179,7 +179,7 @@ void PointLightRenderer2::ReallocLightsBuffer()
 	if (m_lightsBuffer != nullptr)
 	{
 		VkDevice dev = vk::g_vulkanContext.m_device;
-		MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_lightsBuffer);
+		MemoryManager::GetInstance()->FreeHandle(m_lightsBuffer);
 
 	}
 

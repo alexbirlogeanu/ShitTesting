@@ -152,7 +152,7 @@ TextureCreator::TextureCreator(CTexture* text, const SImageData& imgData, bool o
 TextureCreator::~TextureCreator()
 {
 	VkDevice dev = vk::g_vulkanContext.m_device;
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::StaggingTextures, m_staggingBuffer);
+	MemoryManager::GetInstance()->FreeHandle(m_staggingBuffer);
 	
 	if (m_ownData)
 		delete[] m_data.data;
@@ -245,7 +245,7 @@ CTexture::~CTexture()
     VkDevice dev = vk::g_vulkanContext.m_device;
 
     vk::DestroySampler(dev, m_textSampler, nullptr);
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::Textures, m_image);
+	MemoryManager::GetInstance()->FreeHandle(m_image);
 
 }
 

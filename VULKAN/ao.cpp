@@ -48,7 +48,7 @@ CAORenderer::~CAORenderer()
 {
     VkDevice dev = vk::g_vulkanContext.m_device;
 
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_constParamsBuffer->GetRootParent()); //free the parrent buffer, that frees the memory for varParamBuffer too
+	MemoryManager::GetInstance()->FreeHandle(m_constParamsBuffer->GetRootParent()); //free the parrent buffer, that frees the memory for varParamBuffer too
 
 
     vk::DestroySampler(dev, m_sampler, nullptr);

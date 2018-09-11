@@ -29,7 +29,7 @@ ShadowMapRenderer::ShadowMapRenderer(VkRenderPass renderPass, const std::vector<
 
 ShadowMapRenderer::~ShadowMapRenderer()
 {
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_instanceBuffer);
+	MemoryManager::GetInstance()->FreeHandle(m_instanceBuffer);
 }
 
 void ShadowMapRenderer::Init()
@@ -243,7 +243,7 @@ CShadowResolveRenderer::~CShadowResolveRenderer()
 #ifdef USE_SHADOW_BLUR
     vk::DestroyDescriptorSetLayout(dev, m_blurSetLayout, nullptr);
 #endif
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_uniformBuffer);
+	MemoryManager::GetInstance()->FreeHandle(m_uniformBuffer);
 
     delete m_PCFDistrText;
     delete m_blockerDistrText;

@@ -59,8 +59,8 @@ ScreenSpaceReflectionsRenderer::~ScreenSpaceReflectionsRenderer()
 	vk::DestroySampler(dev, m_resolveSampler, nullptr);
 	vk::DestroySampler(dev, m_linearSampler, nullptr);
 
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::Framebuffers, m_ssrOutputImage);
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::Framebuffers, m_ssrDebugImage);
+	MemoryManager::GetInstance()->FreeHandle(m_ssrOutputImage);
+	MemoryManager::GetInstance()->FreeHandle(m_ssrDebugImage);
 
 	vk::DestroyDescriptorSetLayout(dev, m_ssrDescLayout, nullptr);
 	vk::DestroyDescriptorSetLayout(dev, m_blurDescLayout, nullptr);
@@ -112,6 +112,7 @@ void ScreenSpaceReflectionsRenderer::PreRender()
 
 void ScreenSpaceReflectionsRenderer::Render()
 {
+	return;
 	VkCommandBuffer cmdBuff = vk::g_vulkanContext.m_mainCommandBuffer;
 
 	StartDebugMarker("SSRCompute");

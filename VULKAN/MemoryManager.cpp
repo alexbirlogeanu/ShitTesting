@@ -457,9 +457,9 @@ ImageHandle* MemoryManager::CreateImage(EMemoryContextType context, const VkImag
 	return nullptr;
 }
 
-void MemoryManager::FreeHandle(EMemoryContextType context, Handle* handle)
+void MemoryManager::FreeHandle(Handle* handle)
 {
-	m_memoryContexts[(unsigned int)context]->FreeHandle(handle);
+	handle->GetMemoryContext()->FreeHandle(handle);
 }
 
 void MemoryManager::AllocMemory(EMemoryContextType context, VkDeviceSize size)

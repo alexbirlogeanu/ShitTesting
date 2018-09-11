@@ -292,7 +292,7 @@ CParticlesRenderer::~CParticlesRenderer()
     VkDevice dev = vk::g_vulkanContext.m_device;
     vk::DestroyDescriptorPool(vk::g_vulkanContext.m_device, m_descriptorPool, nullptr);
 
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_renderParticlesGlobalBuffer->GetRootParent());
+	MemoryManager::GetInstance()->FreeHandle(m_renderParticlesGlobalBuffer->GetRootParent());
 
     vk::DestroyDescriptorSetLayout(dev, m_computeGlobalDescLayout, nullptr);
     vk::DestroyDescriptorSetLayout(dev, m_computeSpecificDescLayout, nullptr);

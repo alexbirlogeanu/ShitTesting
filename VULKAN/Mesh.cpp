@@ -34,7 +34,7 @@ MeshManager::TransferMeshInfo::TransferMeshInfo(Mesh* mesh)
 
 void MeshManager::TransferMeshInfo::BeginTransfer(VkCommandBuffer cmdBuffer)
 {
-	VkBufferCopy regions[2]; //i think we can use just a region and copy all the buffer
+	VkBufferCopy regions[2]; //i think we can use just a region and copy all the buffers
 	//copy vertexes
 	regions[0].size = m_stagginVertexBuffer->GetSize();
 	regions[0].srcOffset = m_stagginVertexBuffer->GetOffset();
