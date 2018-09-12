@@ -1,7 +1,7 @@
 <!-- for the object type: 0 -means an object just with albedo text, 1 - means an object wuth normal map -->
 <?xml version="1.0" encoding="UTF-8"?>
 <objects> 
-	<object mesh="obj\\sphere.mb" type="0" castShadow="1" roughness="0.9" metalness="0.1" F0="0.5f" name="plastic_sphere">
+	<object mesh="obj\\monkey.mb" type="0" castShadow="1" roughness="0.9" metalness="0.1" F0="0.5f" name="plastic_sphere">
 		<albedoText file="pussy.png" sRGB="1"/>
 		<position x="-1.5" y="-0.5" z="-3.0"/>
 	</object>

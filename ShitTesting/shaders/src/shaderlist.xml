@@ -53,4 +53,6 @@
 	<shader shaderfile="spv.ssr.frag" out="ssr.frag" />
 	<shader shaderfile="spv.ssr.comp" out="ssr.comp" />
 	<shader shaderfile="spv.ssrresolve.frag" out="ssrresolve.frag"/>
+	<shader shaderfile="spv.batch.vert" out="batch.vert"/>
+	<shader shaderfile="spv.batch.frag" out="batch.frag"/>
 </shaderlist>

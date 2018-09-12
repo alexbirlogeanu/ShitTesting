@@ -357,14 +357,22 @@ ObjectRenderer::ObjectRenderer(VkRenderPass renderPass, const std::vector<Object
     , m_instanceDataBuffer(nullptr)
     , m_sampler(VK_NULL_HANDLE)
 {
+
+	BatchBuilder::CreateInstance();
+
     for (unsigned int i = 0; i < (unsigned int)objects.size(); ++i)
     {
+
+		if (objects[i]->GetType() == ObjectType::Solid)
+		{
+			m_solidBatch.AddObject(objects[i]);
+			continue;
+		}
+
         unsigned int batchIndex = (unsigned int)objects[i]->GetType();
         std::vector<Node>& nodes = m_batches[batchIndex].nodes;
         nodes.push_back(Node(objects[i]));
-
-		if (objects[i]->GetType() == ObjectType::Solid)
-			m_solidBatch.AddMesh(objects[i]->GetMesh());
+		
     }
 
     m_batches[(unsigned int)ObjectType::Solid].debugMarker = "Solid";
@@ -379,7 +387,9 @@ ObjectRenderer::~ObjectRenderer()
     }
 
     VkDevice dev = vk::g_vulkanContext.m_device;
-	MemoryManager::GetInstance()->FreeHandle(EMemoryContextType::UniformBuffers, m_instanceDataBuffer);
+	MemoryManager::GetInstance()->FreeHandle(m_instanceDataBuffer);
+
+	BatchBuilder::DestroyInstance();
 }
 
 void ObjectRenderer::Render()
@@ -387,34 +397,43 @@ void ObjectRenderer::Render()
     VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
     StartRenderPass();
 
-    for (const auto& batch : m_batches)
-    {
-        StartDebugMarker(batch.debugMarker);
-        const CGraphicPipeline& currPipeline = batch.pipeline;
-        vk::CmdBindPipeline(cmd, currPipeline.GetBindPoint(), currPipeline.Get());
-        for (const auto& node : batch.nodes)
-        {
-            vk::CmdBindDescriptorSets(cmd, currPipeline.GetBindPoint(), currPipeline.GetLayout(), 0, 1, &node.descriptorSet, 0, nullptr); //try to bind just once
-            node.obj->Render();
-        }
+	for (unsigned int i = (unsigned int)ObjectType::NormalMap; i < (unsigned int)ObjectType::Count; ++i)
+	{
+		const SBatch& batch = m_batches[i];
 
-        EndDebugMarker(batch.debugMarker);
-    }
+		StartDebugMarker(batch.debugMarker);
+		const CGraphicPipeline& currPipeline = batch.pipeline;
+		vk::CmdBindPipeline(cmd, currPipeline.GetBindPoint(), currPipeline.Get());
+		for (const auto& node : batch.nodes)
+		{
+			vk::CmdBindDescriptorSets(cmd, currPipeline.GetBindPoint(), currPipeline.GetLayout(), 0, 1, &node.descriptorSet, 0, nullptr); //try to bind just once
+			node.obj->Render();
+		}
+
+		EndDebugMarker(batch.debugMarker);
+	}
+	
+	m_solidBatch.Render();
 
     EndRenderPass();
 }
 
 void ObjectRenderer::PreRender()
 {
+	if (m_solidBatch.NeedCleanup())
+	{
+		m_solidBatch.Cleanup();
+		MemoryManager::GetInstance()->FreeMemory(EMemoryContextType::BatchStaggingBuffer);
+	}
+
 	if (m_solidBatch.NeedReconstruct())
 	{
 		MemoryManager::GetInstance()->AllocMemory(EMemoryContextType::BatchStaggingBuffer, m_solidBatch.GetTotalBatchMemory());
 
-		m_solidBatch.Construct();
-
-		MemoryManager::GetInstance()->FreeMemory(EMemoryContextType::BatchStaggingBuffer);
+		m_solidBatch.Construct(this, m_renderPass, 0);
 	}
 
+	m_solidBatch.PreRender();
 	UpdateShaderParams();
 }
 

@@ -512,7 +512,8 @@ namespace vk {
     {
         deviceMandatoryExt.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
         deviceMandatoryExt.push_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
-
+		deviceMandatoryExt.push_back("VK_KHR_shader_draw_parameters");
+		
         std::vector<VkExtensionProperties> deviceExtProperties;
         unsigned int devExtCnt;
         
@@ -560,7 +561,6 @@ namespace vk {
 
         VkPhysicalDeviceFeatures devFeatures;
         GetPhysicalDeviceFeatures(physicalDevice, &devFeatures);
-        devFeatures.independentBlend = true;
 
         std::vector<const char*> deviceMandatoryExt;
         //deviceMandatoryExt.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
@@ -665,8 +665,8 @@ namespace vk {
 
         init_dispatch_table_top();
         InitInstance();
-        HMODULE renderDocDll = LoadLibrary(renderDoc);
-        TRAP(renderDocDll);
+        //HMODULE renderDocDll = LoadLibrary(renderDoc);
+        //TRAP(renderDocDll);
         init_dispatch_table_middle(g_vulkanContext.m_instance);
         RegisterDebugInfo();
         

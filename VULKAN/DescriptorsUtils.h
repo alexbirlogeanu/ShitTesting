@@ -12,7 +12,7 @@ public:
 	~DescriptorSetLayout();
 
 	const VkDescriptorSetLayout& Get() const { return m_descSetLayoutHandle; }
-	//VkDescriptorSetLayout& Get() { return m_descSetLayoutHandle; }
+	VkDescriptorSetLayout& Get() { return m_descSetLayoutHandle; }
 
 	const std::vector<VkDescriptorSetLayoutBinding>& GetBindings() const { return m_bindings; }
 

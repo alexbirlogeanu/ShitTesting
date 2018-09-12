@@ -6,4 +6,5 @@
 	<mesh file="obj\\cube.obj"/>
 	<mesh file="obj\\dragon.obj"/>
 	<mesh file="obj\\sphere.obj"/>
+	<mesh file="obj\\monkey.obj"/>
 </meshes>

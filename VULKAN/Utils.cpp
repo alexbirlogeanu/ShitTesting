@@ -121,7 +121,7 @@ void AllocDescriptorSets(VkDescriptorPool descPool, const std::vector<VkDescript
     AllocDescriptorSetsInternal(descPool, setLayouts.data(), (uint32_t)setLayouts.size(), sets.data());
 }
 
-void AllocDescriptorSets(VkDescriptorPool descPool, VkDescriptorSetLayout& layout, VkDescriptorSet* pSet)
+void AllocDescriptorSets(VkDescriptorPool descPool, const VkDescriptorSetLayout& layout, VkDescriptorSet* pSet)
 {
     AllocDescriptorSetsInternal(descPool, &layout, 1, pSet);
 }
@@ -184,6 +184,18 @@ void SetDescValue(VkWriteDescriptorSet& set, VkDescriptorImageInfo* info)
     set.pImageInfo = info;
 }
 
+template<>
+void SetDescValue(VkWriteDescriptorSet& set, const VkDescriptorBufferInfo* info)
+{
+	set.pBufferInfo = info;
+}
+
+template<>
+void SetDescValue(VkWriteDescriptorSet& set, const VkDescriptorImageInfo* info)
+{
+	set.pImageInfo = info;
+}
+
 
 template <typename TYPE>
 VkWriteDescriptorSet InitUpdateDescInternal(VkDescriptorSet dstSet, unsigned int dstBinding, VkDescriptorType type, TYPE* info)
@@ -201,6 +213,21 @@ VkWriteDescriptorSet InitUpdateDescInternal(VkDescriptorSet dstSet, unsigned int
     return wDescSet;
 }
 
+template <typename TYPE>
+VkWriteDescriptorSet InitUpdateDescInternal(VkDescriptorSet dstSet, unsigned int dstBinding, VkDescriptorType type, unsigned int startElement, const std::vector<TYPE>& multipleInfos)
+{
+	VkWriteDescriptorSet  wDescSet;
+	cleanStructure(wDescSet);
+	wDescSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	wDescSet.dstSet = dstSet;
+	wDescSet.dstBinding = dstBinding;
+	wDescSet.dstArrayElement = startElement;
+	wDescSet.descriptorType = type;
+	wDescSet.descriptorCount = (uint32_t)multipleInfos.size();
+
+	SetDescValue(wDescSet, multipleInfos.data());
+	return wDescSet;
+}
 
 
 VkWriteDescriptorSet InitUpdateDescriptor(VkDescriptorSet dstSet, unsigned int dstBinding, VkDescriptorType type, VkDescriptorBufferInfo* buffInfo)
@@ -242,6 +269,45 @@ VkWriteDescriptorSet InitUpdateDescriptor(VkDescriptorSet dstSet, unsigned int d
     return wDescSet;
 }
 
+VkWriteDescriptorSet InitUpdateDescriptor(VkDescriptorSet dstSet, unsigned int dstBinding, VkDescriptorType type, unsigned int startArrayElem, const std::vector<VkDescriptorBufferInfo>& buffersInfo)
+{
+	VkWriteDescriptorSet wDescSet;
+
+	switch (type)
+	{
+	case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+	case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+	case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+	case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+		wDescSet = InitUpdateDescInternal<VkDescriptorBufferInfo>(dstSet, dstBinding, type, startArrayElem, buffersInfo);
+		break;
+	default:
+		TRAP(false && "Descriptor type invalid for buffers");
+	}
+	TRAP(wDescSet.pBufferInfo);
+	return wDescSet;
+}
+
+VkWriteDescriptorSet InitUpdateDescriptor(VkDescriptorSet dstSet, unsigned int dstBinding, VkDescriptorType type, unsigned int startArrayElem, const std::vector<VkDescriptorImageInfo>& imagesInfo)
+{
+	VkWriteDescriptorSet wDescSet;
+	switch (type)
+	{
+	case VK_DESCRIPTOR_TYPE_SAMPLER:
+	case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+	case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+	case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+	case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+		wDescSet = InitUpdateDescInternal<VkDescriptorImageInfo>(dstSet, dstBinding, type, startArrayElem, imagesInfo);
+		break;
+	default:
+		TRAP(false && "Descriptor type invalid for images");
+	};
+
+	TRAP(wDescSet.pImageInfo);
+	return wDescSet;
+}
+
 VkDescriptorImageInfo CreateDescriptorImageInfo(VkSampler sampler, VkImageView imgView, VkImageLayout layot)
 {
     VkDescriptorImageInfo imgInfo;
@@ -276,7 +342,7 @@ void NewDescriptorSetLayout(const std::vector<VkDescriptorSetLayoutBinding>& bin
 {
     VkDescriptorSetLayoutCreateInfo crtInfo;
     cleanStructure(crtInfo);
-    crtInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	crtInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     crtInfo.bindingCount = (uint32_t)bindings.size();
     crtInfo.pBindings = bindings.data();
 

@@ -23,16 +23,18 @@ VkAttachmentDescription AddAttachementDesc(VkImageLayout initialLayout, VkImageL
 VkAttachmentReference CreateAttachmentReference(unsigned int index, VkImageLayout layout);
 
 void AllocDescriptorSets(VkDescriptorPool descPool, const std::vector<VkDescriptorSetLayout>& setLayouts, std::vector<VkDescriptorSet>& sets);
-void AllocDescriptorSets(VkDescriptorPool descPool, VkDescriptorSetLayout& layout, VkDescriptorSet* pSet);
+void AllocDescriptorSets(VkDescriptorPool descPool, const VkDescriptorSetLayout& layout, VkDescriptorSet* pSet);
 
 VkWriteDescriptorSet InitUpdateDescriptor(VkDescriptorSet dstSet, unsigned int dstBinding, VkDescriptorType type, VkDescriptorBufferInfo* buffInfo);
 VkWriteDescriptorSet InitUpdateDescriptor(VkDescriptorSet dstSet, unsigned int dstBinding, VkDescriptorType type, VkDescriptorImageInfo* imgInfo);
+VkWriteDescriptorSet InitUpdateDescriptor(VkDescriptorSet dstSet, unsigned int dstBinding, VkDescriptorType type, unsigned int startArrayElem, const std::vector<VkDescriptorBufferInfo>& buffersInfo);
+VkWriteDescriptorSet InitUpdateDescriptor(VkDescriptorSet dstSet, unsigned int dstBinding, VkDescriptorType type, unsigned int startArrayElem, const std::vector<VkDescriptorImageInfo>& imagesInfo);
 
 VkDescriptorImageInfo CreateDescriptorImageInfo(VkSampler sampler, VkImageView imgView, VkImageLayout layot);
 VkDescriptorBufferInfo CreateDescriptorBufferInfo(VkBuffer buff, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
 
-VkDescriptorSetLayoutBinding CreateDescriptorBinding(unsigned int binding, VkDescriptorType type, VkShaderStageFlags flags, unsigned int count = 1);
-void NewDescriptorSetLayout(const std::vector<VkDescriptorSetLayoutBinding>& bindings, VkDescriptorSetLayout* layout);
+VkDescriptorSetLayoutBinding CreateDescriptorBinding(unsigned int binding, VkDescriptorType type, VkShaderStageFlags flags, unsigned int count = 1); //TODO REFACTOR
+void NewDescriptorSetLayout(const std::vector<VkDescriptorSetLayoutBinding>& bindings, VkDescriptorSetLayout* layout);//TODO REFACTOR
 
 VkSubpassDependency CreateSubpassDependency(unsigned int src, unsigned int dst, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkDependencyFlags depFlags = 0);
 VkSubpassDescription CreateSubpassDesc(VkAttachmentReference* pColorAtts, unsigned int clrCnt, VkAttachmentReference* depthAtt = nullptr);
