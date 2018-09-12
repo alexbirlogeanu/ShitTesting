@@ -127,7 +127,9 @@
   <ItemGroup>
     <ClInclude Include="3DTexture.h" />
     <ClInclude Include="ao.h" />
+    <ClInclude Include="Batch.h" />
     <ClInclude Include="DebugMarkers.h" />
+    <ClInclude Include="DescriptorsUtils.h" />
     <ClInclude Include="MemoryManager.h" />
     <ClInclude Include="MeshLoader.h" />
     <ClInclude Include="Object.h" />
@@ -155,8 +157,10 @@
   <ItemGroup>
     <ClCompile Include="3DTexture.cpp" />
     <ClCompile Include="ao.cpp" />
+    <ClCompile Include="Batch.cpp" />
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="DebugMarkers.cpp" />
+    <ClCompile Include="DescriptorsUtils.cpp" />
     <ClCompile Include="MemoryManager.cpp" />
     <ClCompile Include="MeshLoader.cpp" />
     <ClCompile Include="Object.cpp" />
