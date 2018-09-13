@@ -97,12 +97,13 @@ bool DescriptorPool::CanAllocate(const DescriptorSetLayout& layoutType)
 			return false;
 	}
 
-	return (m_remainingSets - 1) >= 0;
+	return m_remainingSets > 0;
 }
 
 VkDescriptorSet DescriptorPool::AllocateDescriptorSet(const DescriptorSetLayout& layoutType)
 {
 	VkDescriptorSet newDescSet;
 	AllocDescriptorSets(m_descPoolHandle, layoutType.Get(), &newDescSet);
+	--m_remainingSets;
 	return newDescSet;
 }

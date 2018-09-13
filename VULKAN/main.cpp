@@ -2581,10 +2581,10 @@ void CApplication::Render()
     vk::WaitForFences(vk::g_vulkanContext.m_device, 1, &m_aquireImageFence,VK_TRUE, UINT64_MAX);
     vk::ResetFences(vk::g_vulkanContext.m_device, 1, &m_aquireImageFence);
 
-    StartCommandBuffer();
-	
 	CRenderer::PrepareAll();
 
+    StartCommandBuffer();
+	
     CTextureManager::GetInstance()->Update();
 	MeshManager::GetInstance()->Update();
     //BeginFrame();

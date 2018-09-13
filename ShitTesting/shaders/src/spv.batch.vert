@@ -8,10 +8,18 @@ layout(location=2) in vec3 in_normal;
 layout(location=3) in vec3 in_bitangent;
 layout(location=4) in vec3 in_tangent;
 
+struct MaterialPropertis
+{
+	float		Roughness;
+	float		K;
+	float		F0;
+	uint		AlbedoTexture;
+};
+
 struct NodeParams
 {
 	mat4 ModelMatrix;
-	vec4 MaterialProperties; //x = roughness, y = k, z = F0
+	MaterialPropertis Properties;
 };
 
 layout(set=0, binding=0) buffer BatchParams
@@ -25,17 +33,12 @@ layout(push_constant) uniform PushConstants
 	vec4 ViewPos;
 };
 
-struct VertexOut
-{
-	vec4 MaterialProps;
-	uvec4 TextureIndexes;
-};
 
 //outs
 layout(location=0) out vec4 normal;
 layout(location=1) out vec4 worldPos;
 layout(location=2) out vec2 uv;
-layout(location=3) out VertexOut Out;
+layout(location=3) out MaterialPropertis OutProperties;
 
 void main()
 {
@@ -47,6 +50,5 @@ void main()
 	worldPos = (currentNode.ModelMatrix * vec4(position, 1));
 	gl_Position = ProjViewMatrix * worldPos;
 	
-	Out.MaterialProps = currentNode.MaterialProperties;
-	Out.TextureIndexes = uvec4(gl_DrawID);
+	OutProperties = currentNode.Properties;
 }

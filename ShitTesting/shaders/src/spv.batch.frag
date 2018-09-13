@@ -9,16 +9,18 @@ layout(location=3) out vec4 out_position;
 
 layout(set=0, binding=1) uniform sampler2D BatchTextures[12];
 
-struct VertexOut
+struct MaterialPropertis
 {
-	vec4 MaterialProps;
-	uvec4 TextureIndexes;
+	float		Roughness;
+	float		K;
+	float		F0;
+	uint		AlbedoTexture;
 };
 
 layout(location=0) in vec4 normal;
 layout(location=1) in vec4 worldPos;
 layout(location=2) in vec2 uv;
-layout(location=3) flat in VertexOut VIn;
+layout(location=3) flat in MaterialPropertis Properties;
 
 float Depth()
 {
@@ -30,9 +32,10 @@ float Depth()
 
 void main()
 {
-	const uint index = VIn.TextureIndexes.x;
+	const uint index = Properties.AlbedoTexture;
+
 	albedo = texture(BatchTextures[index], uv);
-	out_specular = VIn.MaterialProps;
+	out_specular = vec4(Properties.Roughness, Properties.K, Properties.F0, 0.0f);
 	out_normal = normal;
 	out_position = worldPos;
 	

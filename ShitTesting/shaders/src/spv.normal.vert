@@ -43,5 +43,7 @@ void main()
 	mat3 tTBN = transpose(TBN);
 	tsViewPos = vec4(tTBN * vec3(param.viewPos), 1.0);
 	tsFragPos = vec4(tTBN * vec3(worldPos), 1.0);
+	
+	//uv.x = float(gl_DrawID);
     gl_Position = param.mvp * vec4(position, 1.0f);
 }

@@ -394,6 +394,19 @@ ObjectRenderer::~ObjectRenderer()
 
 void ObjectRenderer::Render()
 {
+	if (m_solidBatch.NeedCleanup())
+	{
+		m_solidBatch.Cleanup();
+		MemoryManager::GetInstance()->FreeMemory(EMemoryContextType::BatchStaggingBuffer);
+	}
+
+	if (m_solidBatch.NeedReconstruct())
+	{
+		MemoryManager::GetInstance()->AllocMemory(EMemoryContextType::BatchStaggingBuffer, m_solidBatch.GetTotalBatchMemory());
+
+		m_solidBatch.Construct(this, m_renderPass, 0);
+	}
+
     VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
     StartRenderPass();
 
@@ -420,19 +433,6 @@ void ObjectRenderer::Render()
 
 void ObjectRenderer::PreRender()
 {
-	if (m_solidBatch.NeedCleanup())
-	{
-		m_solidBatch.Cleanup();
-		MemoryManager::GetInstance()->FreeMemory(EMemoryContextType::BatchStaggingBuffer);
-	}
-
-	if (m_solidBatch.NeedReconstruct())
-	{
-		MemoryManager::GetInstance()->AllocMemory(EMemoryContextType::BatchStaggingBuffer, m_solidBatch.GetTotalBatchMemory());
-
-		m_solidBatch.Construct(this, m_renderPass, 0);
-	}
-
 	m_solidBatch.PreRender();
 	UpdateShaderParams();
 }

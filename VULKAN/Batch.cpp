@@ -5,15 +5,7 @@
 #include "Object.h"
 #include "Renderer.h"
 #include "Texture.h"
-
-//TODO remove
-struct BatchNodeParams
-{
-	//Every Node from batch should have a model matrix
-	glm::mat4 ModelMatrix;
-	//this are the true material specifics. For now we keep the old functionality
-	glm::vec4 MaterialProperties; //x = roughness, y = k, z = F0
-};
+#include "Material.h"
 
 BatchBuilder::BatchBuilder()
 	: m_currentPoolIndex(-1)
@@ -64,8 +56,7 @@ Batch::Batch()
 	, m_totalBatchMemory(0)
 	, m_needReconstruct(true)
 	, m_needCleanup(false)
-	, m_canRender(false)
-	, m_needUpdate(true)
+	, m_isReady(false)
 {
 }
 
@@ -95,7 +86,8 @@ void Batch::Construct(CRenderer* renderer, VkRenderPass renderPass, uint32_t sub
 	ConstructMeshes();
 	ConstructPipeline(renderer, renderPass, subpassIndex);
 	ConstructBatchSpecifics();
-	//UpdateGraphicsInterface();
+	IndexTextures();
+	UpdateGraphicsInterface();
 	m_needReconstruct = false;
 }
 
@@ -169,6 +161,8 @@ void Batch::ConstructMeshes()
 
 void Batch::ConstructPipeline(CRenderer* renderer, VkRenderPass renderPass, uint32_t subpassIndex)
 {
+	m_materialTemplate = new MaterialTemplate<StandardMaterial>("batch.vert", "batch.frag");
+
 	VkPushConstantRange pushConstRange;
 	pushConstRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 	pushConstRange.offset = 0;
@@ -176,8 +170,8 @@ void Batch::ConstructPipeline(CRenderer* renderer, VkRenderPass renderPass, uint
 
 	m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
 	m_pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), GBuffer_InputCnt);
-	m_pipeline.SetVertexShaderFile("batch.vert");
-	m_pipeline.SetFragmentShaderFile("batch.frag");
+	m_pipeline.SetVertexShaderFile(m_materialTemplate->GetVertexShader());
+	m_pipeline.SetFragmentShaderFile(m_materialTemplate->GetFragmentShader());
 	m_pipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
 	m_pipeline.AddPushConstant(pushConstRange);
 	m_pipeline.CreatePipelineLayout(BatchBuilder::GetInstance()->GetDescriptorSetLayout());
@@ -187,7 +181,7 @@ void Batch::ConstructPipeline(CRenderer* renderer, VkRenderPass renderPass, uint
 void Batch::ConstructBatchSpecifics()
 {
 	//here we need to get material specifics and allocate a suitable amount of memory. But for now we just hardcode the late functionality
-	VkDeviceSize totalSize = m_objects.size() * sizeof(BatchNodeParams);
+	VkDeviceSize totalSize = m_objects.size() * (sizeof(glm::mat4) + m_materialTemplate->GetDataStride());
 	m_materialBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, totalSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 	m_batchSpecificDescSet = BatchBuilder::GetInstance()->AllocNewDescriptorSet();
 }
@@ -199,15 +193,53 @@ void Batch::UpdateGraphicsInterface()
 	wDesc.push_back(InitUpdateDescriptor(m_batchSpecificDescSet, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &buffInfo));
 	std::vector<VkDescriptorImageInfo> imageInfo;
 
-	for (const auto& obj : m_objects)
+	for (const auto& text : m_batchTextures)
 	{
-		CTexture* albedoText = obj->GetAlbedoTexture();
-		imageInfo.push_back(albedoText->GetTextureDescriptor());
+		imageInfo.push_back(text->GetTextureDescriptor());
 	}
 
 	wDesc.push_back(InitUpdateDescriptor(m_batchSpecificDescSet, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, imageInfo));
 
 	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
+}
+
+void Batch::IndexTextures()
+{
+	m_materials.resize(m_objects.size());
+	for (unsigned int i = 0; i < m_objects.size(); ++i)
+	{
+		Object* obj = m_objects[i];
+		m_materials[i] = m_materialTemplate->Create();
+		StandardMaterial* mat = (StandardMaterial*)m_materials[i];
+		mat->SetAlbedoTexture(obj->GetAlbedoTexture());
+		mat->SetSpecularProperties(obj->GetMaterialProperties());
+	}
+
+	//idk man. this is some fucked up shit
+	for (Material* mat : m_materials)
+	{
+		std::vector<IndexedTexture> slots = mat->GetTextureSlots();
+		std::vector<IndexedTexture> newSlots = slots;
+		for (unsigned int i = 0; i < slots.size(); ++i)
+		{
+			auto it = std::find_if(m_batchTextures.begin(), m_batchTextures.end(), [&](const CTexture* elem)
+			{
+				return elem == slots[i].texture;
+			});
+
+			if (it != m_batchTextures.end())
+			{
+				newSlots[i].index = it - m_batchTextures.begin();
+			}
+			else
+			{
+				newSlots[i].index = m_batchTextures.size();
+				m_batchTextures.push_back(slots[i].texture);
+			}
+		}
+
+		mat->SetTextureSlots(newSlots);
+	}
 }
 
 void Batch::Cleanup()
@@ -217,28 +249,29 @@ void Batch::Cleanup()
 	m_staggingBuffer = nullptr;
 
 	m_needCleanup = false;
+	m_isReady = true;
 }
 
 void Batch::Destruct()
 {
 	//TODO
+	m_isReady = false;
+	delete m_materialTemplate;
 }
 
 void Batch::PreRender()
 {
-	if (m_canRender && m_needUpdate)
-	{
-		UpdateGraphicsInterface();
-		m_needUpdate = false;
-	}
+	if (!m_isReady)
+		return;
 
-	BatchNodeParams* mem = m_materialBuffer->GetPtr<BatchNodeParams*>();
-
-	for (unsigned int i = 0; i < m_objects.size(); ++i, ++mem)
+	uint8_t* mem = m_materialBuffer->GetPtr<uint8_t*>();
+	uint32_t offset = m_materialTemplate->GetDataStride() + sizeof(glm::mat4);
+	for (unsigned int i = 0; i < m_objects.size(); ++i, mem += offset)
 	{
 		Object* obj = m_objects[i];
-		mem->ModelMatrix = obj->GetModelMatrix();
-		mem->MaterialProperties = obj->GetMaterialProperties();
+		//this one, too, is GOOOD SHIT
+		*((glm::mat4*)mem) = obj->GetModelMatrix();
+		memcpy(mem + sizeof(glm::mat4), m_materials[i]->GetData(), m_materials[i]->GetDataStride());
 	}
 
 	glm::mat4 projMatrix;
@@ -250,12 +283,9 @@ void Batch::PreRender()
 }
 void Batch::Render()
 {
-	if (!m_canRender)
-	{
-		m_canRender = true;
+	if (!m_isReady)
 		return;
-	}
-	
+
 	VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
 
 	vk::CmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.Get());

@@ -35,6 +35,7 @@ public:
 	void Construct(const DescriptorSetLayout& layoutType, uint32_t maxSets);
 	void Construct(const std::vector<VkDescriptorPoolSize>& poolSize, uint32_t maxSets); //backwards compatibility
 
+	//need methods to check for multiples sets
 	bool CanAllocate(const DescriptorSetLayout& layoutType);
 	VkDescriptorSet AllocateDescriptorSet(const DescriptorSetLayout& layoutType);
 private:

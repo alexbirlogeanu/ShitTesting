@@ -11,8 +11,11 @@ class BufferHandle;
 class Mesh;
 class Object;
 class CRenderer;
-
+class MaterialTemplateBase;
 class Batch;
+class Material;
+class CTexture;
+
 class BatchBuilder : public Singleton<BatchBuilder>
 {
 public:
@@ -58,6 +61,7 @@ private:
 	void ConstructPipeline(CRenderer* renderer, VkRenderPass renderPass, uint32_t subpassIndex); //TODO remove
 	void ConstructBatchSpecifics();
 	void UpdateGraphicsInterface();
+	void IndexTextures();
 private:
 	struct BatchParams
 	{
@@ -74,16 +78,17 @@ private:
 	BufferHandle*			m_materialBuffer; //this should be coming from a material template
 
 	std::vector<Object*>	m_objects;
+	std::vector<Material*>	m_materials; //temporary
 	VkDeviceSize			m_totalBatchMemory;
 
 	bool					m_needReconstruct;
 	bool					m_needCleanup;
-
-	//HACK
-	bool					m_canRender;
-	bool					m_needUpdate;
+	bool					m_isReady;
 
 	//need a buffer for uniforms. Also need to pack descriptors??
 	CGraphicPipeline		m_pipeline; //Batch class shouldn't onw a pipline. material should construct the pipeline. and we bind only once per multiple batches
 	VkDescriptorSet			m_batchSpecificDescSet;
+	MaterialTemplateBase*	m_materialTemplate;
+	std::vector<CTexture*>	m_batchTextures;
+
 };

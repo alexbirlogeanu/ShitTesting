@@ -130,6 +130,7 @@
     <ClInclude Include="Batch.h" />
     <ClInclude Include="DebugMarkers.h" />
     <ClInclude Include="DescriptorsUtils.h" />
+    <ClInclude Include="Material.h" />
     <ClInclude Include="MemoryManager.h" />
     <ClInclude Include="MeshLoader.h" />
     <ClInclude Include="Object.h" />
@@ -161,6 +162,7 @@
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="DebugMarkers.cpp" />
     <ClCompile Include="DescriptorsUtils.cpp" />
+    <ClCompile Include="Material.cpp" />
     <ClCompile Include="MemoryManager.cpp" />
     <ClCompile Include="MeshLoader.cpp" />
     <ClCompile Include="Object.cpp" />
