@@ -72,7 +72,7 @@ void Batch::AddObject(Object* obj)
 
 	for (Object* obj : m_objects)
 	{
-		Mesh* mesh = obj->GetMesh();
+		Mesh* mesh = obj->GetObjectMesh();
 		sizes[0] += mesh->GetVerticesMemorySize(); //first part of memory will be vertexes
 		sizes[1] += mesh->GetIndicesMemorySize();  //second part will be indexes
 	}
@@ -98,7 +98,7 @@ void Batch::ConstructMeshes()
 	subBuffersSizes[0] = subBuffersSizes[1] = 0;//unnecessary i think
 	for (Object* obj : m_objects)
 	{
-		Mesh* mesh = obj->GetMesh();
+		Mesh* mesh = obj->GetObjectMesh();
 		subBuffersSizes[0] += (VkDeviceSize)mesh->GetVerticesMemorySize(); //in first part of the memory we keep the vertices
 		subBuffersSizes[1] += (VkDeviceSize)mesh->GetIndicesMemorySize(); //in the second part of the memory we keep the indices
 	}
@@ -124,7 +124,7 @@ void Batch::ConstructMeshes()
 
 	for (Object* obj : m_objects)
 	{
-		Mesh* mesh = obj->GetMesh();
+		Mesh* mesh = obj->GetObjectMesh();
 
 		mesh->CopyLocalData(vertexMemory, indexMemory);
 		indirectCommand->firstIndex = indexOffset;
@@ -211,8 +211,8 @@ void Batch::IndexTextures()
 		Object* obj = m_objects[i];
 		m_materials[i] = m_materialTemplate->Create();
 		StandardMaterial* mat = (StandardMaterial*)m_materials[i];
-		mat->SetAlbedoTexture(obj->GetAlbedoTexture());
-		mat->SetSpecularProperties(obj->GetMaterialProperties());
+		//mat->SetAlbedoTexture(obj->GetAlbedoTexture());
+		//mat->SetSpecularProperties(obj->GetMaterialProperties());
 	}
 
 	//idk man. this is some fucked up shit

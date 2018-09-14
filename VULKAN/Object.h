@@ -5,6 +5,8 @@
 #include "Renderer.h"
 #include "VulkanLoader.h"
 #include "Batch.h"
+#include "Material.h"
+#include "Serializer.h"
 
 #include <string>
 #include <vector>
@@ -22,15 +24,34 @@ enum class ObjectType
     Count
 };
 
+//////////////////////////////////////////TEST Seriable
+
+class ObjectSer : public SeriableImpl<ObjectSer>
+{
+public:
+	ObjectSer();
+	virtual ~ObjectSer();
+
+private:
+	DECLARE_PROPERTY(Material*, ObjectMaterial, ObjectSer);
+	DECLARE_PROPERTY(glm::vec3, Position, ObjectSer);
+};
+
+
+
+
+///////////////////////////////////////////
+
 class ObjectFactory
 {
 public:
-    static void LoadXml(const std::string& file);
-    static const std::vector<Object*>& GetObjects();
+	static void LoadXml(const std::string& file){}
+	static const std::vector<Object*>& GetObjects() { return m_objects; };
 private:
+	static std::vector<Object*> m_objects;
 };
 
-class Object : public CPickable
+class Object :/* public CPickable,*/ public SeriableImpl<Object>
 {
 public:
 
@@ -72,64 +93,52 @@ public:
         m_needComputeModelMtx = true;
     }
 
-    void SetMaterialProperties(float roughness = 1, float k = 0.5f, float F0 = 0.8f)
-    {
-        this->m_roughtness = roughness;
-        this->m_metallic = k;
-        this->F0 = F0;
-    }
-    glm::vec4 GetMaterialProperties() const { return glm::vec4(m_roughtness, m_metallic, F0, 0.0f); }
-
     BoundingBox GetBoundingBox() const
     {
-        return m_mesh->GetBB();
+        return GetObjectMesh()->GetBB();
     }
 
-    ObjectType GetType() const { return m_type; }
     glm::mat4 GetModelMatrix();
-    CTexture* GetAlbedoTexture() const { return m_albedoTexture; }
-    CTexture* GetNormalMap() const { return m_normalMapTexture; }
-	Mesh* GetMesh() const { return m_mesh; }
 
     void Render();
-    virtual void GetPickableDescription(std::vector<std::string>& texts) override;
-    virtual bool ChangePickableProperties(unsigned int key) override;
+    //virtual void GetPickableDescription(std::vector<std::string>& texts) override;
+    //virtual bool ChangePickableProperties(unsigned int key) override;
+	Object();
+	virtual ~Object();
 private:
-    Object();
-    virtual ~Object();
-
-    void SetIsShadowCaster(bool isShadowCaster) { m_isShadowCaster = isShadowCaster; }
-    void SetAlbedoTexture(CTexture* text) { m_albedoTexture = text; }
-    void SetNormalMap(CTexture* text) { m_normalMapTexture = text; }
-    void SetMesh(Mesh* mesh) { m_mesh = mesh; }
-    void SetType (ObjectType type) { m_type = type; }
-    void SetDebugName(const std::string& debug) { m_debugName = debug; }
+   
 
     void ValidateResources();
 
-    friend class ObjectFactoryImpl;
+    friend class ObjectSerializer;
 private:
-    bool                    m_isShadowCaster;
+	DECLARE_PROPERTY(Mesh*, ObjectMesh, Object);
+	DECLARE_PROPERTY(Material*, ObjectMaterial, Object);
+	DECLARE_PROPERTY(bool, isShadowCaster, Object);
+	DECLARE_PROPERTY(glm::vec3, worldPosition, Object);
+	DECLARE_PROPERTY(glm::vec3, scale, Object);
+	DECLARE_PROPERTY(std::string, debugName, Object);
+
     bool                    m_needComputeModelMtx;
 
-    CTexture*               m_albedoTexture;
-    CTexture*               m_normalMapTexture;
-    Mesh*                   m_mesh;
-
-    glm::vec3               m_worldPosition;
-    glm::vec3               m_scale;
     float                   m_yRot;
     float                   m_xRot;
 
     glm::mat4               m_modelMatrix;
+};
 
-    //material properties
-    float                   m_roughtness;
-    float                   F0;
-    float                   m_metallic;
+class ObjectSerializer : public Serializer
+{
+public:
+	ObjectSerializer();
+	virtual ~ObjectSerializer();
 
-    ObjectType              m_type;
-    std::string             m_debugName;
+	virtual void Save(const std::string& filename) override;
+	virtual void Load(const std::string& filename) override;
+
+	void AddObject(Object* obj);
+private:
+	std::vector<Object*>		m_objects;
 };
 
 enum GBuffer //until refactoring change values into ao.cpp too

@@ -136,15 +136,21 @@ unsigned int MeshManager::CalculateStagginMemorySize()
 ////////////////////////////////////////////////////////////////////////////////////////
 Mesh::InputVertexDescription* Mesh::ms_vertexDescription = nullptr;
 
+BEGIN_PROPERTY_MAP(Mesh)
+	IMPLEMENT_PROPERTY(std::string, Filename, "file", Mesh)
+END_PROPERTY_MAP(Mesh)
+
 Mesh::Mesh()
-	: m_meshBuffer(nullptr)
+	: SeriableImpl<Mesh>("mesh")
+	, m_meshBuffer(nullptr)
 	, m_vertexSubBuffer(nullptr)
 	, m_indexSubBuffer(nullptr)
 {
 }
 
 Mesh::Mesh(const std::vector<SVertex>& vertexes, const std::vector<unsigned int>& indices)
-	: m_meshBuffer(nullptr)
+	: SeriableImpl<Mesh>("mesh")
+	, m_meshBuffer(nullptr)
 	, m_vertexSubBuffer(nullptr)
 	, m_indexSubBuffer(nullptr)
     , m_vertexes(vertexes)
@@ -154,9 +160,15 @@ Mesh::Mesh(const std::vector<SVertex>& vertexes, const std::vector<unsigned int>
 }
 
 Mesh::Mesh(const std::string filename) //use the binarized version
-	: m_meshBuffer(nullptr)
+	: SeriableImpl<Mesh>("mesh")
+	, m_meshBuffer(nullptr)
 	, m_vertexSubBuffer(nullptr)
 	, m_indexSubBuffer(nullptr)
+{
+	LoadFromFile(filename);
+}
+
+void Mesh::LoadFromFile(const std::string filename)
 {
 	std::fstream inFile(filename, std::ios_base::in | std::ios_base::binary);
 
@@ -182,9 +194,10 @@ Mesh::Mesh(const std::string filename) //use the binarized version
 	Create();
 }
 
+
 void Mesh::Create()
 {
-   m_nbOfIndexes = (unsigned int)m_indices.size();
+	m_nbOfIndexes = (unsigned int)m_indices.size();
 	MeshManager::GetInstance()->RegisterForUploading(this);
 
 	CreateBoundigBox();

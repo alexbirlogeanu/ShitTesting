@@ -5,6 +5,8 @@
 #include "glm/glm.hpp"
 #include "SVertex.h"
 #include "Singleton.h"
+#include "Serializer.h"
+#include "ResourceLoader.h"
 
 struct BoundingBox
 {
@@ -73,7 +75,7 @@ private:
 };
 
 
-class Mesh
+class Mesh : public SeriableImpl<Mesh>
 {
 	friend class MeshManager;
 	friend class TransferMeshInfo;
@@ -101,10 +103,12 @@ public:
 	void CopyLocalData(BufferHandle* stagginVertexBuffer, BufferHandle* staggingIndexBuffer);
 	void CopyLocalData(void* vboMemory, void* iboMemory);
 
+	void LoadFromFile(const std::string filename);
 private:
     void Create();
     void CreateBoundigBox();
 private:
+	DECLARE_PROPERTY(std::string, Filename, Mesh);
 
     std::vector<SVertex>			m_vertexes;
     std::vector<unsigned int>		m_indices;
@@ -124,4 +128,43 @@ private:
     };
 
     static InputVertexDescription*            ms_vertexDescription;
+};
+
+template<typename BASE>
+class Property<Mesh*, BASE> : public PropertyGeneric
+{
+public:
+	typedef Mesh* BASE::* PtmType;
+	Property()
+	{}
+	Property(PtmType offset, const std::string& label)
+		: m_ptm(offset)
+		, m_label(label)
+	{}
+
+	virtual void Save(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		TRAP(cobj);
+
+		(cobj->*m_ptm)->SetName(m_label);
+		(cobj->*m_ptm)->Serialize(serializer);
+	};
+
+	virtual void Load(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		auto prop = objNode->first_attribute(m_label.c_str(), 0, false);
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		TRAP(cobj);
+
+		cobj->*m_ptm = new Mesh();
+
+		(cobj->*m_ptm)->SetName(m_label);
+		(cobj->*m_ptm)->Serialize(serializer);
+
+		ResourceLoader::GetInstance()->LoadMesh(&(cobj->*m_ptm));
+	};
+private:
+	PtmType						m_ptm;
+	std::string					m_label;
 };

@@ -219,10 +219,23 @@ void TextureCreator::CopyLocalData()
 //CTexture
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+BEGIN_PROPERTY_MAP(CTexture)
+	IMPLEMENT_PROPERTY(std::string, Filename, "file", CTexture),
+	IMPLEMENT_PROPERTY(bool, IsSRGB, "isSRGB", CTexture)
+END_PROPERTY_MAP(CTexture)
+
 CTexture::CTexture(const SImageData& image, bool ownData)
 	: m_image(nullptr)
+	, SeriableImpl<CTexture>("texture")
 {
     CreateTexture(image, ownData);
+}
+
+CTexture::CTexture()
+	: m_image(nullptr)
+	, SeriableImpl<CTexture>("texture")
+{
+
 }
 
 const VkDescriptorImageInfo& CTexture::GetTextureDescriptor() const  
@@ -242,10 +255,13 @@ VkImageView  CTexture::GetImageView() const
 
 CTexture::~CTexture()
 {
-    VkDevice dev = vk::g_vulkanContext.m_device;
+	if (m_image)
+	{
+		VkDevice dev = vk::g_vulkanContext.m_device;
 
-    vk::DestroySampler(dev, m_textSampler, nullptr);
-	MemoryManager::GetInstance()->FreeHandle(m_image);
+		vk::DestroySampler(dev, m_textSampler, nullptr);
+		MemoryManager::GetInstance()->FreeHandle(m_image);
+	}
 
 }
 

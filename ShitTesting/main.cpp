@@ -539,6 +539,7 @@ class Serializer
 public:
 	Serializer()
 		: m_isSaving(true)
+		, m_HasReachedEoF(false)
 		, m_currentNode(nullptr)
 	{
 		auto root = GetNewNode(GetNewString("objects"));
@@ -554,7 +555,7 @@ public:
 
 	}
 
-	void BeginSerializing(ISeriable* obj)
+	bool BeginSerializing(ISeriable* obj)
 	{
 		if (m_isSaving)
 		{
@@ -576,9 +577,16 @@ public:
 				else
 					m_currentNode = m_currentNode->first_node(obj->GetName().c_str());
 			}
-			BREAKPOINT(m_currentNode); //no node has been found.
+
+			if (!m_currentNode)
+			{
+				m_HasReachedEoF = true;
+				return false;
+			}
+
 			m_nodeStack.push_back(m_currentNode);
 		}
+		return true;
 	}
 
 	void EndSerializing(ISeriable* obj)
@@ -597,7 +605,15 @@ public:
 		}
 		else
 		{
-			newCurrentNode = (m_nodeStack.empty()) ? m_currentNode : m_nodeStack.back();
+			if (m_nodeStack.empty())
+			{
+				m_HasReachedEoF =  m_currentNode->next_sibling() == nullptr;
+				newCurrentNode = m_currentNode;
+			}
+			else
+			{
+				newCurrentNode = m_nodeStack.back();
+			}
 		}
 		m_currentNode = newCurrentNode;
 
@@ -631,12 +647,14 @@ public:
 	}
 
 	void ToggleIsSaving() { m_isSaving = false; m_currentNode = nullptr; } //this one is debug
+	bool HasReachedEof() const { return m_HasReachedEoF; }
 private:
 	rapidxml::xml_node<char>*				m_currentNode;
 	std::vector<rapidxml::xml_node<char>*>	m_nodeStack;
 
 	rapidxml::xml_document<char>	m_document;
 	bool							m_isSaving;
+	bool							m_HasReachedEoF;
 
 };
 
@@ -650,15 +668,17 @@ public:
 
 	virtual void Serialize(Serializer* serializer) override
 	{
-		serializer->BeginSerializing(this);
-		for (auto prop : T::PropertiesMap)
-			serializer->SerializeProperty(prop, this);
+		if (serializer->BeginSerializing(this))
+		{
+			for (auto prop : T::PropertiesMap)
+				serializer->SerializeProperty(prop, this);
 
-		serializer->EndSerializing(this);
+			serializer->EndSerializing(this);
+		}
 	}
 
 
-protected:
+public:
 	static std::vector<PropertyGeneric*> PropertiesMap;
 };
 
@@ -667,10 +687,12 @@ protected:
 
 #define END_PROPERTY_MAP(CLASSTYPE) };
 
-#define IMPLEMENT_PROPERTY(PTYPE, PNAME, PLABEL, CLASSTYPE) new Property<PTYPE, CLASSTYPE>(CLASSTYPE::Get##PNAME(), PLABEL)
+#define IMPLEMENT_PROPERTY(PTYPE, PNAME, PLABEL, CLASSTYPE) new Property<PTYPE, CLASSTYPE>(CLASSTYPE::GetMember##PNAME(), PLABEL)
 
-#define DECLARE_PROPERTY(PTYPE, PNAME, CLASSTYPE)  protected: PTYPE PNAME; \
-													public: static PTYPE CLASSTYPE::* Get##PNAME() { return &CLASSTYPE::PNAME; }
+#define DECLARE_PROPERTY(PTYPE, PNAME, CLASSTYPE)  protected: PTYPE m_##PNAME; \
+													public: static PTYPE CLASSTYPE::* GetMember##PNAME() { return &CLASSTYPE::m_##PNAME; } \
+													const PTYPE Get##PNAME() const { return m_##PNAME; } \
+													void Set##PNAME(PTYPE val) { m_##PNAME = val; }
 
 template<typename T, typename BASE> //default int
 class Property : public PropertyGeneric
@@ -818,9 +840,62 @@ private:
 };
 
 
+class FloatSer : public SeriableImpl<FloatSer>
+{
+public:
+	FloatSer()
+		: SeriableImpl<FloatSer>("floatSer")
+	{
+		m_f = 69.0f;
+	}
 
+	DECLARE_PROPERTY(float, f, FloatSer);
+};
 
-class TestSer : public SeriableImpl<TestSer>
+template<typename BASE>
+class Property<FloatSer, BASE> : public PropertyGeneric
+{
+public:
+	typedef FloatSer BASE::* PtmType;
+	Property()
+	{}
+	Property(PtmType offset, const std::string& label)
+		: m_ptm(offset)
+		, m_label(label)
+	{}
+
+	virtual void Save(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		BREAKPOINT(cobj);
+		(cobj->*m_ptm).SetName(m_label);
+		(cobj->*m_ptm).Serialize(serializer);
+	};
+
+	virtual void Load(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		BREAKPOINT(cobj);
+		(cobj->*m_ptm).SetName(m_label);
+		(cobj->*m_ptm).Serialize(serializer);
+	};
+
+private:
+	PtmType						m_ptm;
+	std::string					m_label;
+};
+
+BEGIN_PROPERTY_MAP(FloatSer)
+	IMPLEMENT_PROPERTY(float, f, "float", FloatSer),
+END_PROPERTY_MAP(FloatSer)
+
+class BaseSer
+{
+public:
+	virtual void Load(Serializer* ser) = 0;
+};
+
+class TestSer : public SeriableImpl<TestSer>, public BaseSer
 {
 public:
 
@@ -829,17 +904,23 @@ public:
 
 	TestSer(float dick, int women, int men)
 		: SeriableImpl<TestSer>("testSer")
-		, dickLength(dick)
-		, womenFucked(women)
-		, menFucked(men)
+		, m_dickLength(dick)
+		, m_womenFucked(women)
+		, m_menFucked(men)
 	{
-		mesaj = "muie cu cacat pe o pula de : " + to_string(dickLength);
+		m_mesaj = "muie cu cacat pe o pula de : " + to_string(m_dickLength);
+	}
+
+	void Load(Serializer* ser) override
+	{
+		Serialize(ser);
 	}
 
 protected:
 	DECLARE_PROPERTY(float, dickLength, TestSer);
 	DECLARE_PROPERTY(int, womenFucked, TestSer);
 	DECLARE_PROPERTY(int, menFucked, TestSer);
+	DECLARE_PROPERTY(FloatSer, pizda, TestSer);
 	DECLARE_PROPERTY(std::string, mesaj, TestSer);
 };
 
@@ -847,7 +928,8 @@ BEGIN_PROPERTY_MAP(TestSer)
 	IMPLEMENT_PROPERTY(float, dickLength, "dickLength", TestSer),
 	IMPLEMENT_PROPERTY(int, womenFucked, "WomenFucked", TestSer),
 	IMPLEMENT_PROPERTY(int, menFucked, "MenFucked", TestSer),
-	IMPLEMENT_PROPERTY(std::string, mesaj, "Mesaj", TestSer)
+	IMPLEMENT_PROPERTY(std::string, mesaj, "Mesaj", TestSer),
+	IMPLEMENT_PROPERTY(FloatSer, pizda, "PizdaMatii", TestSer)
 END_PROPERTY_MAP(TestSer)
 
 template<typename BASE>
@@ -883,16 +965,21 @@ private:
 	std::string					m_label;
 };
 
-class ComplexTestSer : public SeriableImpl<ComplexTestSer>
+class ComplexTestSer : public SeriableImpl<ComplexTestSer>, public BaseSer
 {
 public:
 
 	ComplexTestSer()
 		: SeriableImpl<ComplexTestSer>("complex")
-		, testFloat(69.0f)
-		, ser(2 * 21.6f, 3 * 10, 20)
-		, position(1, 2, 3)
+		, m_testFloat(69.0f)
+		, m_ser(2 * 21.6f, 3 * 10, 20)
+		, m_position(1, 2, 3)
 	{}
+
+	void Load(Serializer* ser) override
+	{
+		Serialize(ser);
+	}
 
 private:
 	DECLARE_PROPERTY(float, testFloat, ComplexTestSer);
@@ -905,6 +992,7 @@ BEGIN_PROPERTY_MAP(ComplexTestSer)
 	IMPLEMENT_PROPERTY(TestSer, ser, "testSerializer", ComplexTestSer),
 	IMPLEMENT_PROPERTY(glm::vec3, position, "PoSItion", ComplexTestSer)
 END_PROPERTY_MAP(ComplexTestSer)
+
 
 int Sum(int a, int b)
 {
@@ -1000,7 +1088,7 @@ public:
 
 int main (int argc, char** argv)
 {
-	/*TestSer t(21.6f, 10, 20);
+	TestSer t(21.6f, 10, 20);
 	TestSer t2(13.0f, 2, 0);
 	ComplexTestSer ct;
 
@@ -1012,12 +1100,27 @@ int main (int argc, char** argv)
 	serializer.PrintContent();
 
 	serializer.ToggleIsSaving();
-	TestSer tloads[2];
-	tloads[0].Serialize(&serializer);
-	tloads[1].Serialize(&serializer);
-	ComplexTestSer ctload;
-	ctload.Serialize(&serializer);
-*/
+
+	uint32_t i = 0;
+	BaseSer* tloads[3];
+	tloads[0] = new TestSer();
+	tloads[1] = new TestSer();
+	tloads[2] = new ComplexTestSer();
+
+	ComplexTestSer* comp = (ComplexTestSer*)tloads[2];
+	comp->SettestFloat(12.0f);
+
+	while (!serializer.HasReachedEof())
+	{
+		tloads[i++]->Load(&serializer);
+	}
+
+	
+	//tloads[0].Serialize(&serializer);
+	//tloads[1].Serialize(&serializer);
+	//ComplexTestSer ctload;
+	//ctload.Serialize(&serializer);
+
     return 0;
 }
 

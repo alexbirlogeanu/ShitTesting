@@ -1121,6 +1121,7 @@ CApplication::CApplication()
 	MemoryManager::CreateInstance();
 	MeshManager::CreateInstance();
 	CTextureManager::CreateInstance();
+	ResourceLoader::CreateInstance();
 
     CreateCommandBuffer();
     CPickManager::CreateInstance();
@@ -1202,6 +1203,7 @@ CApplication::~CApplication()
     vk::DestroyRenderPass(dev, m_volumetricRenderPass, nullptr);
 	vk::DestroyRenderPass(dev, m_ssrRenderPass, nullptr);
 
+	ResourceLoader::DestroyInstance();
 	CTextureManager::DestroyInstance();
 	MeshManager::DestroyInstance();
 	MemoryManager::DestroyInstance();
@@ -2980,7 +2982,35 @@ void CApplication::RenderCameraFrustrum()
 
 int main(int argc, char* arg[])
 {
-    CApplication app;
+	/*ResourceLoader::CreateInstance();
+	ObjectSerializer serializer;
+	Object* obj = new Object();
+	StandardMaterial* mat = (StandardMaterial*)s_TestTemplate->Create();
+	CTexture* texture = new CTexture();
+	Mesh* mesh = new Mesh();
+
+	mesh->SetFilename("obj\\\\monkey.mb");
+	texture->SetFilename("pussy.png");
+	texture->SetIsSRGB(true);
+
+	mat->SetRoughness(20);
+	mat->SetF0(4);
+	mat->SetK(1);
+	mat->SetAlbedoText(texture);
+	obj->SetisShadowCaster(true);
+	obj->SetScale(glm::vec3(1.0));
+
+	obj->SetObjectMaterial(mat);
+	obj->SetObjectMesh(mesh);
+
+	serializer.AddObject(obj);
+	serializer.Save("scene.xml");
+
+	ObjectSerializer loadSerializer;
+	loadSerializer.Load("scene.xml");*/
+
+	CApplication app;
+
     app.Run();
     return 0;
 }

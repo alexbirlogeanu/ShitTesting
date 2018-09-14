@@ -7,6 +7,8 @@
 #include <string>
 #include "Utils.h"
 #include "Singleton.h"
+#include "Serializer.h"
+#include "ResourceLoader.h"
 
 #define TEXTDIR "text/"
 
@@ -92,23 +94,28 @@ private:
     bool                    m_ownData;
 };
 
-class CTexture
+class CTexture : public SeriableImpl<CTexture>
 {
 	friend class TextureCreator;
 public:
-    CTexture(const SImageData& image, bool ownData = false);
+    CTexture(const SImageData& image, bool ownData = false); //for compatibility TODO delete
+	CTexture();
     ~CTexture();
 
     const VkDescriptorImageInfo& GetTextureDescriptor() const;
     VkDescriptorImageInfo& GetTextureDescriptor();
 	VkImageView  GetImageView() const;
+	void CreateTexture(const SImageData& imageData, bool ownData);
+
 protected:
     //void CleanUp();
-    void CreateTexture(const SImageData& imageData, bool ownData);
 protected:
 	ImageHandle*			m_image;
     VkSampler               m_textSampler;
     VkDescriptorImageInfo   m_textureInfo;
+
+	DECLARE_PROPERTY(std::string, Filename, CTexture);
+	DECLARE_PROPERTY(bool, IsSRGB, CTexture);
 };
 
 
@@ -141,3 +148,43 @@ private:
 };
 
 CCubeMapTexture* CreateCubeMapTexture(std::vector<std::string>& facesFileNames);
+
+
+template<typename BASE>
+class Property<CTexture*, BASE> : public PropertyGeneric
+{
+public:
+	typedef CTexture* BASE::* PtmType;
+	Property()
+	{}
+	Property(PtmType offset, const std::string& label)
+		: m_ptm(offset)
+		, m_label(label)
+	{}
+
+	virtual void Save(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		TRAP(cobj);
+
+		(cobj->*m_ptm)->SetName(m_label);
+		(cobj->*m_ptm)->Serialize(serializer);
+	};
+
+	virtual void Load(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		auto prop = objNode->first_attribute(m_label.c_str(), 0, false);
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		TRAP(cobj);
+
+		cobj->*m_ptm = new CTexture();
+
+		(cobj->*m_ptm)->SetName(m_label);
+		(cobj->*m_ptm)->Serialize(serializer);
+
+		ResourceLoader::GetInstance()->LoadTexture(&(cobj->*m_ptm));
+	};
+private:
+	PtmType						m_ptm;
+	std::string					m_label;
+};
