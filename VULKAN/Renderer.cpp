@@ -611,7 +611,7 @@ void CComputePipeline::CleanInternal()
 //CRenderer
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-std::unordered_set<CRenderer*> CRenderer::ms_Renderers;
+std::vector<CRenderer*> CRenderer::ms_Renderers;
 
 CRenderer::CRenderer(VkRenderPass renderPass, std::string renderPassMarker)
     : m_initialized(false)
@@ -622,7 +622,7 @@ CRenderer::CRenderer(VkRenderPass renderPass, std::string renderPassMarker)
     , m_renderPassMarker(renderPassMarker)
 
 {
-    ms_Renderers.insert(this);
+    ms_Renderers.push_back(this);
 }
 
 
@@ -674,7 +674,10 @@ CRenderer::~CRenderer()
     if(m_ownFramebuffer)
         delete m_framebuffer;
 
-    ms_Renderers.erase(this);
+	auto it = std::find(ms_Renderers.begin(), ms_Renderers.end(), this);
+	if (it != ms_Renderers.end())
+		ms_Renderers.erase(it);
+
     m_ownPipelines.clear();
 }
 
@@ -703,12 +706,8 @@ void CRenderer::UpdateAll()
 
 void CRenderer::PrepareAll()
 {
-	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::UniformBuffers);
-
 	for (auto renderer : ms_Renderers)
 		renderer->PreRender();
-
-	MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::UniformBuffers);
 }
 
 void CRenderer::Init()

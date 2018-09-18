@@ -11,23 +11,6 @@
 #include <iostream>
 #include <fstream>
 
-//////////////////////////////////////////TEST Seriable
-BEGIN_PROPERTY_MAP(ObjectSer)
-	IMPLEMENT_PROPERTY(Material*, ObjectMaterial, "Material", ObjectSer),
-	IMPLEMENT_PROPERTY(glm::vec3, Position, "Position", ObjectSer)
-END_PROPERTY_MAP(ObjectSer);
-
-ObjectSer::ObjectSer()
-	: SeriableImpl<ObjectSer>("Object")
-{
-
-}
-
-ObjectSer::~ObjectSer()
-{
-
-}
-
 
 //////////////////////////////////////////////////////////////////////
 //ObjectSerializer
@@ -76,11 +59,19 @@ void ObjectSerializer::Load(const std::string& filename)
 
 	delete xmlContent;
 	m_document.clear();
+
+	for (Object* obj : m_objects)
+	{
+		CScene::AddObject(obj);
+		BatchManager::GetInstance()->AddObject(obj);
+	}
 }
 
 void ObjectSerializer::AddObject(Object* obj)
 {
 	m_objects.push_back(obj);
+	CScene::AddObject(obj);
+	BatchManager::GetInstance()->AddObject(obj);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -327,8 +318,6 @@ void ObjectSerializer::AddObject(Object* obj)
 //    return s_objectFactory.GetObjects();
 //}
 
-std::vector<Object*> ObjectFactory::m_objects;
-
 //////////////////////////////////////////////////////////////////////
 //Object
 //////////////////////////////////////////////////////////////////////
@@ -336,7 +325,7 @@ std::vector<Object*> ObjectFactory::m_objects;
 BEGIN_PROPERTY_MAP(Object)
 	IMPLEMENT_PROPERTY(Mesh*, ObjectMesh, "mesh", Object),
 	IMPLEMENT_PROPERTY(Material*, ObjectMaterial, "material", Object),
-	IMPLEMENT_PROPERTY(bool, isShadowCaster, "castShadows", Object),
+	IMPLEMENT_PROPERTY(bool, IsShadowCaster, "castShadows", Object),
 	IMPLEMENT_PROPERTY(glm::vec3, worldPosition, "position", Object),
 	IMPLEMENT_PROPERTY(glm::vec3, scale, "scale", Object),
 	IMPLEMENT_PROPERTY(std::string, debugName, "name", Object)
@@ -345,7 +334,6 @@ END_PROPERTY_MAP(Object)
 Object::Object()
 	: SeriableImpl<Object>("object")
 	, m_needComputeModelMtx(true)
-    , m_isShadowCaster(false)
     , m_xRot(0.0f)
     , m_yRot(0.0f)
     , m_scale(1.0f)
@@ -433,126 +421,45 @@ struct ObjectShaderParams
     glm::vec4 ViewPos; //??
 };
 
-ObjectRenderer::ObjectRenderer(VkRenderPass renderPass, const std::vector<Object*>& objects)
-    : CRenderer(renderPass, "SolidRenderPass")
-    , m_numOfObjects((unsigned int)objects.size())
-    , m_objectDescLayout(VK_NULL_HANDLE)
-    , m_instanceDataBuffer(nullptr)
-    , m_sampler(VK_NULL_HANDLE)
+ObjectRenderer::ObjectRenderer(VkRenderPass renderPass)
+	: CRenderer(renderPass, "SolidRenderPass")
 {
-
-	BatchBuilder::CreateInstance();
-
-    for (unsigned int i = 0; i < (unsigned int)objects.size(); ++i)
-    {
-
-		/*if (objects[i]->GetType() == ObjectType::Solid)
-		{
-			m_solidBatch.AddObject(objects[i]);
-			continue;
-		}
-
-        unsigned int batchIndex = (unsigned int)objects[i]->GetType();
-        std::vector<Node>& nodes = m_batches[batchIndex].nodes;
-        nodes.push_back(Node(objects[i]));*/
-		
-    }
-
-    m_batches[(unsigned int)ObjectType::Solid].debugMarker = "Solid";
-    m_batches[(unsigned int)ObjectType::NormalMap].debugMarker = "NormalMapping";
 }
 
 ObjectRenderer::~ObjectRenderer()
 {
-    for (unsigned int i = 0; i < (unsigned int)ObjectType::Count; ++i)
-    {
-        m_batches[i].nodes.clear(); //no need i think. doesnt free the m
-    }
-
-    VkDevice dev = vk::g_vulkanContext.m_device;
-	MemoryManager::GetInstance()->FreeHandle(m_instanceDataBuffer);
-
-	BatchBuilder::DestroyInstance();
 }
 
 void ObjectRenderer::Render()
 {
-	if (m_solidBatch.NeedCleanup())
-	{
-		m_solidBatch.Cleanup();
-		MemoryManager::GetInstance()->FreeMemory(EMemoryContextType::BatchStaggingBuffer);
-	}
-
-	if (m_solidBatch.NeedReconstruct())
-	{
-		MemoryManager::GetInstance()->AllocMemory(EMemoryContextType::BatchStaggingBuffer, m_solidBatch.GetTotalBatchMemory());
-
-		m_solidBatch.Construct(this, m_renderPass, 0);
-	}
-
     VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
     StartRenderPass();
-
-	for (unsigned int i = (unsigned int)ObjectType::NormalMap; i < (unsigned int)ObjectType::Count; ++i)
-	{
-		const SBatch& batch = m_batches[i];
-
-		StartDebugMarker(batch.debugMarker);
-		const CGraphicPipeline& currPipeline = batch.pipeline;
-		vk::CmdBindPipeline(cmd, currPipeline.GetBindPoint(), currPipeline.Get());
-		for (const auto& node : batch.nodes)
-		{
-			vk::CmdBindDescriptorSets(cmd, currPipeline.GetBindPoint(), currPipeline.GetLayout(), 0, 1, &node.descriptorSet, 0, nullptr); //try to bind just once
-			node.obj->Render();
-		}
-
-		EndDebugMarker(batch.debugMarker);
-	}
 	
-	m_solidBatch.Render();
+	BatchManager::GetInstance()->RenderAll();
 
     EndRenderPass();
 }
 
 void ObjectRenderer::PreRender()
 {
-	m_solidBatch.PreRender();
-	UpdateShaderParams();
 }
 
 void ObjectRenderer::Init()
 {
     CRenderer::Init();
 
-    CreateNearestSampler(m_sampler);
     PerspectiveMatrix(m_projMatrix);
     ConvertToProjMatrix(m_projMatrix);
-
-    InitDescriptorNodes();
-    InitMemoryOffsetNodes();
-
-    //setup pipelines for batches
-    SetupPipeline("vert.spv", "frag.spv", m_batches[(unsigned int)ObjectType::Solid].pipeline);
-    SetupPipeline("normal.vert", "normal.frag", m_batches[(unsigned int)ObjectType::NormalMap].pipeline);
 }
 
 void ObjectRenderer::CreateDescriptorSetLayout()
 {
-    std::vector<VkDescriptorSetLayoutBinding> bindings;
-    bindings.push_back(CreateDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS));
-    bindings.push_back(CreateDescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT));
-    bindings.push_back(CreateDescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT));
-
-    NewDescriptorSetLayout(bindings, &m_objectDescLayout);
 }
 
 void ObjectRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)
 {
-    maxSets = m_numOfObjects;
-    AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, m_numOfObjects);
-    AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, m_numOfObjects); //albedo
-    AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, m_numOfObjects); //normal map
-}
+    maxSets = 1;
+    AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1);}
 
 void ObjectRenderer::UpdateResourceTable()
 {
@@ -566,94 +473,6 @@ void ObjectRenderer::UpdateResourceTable()
 
 void ObjectRenderer::UpdateGraphicInterface()
 {
-    //this section is to declare all the variables used for creating the update info in no particular order
-    std::vector<VkWriteDescriptorSet> wDesc;
-    //these have to be cached otherwise vk::UpdateDescriptorSets will crash, pointers will become invalid
-    std::vector<VkDescriptorBufferInfo> buffInfos;
-    buffInfos.reserve(m_numOfObjects);
-
-    for (auto& batch : m_batches)
-    {
-        for (auto& node : batch.nodes)
-        {
-   //         buffInfos.push_back(node.buffer->GetDescriptor());
-			//CTexture* albedo = node.obj->GetAlbedoTexture();
-   //         wDesc.push_back(InitUpdateDescriptor(node.descriptorSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfos.back()));
-   //         TRAP(albedo);
-   //         wDesc.push_back(InitUpdateDescriptor(node.descriptorSet, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &albedo->GetTextureDescriptor()));
-   //         //CTexture* normalmap = node.obj->GetNormalMap();
-   //         if (normalmap)
-   //         {
-   //             wDesc.push_back(InitUpdateDescriptor(node.descriptorSet, 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &normalmap->GetTextureDescriptor()));
-   //         }
-        }
-    }
-
-    vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
-}
-
-void ObjectRenderer::InitDescriptorNodes()
-{
-    std::vector<VkDescriptorSetLayout> layouts (m_numOfObjects, m_objectDescLayout);
-    std::vector<VkDescriptorSet> sets(m_numOfObjects);
-
-    AllocDescriptorSets(m_descriptorPool, layouts, sets);
-    //here we give a descriptor set to every graphic node in batches
-    unsigned int setIndex = 0;
-    for (auto& batch : m_batches)
-    {
-        std::vector<Node>& nodes = batch.nodes;
-        for(unsigned int i = 0; i < nodes.size(); ++i, ++setIndex)
-        {
-            nodes[i].descriptorSet = sets[setIndex];
-        }
-    }
-}
-
-void ObjectRenderer::InitMemoryOffsetNodes()
-{
-	m_instanceDataBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, std::vector<VkDeviceSize>(m_numOfObjects, sizeof(ObjectShaderParams)), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-
-    VkDeviceSize currentOffset = 0;
-    for (auto& batch : m_batches)
-    {
-        std::vector<Node>& nodes = batch.nodes;
-		for (unsigned int i = 0; i < nodes.size(); ++i)
-            nodes[i].buffer = m_instanceDataBuffer->CreateSubbuffer(sizeof(ObjectShaderParams));
-    }
-}
-
-void ObjectRenderer::SetupPipeline(const std::string& vertex, const std::string& fragment, CGraphicPipeline& pipeline)
-{
-    pipeline.SetVertexInputState(Mesh::GetVertexDesc());
-    pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), GBuffer_InputCnt);
-    pipeline.SetVertexShaderFile(vertex);
-    pipeline.SetFragmentShaderFile(fragment);
-    pipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
-    pipeline.CreatePipelineLayout(m_objectDescLayout);
-    pipeline.Init(this, m_renderPass, 0); //0 is a "magic" number. This means that renderpass has just a subpass and the pipelines are used in that subpass
-}
-
-void ObjectRenderer::UpdateShaderParams()
-{
-    void* memPtr = nullptr;
-    glm::mat4 projView = m_projMatrix * ms_camera.GetViewMatrix();
-
-    for (auto& batch : m_batches)
-    {
-        for (auto& node : batch.nodes)
-        {
-            Object* obj = node.obj;
-            glm::mat4 model = obj->GetModelMatrix();
-
-			ObjectShaderParams* params = node.buffer->GetPtr<ObjectShaderParams*>();
-            params->Mvp = projView * model;
-            params->WorldMatrix = model;
-            //params->MaterialProp = obj->GetMaterialProperties();
-            params->ViewPos = glm::vec4(ms_camera.GetFrontVector(), 0.0f);
-        }
-    }
-
 }
 
 //////////////////////////////////////////////////////////////////////////

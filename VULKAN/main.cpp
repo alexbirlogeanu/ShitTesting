@@ -1122,10 +1122,13 @@ CApplication::CApplication()
 	MeshManager::CreateInstance();
 	CTextureManager::CreateInstance();
 	ResourceLoader::CreateInstance();
+	BatchManager::CreateInstance();
+	MaterialLibrary::CreateInstance();
 
     CreateCommandBuffer();
     CPickManager::CreateInstance();
-    ObjectFactory::LoadXml("scene.xml");
+	ObjectSerializer::CreateInstance();
+	ObjectSerializer::GetInstance()->Load("scene.xml");
 
 	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::UniformBuffers);
 
@@ -1203,6 +1206,9 @@ CApplication::~CApplication()
     vk::DestroyRenderPass(dev, m_volumetricRenderPass, nullptr);
 	vk::DestroyRenderPass(dev, m_ssrRenderPass, nullptr);
 
+	ObjectSerializer::DestroyInstance();
+	MaterialLibrary::DestroyInstance();
+	BatchManager::DestroyInstance();
 	ResourceLoader::DestroyInstance();
 	CTextureManager::DestroyInstance();
 	MeshManager::DestroyInstance();
@@ -1219,6 +1225,7 @@ CApplication::~CApplication()
 void CApplication::Run()
 {
     bool isRunning = true;
+	MaterialLibrary::GetInstance()->Initialize(m_objectRenderer);
     CreateResources();
     CreateQueryPools();
 	//RenderCameraFrustrum();
@@ -1555,7 +1562,7 @@ void CApplication::SetupDeferredRendering()
 
     CreateDeferredRenderPass(fbDesc);
 
-    m_objectRenderer = new ObjectRenderer(m_deferredRenderPass, ObjectFactory::GetObjects());
+    m_objectRenderer = new ObjectRenderer(m_deferredRenderPass);
     m_objectRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
     m_objectRenderer->Init();
 
@@ -1833,17 +1840,8 @@ void CApplication::SetupShadowMapRendering()
     fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "ShadowMap");
     fbDesc.End();
 
-    const std::vector<Object*>& objects = ObjectFactory::GetObjects();
-    std::vector<Object*> shadowCasters;
-
-    for (auto o : objects)
-    {
-        if (o->GetIsShadowCaster())
-            shadowCasters.push_back(o);
-    }
-
     CreateShadowRenderPass(fbDesc);
-    m_shadowRenderer = new ShadowMapRenderer(m_shadowRenderPass, shadowCasters);
+    m_shadowRenderer = new ShadowMapRenderer(m_shadowRenderPass);
     m_shadowRenderer->Init();
 
     m_shadowRenderer->CreateFramebuffer(fbDesc, SHADOWW, SHADOWH);
@@ -2583,12 +2581,17 @@ void CApplication::Render()
     vk::WaitForFences(vk::g_vulkanContext.m_device, 1, &m_aquireImageFence,VK_TRUE, UINT64_MAX);
     vk::ResetFences(vk::g_vulkanContext.m_device, 1, &m_aquireImageFence);
 
+	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::UniformBuffers);
 	CRenderer::PrepareAll();
+	BatchManager::GetInstance()->PreRender();
+	MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::UniformBuffers);
 
     StartCommandBuffer();
 	
     CTextureManager::GetInstance()->Update();
 	MeshManager::GetInstance()->Update();
+	BatchManager::GetInstance()->Update();
+
     //BeginFrame();
     QueryManager::GetInstance().Reset();
     QueryManager::GetInstance().StartStatistics();
@@ -2985,7 +2988,7 @@ int main(int argc, char* arg[])
 	/*ResourceLoader::CreateInstance();
 	ObjectSerializer serializer;
 	Object* obj = new Object();
-	StandardMaterial* mat = (StandardMaterial*)s_TestTemplate->Create();
+	DefaultMaterial* mat = (DefaultMaterial*)s_TestTemplate->Create();
 	CTexture* texture = new CTexture();
 	Mesh* mesh = new Mesh();
 

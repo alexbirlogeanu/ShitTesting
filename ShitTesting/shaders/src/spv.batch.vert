@@ -16,20 +16,25 @@ struct MaterialPropertis
 	uint		AlbedoTexture;
 };
 
-struct NodeParams
+struct BatchCommons
 {
 	mat4 ModelMatrix;
-	MaterialPropertis Properties;
 };
 
 layout(set=0, binding=0) buffer BatchParams
 {
-	NodeParams data[];
+	BatchCommons commonData[];
+};
+
+layout(set=1, binding=0) buffer MaterialParams
+{
+	MaterialPropertis materials[];
 };
 
 layout(push_constant) uniform PushConstants
 {
 	mat4 ProjViewMatrix;
+	mat4 ShadowProjViewMatrix;
 	vec4 ViewPos;
 };
 
@@ -43,12 +48,12 @@ layout(location=3) out MaterialPropertis OutProperties;
 void main()
 {
 	uv = in_uv;
-	NodeParams currentNode = data[gl_DrawID];
+	BatchCommons currentNode = commonData[gl_DrawID];
 	
 	vec3 transNormal = inverse(transpose(mat3(currentNode.ModelMatrix))) * in_normal;
 	normal = vec4(normalize(transNormal), 0.0f);
 	worldPos = (currentNode.ModelMatrix * vec4(position, 1));
 	gl_Position = ProjViewMatrix * worldPos;
 	
-	OutProperties = currentNode.Properties;
+	OutProperties = materials[gl_DrawID];
 }

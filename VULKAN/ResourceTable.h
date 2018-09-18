@@ -51,6 +51,7 @@ enum EResourceType
 	EResourceType_AfterPostProcessImage,
 	EResourceType_VolumetricImage,
 	EResourceType_ShadowProjViewMat,
+	EResourceType_ShadowRenderPipeline,
 	EResourceType_Count
 };
 
@@ -83,6 +84,17 @@ public:
         return *ptr;
     }
 
+	template<typename T>
+	T* GetAsPtr(EResourceType type)
+	{
+		TRAP(type < EResourceType_Count && "Invalid type");
+		TRAP(m_resources[type] && "Resource not registered");
+		Entry<T>* entry = dynamic_cast<Entry<T>*>(m_resources[type]);
+		TRAP(entry && "Incorrect type of resource");
+		T* ptr = (T*)entry->Get();
+		TRAP(ptr && "Handle is NULL");
+		return ptr;
+	}
 private:
     void Validate(EResourceType type)
     {

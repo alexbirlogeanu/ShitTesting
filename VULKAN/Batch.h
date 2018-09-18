@@ -16,47 +16,53 @@ class Batch;
 class Material;
 class CTexture;
 
-class BatchBuilder : public Singleton<BatchBuilder>
+class BatchManager : public Singleton<BatchManager>
 {
 public:
-	BatchBuilder();
-	virtual ~BatchBuilder();
+	BatchManager();
+	virtual ~BatchManager();
 
+	void AddObject(Object* obj);
 	//we need a list of parameters here (we have to know the pipeline, how much uniform memory per batch, or do we use a fixed size. I dont know it seems not too optim)
-	Batch* CreateNewBatch();
+	Batch* CreateNewBatch(MaterialTemplateBase* materialTemplate);
 
-	//TODO temporary function
-	VkDescriptorSet AllocNewDescriptorSet();
+	void Update();
 
-	VkDescriptorSetLayout GetDescriptorSetLayout() const { return m_batchSpecificDescLayout.Get(); }
+	void RenderAll();
+	void RenderShadows();
+	void PreRender();
 private:
-	void CreateDescriptorLayout();
 private:
-	std::vector<DescriptorPool>		m_descriptorPools;
-	uint32_t						m_currentPoolIndex;
+	std::vector<Batch*>				m_batches;
+	std::vector<Batch*>				m_inProgressBatches;
 
-	DescriptorSetLayout				m_batchSpecificDescLayout;
+	typedef std::unordered_map<MaterialTemplateBase*, std::vector<Batch*>> TBatchMap;
+	TBatchMap						m_batchesCategories;
 };
 
 class Batch
 {
 public:
-	Batch();
+	Batch(MaterialTemplateBase* materialTemplate);
 	virtual ~Batch();
 
 	void AddObject(Object* obj);
-	void Construct(CRenderer* renderer, VkRenderPass renderPass, uint32_t subpassIndex/*TODO remove*/);
+
+	void Construct();
 	void Destruct();
 	void Cleanup();
 
 	void PreRender();
-	void Render();
+	void Render(bool shadowPass);
+	void PrepareRendering(const CGraphicPipeline& pipeline, bool shadowPass);
 
 	bool NeedReconstruct() const { return m_needReconstruct; }
 	bool NeedCleanup() const { return m_needCleanup; }
 
 	VkDeviceSize GetTotalBatchMemory() const { return m_totalBatchMemory; }
+
 private:
+	void OrderOjects();
 	void ConstructMeshes();
 	void ConstructPipeline(CRenderer* renderer, VkRenderPass renderPass, uint32_t subpassIndex); //TODO remove
 	void ConstructBatchSpecifics();
@@ -66,6 +72,7 @@ private:
 	struct BatchParams
 	{
 		glm::mat4 ProjViewMatrix;
+		glm::mat4 ShadowProjViewMatrix;
 		glm::vec4 ViewPos;
 	} m_batchParams;
 
@@ -74,11 +81,14 @@ private:
 	BufferHandle*			m_indirectCommandBuffer;
 	BufferHandle*			m_batchVertexBuffer;
 	BufferHandle*			m_batchIndexBuffer;
+	
+	BufferHandle*			m_batchStorageBuffer;
+	BufferHandle*			m_batchCommonsBuffer;
+	BufferHandle*			m_batchSpecificsBuffer;
 
-	BufferHandle*			m_materialBuffer; //this should be coming from a material template
+	MaterialTemplateBase*	m_materialTemplate;
 
 	std::vector<Object*>	m_objects;
-	std::vector<Material*>	m_materials; //temporary
 	VkDeviceSize			m_totalBatchMemory;
 
 	bool					m_needReconstruct;
@@ -86,9 +96,7 @@ private:
 	bool					m_isReady;
 
 	//need a buffer for uniforms. Also need to pack descriptors??
-	CGraphicPipeline		m_pipeline; //Batch class shouldn't onw a pipline. material should construct the pipeline. and we bind only once per multiple batches
-	VkDescriptorSet			m_batchSpecificDescSet;
-	MaterialTemplateBase*	m_materialTemplate;
-	std::vector<CTexture*>	m_batchTextures;
+	std::vector<VkDescriptorSet>			m_batchDescriptorSets;
+	std::vector<CTexture*>					m_batchTextures;
 
 };

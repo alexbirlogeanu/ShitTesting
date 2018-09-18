@@ -11,33 +11,24 @@
 //ShadowMapRenderer
 //////////////////////////////////////////////////////////////////////////
 
-struct ShadowMapParams
-{
-    glm::mat4 MVP;
-};
 
-ShadowMapRenderer::ShadowMapRenderer(VkRenderPass renderPass, const std::vector<Object*>& shadowCasters)
+ShadowMapRenderer::ShadowMapRenderer(VkRenderPass renderPass)
     : CRenderer(renderPass, "ShadowmapRenderPass")
-    , m_instanceBuffer(VK_NULL_HANDLE)
 {
-    m_nodes.reserve(shadowCasters.size());
-    for (auto caster : shadowCasters)
-    {
-        m_nodes.push_back(Node(caster));
-    }
 }
 
 ShadowMapRenderer::~ShadowMapRenderer()
 {
-	MemoryManager::GetInstance()->FreeHandle(m_instanceBuffer);
 }
 
 void ShadowMapRenderer::Init()
 {
-	if (m_nodes.empty())
-		return;
-
     CRenderer::Init();
+
+	VkPushConstantRange pushConstRange;
+	pushConstRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	pushConstRange.offset = 0;
+	pushConstRange.size = 256; //max push constant range(can get it from limits)
 
     m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
     m_pipeline.SetViewport(SHADOWW, SHADOWH);
@@ -49,12 +40,10 @@ void ShadowMapRenderer::Init()
     m_pipeline.SetStencilOp(VK_COMPARE_OP_ALWAYS);
     m_pipeline.SetStencilOperations(VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_REPLACE);
     m_pipeline.SetStencilValues(0x01, 0x01, 1);
+	m_pipeline.AddPushConstant(pushConstRange);
 
     m_pipeline.CreatePipelineLayout(m_descriptorSetLayout);
     m_pipeline.Init(this, m_renderPass, 0);
-
-    InitNodesDescriptorSet();
-    InitNodesMemory();
 }
 
 void ShadowMapRenderer::ComputeProjMatrix(glm::mat4& proj, const glm::mat4& view)
@@ -100,53 +89,8 @@ void ShadowMapRenderer::ComputeProjMatrix(glm::mat4& proj, const glm::mat4& view
     ConvertToProjMatrix(proj);
 }
 
-void ShadowMapRenderer::InitNodesDescriptorSet()
-{
-    std::vector<VkDescriptorSetLayout> layouts (m_nodes.size(), m_descriptorSetLayout);
-    std::vector<VkDescriptorSet> sets(m_nodes.size());
-
-    AllocDescriptorSets(m_descriptorPool, layouts, sets);
-
-    for (unsigned int i = 0; i < sets.size(); ++i)
-    {
-        m_nodes[i].descSet = sets[i];
-    }
-
-}
-
-void ShadowMapRenderer::InitNodesMemory()
-{
-	m_instanceBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, std::vector<VkDeviceSize>(m_nodes.size(), sizeof(ShadowMapParams)), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-    for (unsigned int i = 0; i < m_nodes.size(); ++i)
-    {
-        m_nodes[i].buffer = m_instanceBuffer->CreateSubbuffer(sizeof(ShadowMapParams));
-    }
-}
-
-void ShadowMapRenderer::UpdateShaderParams()
-{
-    for (auto& node : m_nodes)
-    {
-        ShadowMapParams* params = node.buffer->GetPtr<ShadowMapParams*>();
-        params->MVP = m_shadowViewProj * node.obj->GetModelMatrix();
-    }
-}
-
 void ShadowMapRenderer::UpdateGraphicInterface()
 {
-    //this section is to declare all the variables used for creating the update info in no particular order
-    std::vector<VkWriteDescriptorSet> wDesc;
-    //these have to be cached otherwise vk::UpdateDescriptorSets will crash, pointers will become invalid
-    std::vector<VkDescriptorBufferInfo> buffInfos;
-    buffInfos.reserve(m_nodes.size());
-
-    for (auto& node : m_nodes)
-    {
-        buffInfos.push_back(node.buffer->GetDescriptor());
-        wDesc.push_back(InitUpdateDescriptor(node.descSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfos.back()));
-    }
-
-    vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
 }
 
 void ShadowMapRenderer::PreRender()
@@ -161,43 +105,36 @@ void ShadowMapRenderer::PreRender()
 
 	//= glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.1f, 25.0f);
 	m_shadowViewProj = proj * view;
-
-	UpdateShaderParams();
 }
 
 void ShadowMapRenderer::Render()
 {
-	if (m_nodes.empty())
-		return;
-
     VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
 
-    vk::CmdBindPipeline(cmd, m_pipeline.GetBindPoint(), m_pipeline.Get());
-    for (auto& node : m_nodes)
-    {
-        vk::CmdBindDescriptorSets(cmd, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, 1, &node.descSet, 0, nullptr); //try to bind just once
-        node.obj->Render();
-    }
+	BatchManager::GetInstance()->RenderShadows();
 
 }
 
 void ShadowMapRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)
 {
-    AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, (uint32_t)m_nodes.size());
-    maxSets = (uint32_t)m_nodes.size();
+    AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1);
+    maxSets = 1;
 }
 
 void ShadowMapRenderer::UpdateResourceTable()
 {
     UpdateResourceTableForDepth(EResourceType_ShadowMapImage);
     g_commonResources.SetAs<glm::mat4>(&m_shadowViewProj, EResourceType_ShadowProjViewMat);
+
+	TRAP(m_pipeline.IsValid());
+	g_commonResources.SetAs<CGraphicPipeline>(&m_pipeline, EResourceType_ShadowRenderPipeline);
 }
 
 void ShadowMapRenderer::CreateDescriptorSetLayout()
 {
     std::vector<VkDescriptorSetLayoutBinding> descCnt;
     descCnt.resize(1);
-    descCnt[0] = CreateDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
+	descCnt[0] = CreateDescriptorBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
 
     NewDescriptorSetLayout(descCnt, &m_descriptorSetLayout);
 }

@@ -211,6 +211,7 @@ public:
     void CreatePipelineLayout(const std::vector<VkDescriptorSetLayout>& layouts);
 
 	void AddPushConstant(VkPushConstantRange range);
+	bool IsValid() const { return m_pipeline != VK_NULL_HANDLE; }
 
     VkPipeline Get() const { return m_pipeline; }
     VkPipelineLayout GetLayout() const { return m_pipelineLayout; }
@@ -367,6 +368,8 @@ public:
     static void ReloadAll();
     static void UpdateAll();
 	static void PrepareAll();
+
+	VkRenderPass GetRenderPass() const { return m_renderPass; }
 protected:
     virtual void CreateDescriptorSetLayout()=0;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)=0;
@@ -390,6 +393,6 @@ private:
     std::string                                         m_renderPassMarker;
 
     std::unordered_set<CPipeline*>                      m_ownPipelines;
-    static std::unordered_set<CRenderer*>               ms_Renderers;
+    static std::vector<CRenderer*>						ms_Renderers;
 };
 

@@ -437,7 +437,7 @@ BufferHandle* MemoryManager::CreateBuffer(EMemoryContextType context, std::vecto
 	return CreateBuffer(context, MemoryManager::ComputeTotalSize(sizes), usage);
 }
 
-VkDeviceSize MemoryManager::ComputeTotalSize(std::vector<VkDeviceSize> sizes)
+VkDeviceSize MemoryManager::ComputeTotalSize(const std::vector<VkDeviceSize>& sizes)
 {
 	VkDeviceSize totalSize = 0;
 	VkDeviceSize minAllign = vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment;

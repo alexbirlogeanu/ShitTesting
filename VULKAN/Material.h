@@ -5,6 +5,7 @@
 #include "glm/glm.hpp"
 #include "Serializer.h"
 #include "Texture.h"
+#include "DescriptorsUtils.h"
 
 #include <string>
 #include <vector>
@@ -12,36 +13,70 @@
 class CRenderer;
 class CTexture;
 class Material;
+class MaterialTemplateBase;
+
+enum DescriptorIndex
+{
+	Common = 0,
+	Specific,
+	Count
+};
+
+class MaterialLibrary : public Singleton<MaterialLibrary>
+{
+	friend class Singleton<MaterialLibrary>;
+public:
+	void Initialize(CRenderer* renderer); //this should need some thoughts
+	std::vector<VkDescriptorSet> AllocNewDescriptors();
+
+	std::vector<VkDescriptorSetLayout> GetDescriptorLayouts() const;
+	MaterialTemplateBase* GetMaterialByName(const std::string& name) const;
+private:
+	MaterialLibrary();
+	virtual ~MaterialLibrary();
+private:
+	std::unordered_map<std::string, MaterialTemplateBase*>		m_materialTemplates;
+	
+	std::vector<DescriptorPool>									m_descriptorPools;
+	uint32_t													m_currentPoolIndex;
+
+	std::vector<DescriptorSetLayout>							m_descriptorLayouts;
+};
+
 
 class MaterialTemplateBase
 {
 public:
-	MaterialTemplateBase(const std::string& vertexShader, const std::string& fragmentShader);
+	MaterialTemplateBase(const std::string& vertexShader, const std::string& fragmentShader, const std::string& name);
 	virtual ~MaterialTemplateBase();
 
 	const std::string& GetVertexShader() const { return m_vertexShader; }
 	const std::string& GetFragmentShader() const { return m_fragmentShader; }
-	const uint32_t GetID() const { return 2; } //find a way to identify a template material
+	const std::string& GetName() const { return m_name; }
+
+	void CreatePipeline(CRenderer* renderer);
+	const CGraphicPipeline& GetPipeline() const { return m_pipeline; }
+
+	std::vector<VkDescriptorSet> GetNewDescriptorSets();
 
 	virtual const uint32_t GetDataStride() const = 0;
 	virtual Material* Create() = 0;
 	virtual Material* Create(Serializer* serializer) = 0;
 	virtual void Save(Material* mat, Serializer*) = 0;
+protected:
+
 private:
-	std::string		m_vertexShader;
-	std::string		m_fragmentShader;
+	std::string						m_vertexShader;
+	std::string						m_fragmentShader;
+	std::string						m_name;
+
+	CGraphicPipeline				m_pipeline;
 };
 
 template<class MaterialType>
 class MaterialTemplate : public MaterialTemplateBase
 {
 public:
-	MaterialTemplate(const std::string& vertexShader, const std::string& fragmentShader)
-		: MaterialTemplateBase(vertexShader, fragmentShader)
-	{}
-
-	virtual ~MaterialTemplate(){}
-
 	const uint32_t GetDataStride() const override { return sizeof(MaterialType::PropertiesType); }
 
 	Material* Create(Serializer* serializer) override
@@ -61,6 +96,14 @@ public:
 		TRAP(material);
 		material->Serialize(serializer);
 	}
+private:
+	MaterialTemplate(const std::string& vertexShader, const std::string& fragmentShader, const std::string& name)
+		: MaterialTemplateBase(vertexShader, fragmentShader, name)
+	{}
+
+	virtual ~MaterialTemplate(){}
+
+	friend class MaterialLibrary;
 };
 
 struct IndexedTexture
@@ -92,14 +135,14 @@ public:
 	std::vector<IndexedTexture>& GetTextureSlots() { return m_textureSlots; }
 	virtual void SetTextureSlots(const std::vector<IndexedTexture>& indexedTexture) = 0; //the material should implement this method to write the texture indexes to the shader data
 
+protected:
+	//Method that search the text in the texture slot and if that texture exists it writes the index at the address parameter. Usually after the writing, data from that address should be uploaded to GPU (uniform buffer)
+	void WriteTextureIndex(const CTexture* text, uint32_t* addressToWrite);
 	uint32_t AddTextureSlot(CTexture* texture);
 protected:
-	
 	MaterialTemplateBase*			m_template;
 	std::vector<IndexedTexture>		m_textureSlots;
 };
-
-
 
 
 /////////////////TEST///////////////////
@@ -112,35 +155,30 @@ struct MaterialProperties
 	uint32_t	AlbedoTexture;
 };
 
-class StandardMaterial : public Material, public SeriableImpl<StandardMaterial>
+class DefaultMaterial : public Material, public SeriableImpl<DefaultMaterial>
 {
 public:
-	StandardMaterial(MaterialTemplateBase* matTemplate);
-	virtual ~StandardMaterial();
+	DefaultMaterial(MaterialTemplateBase* matTemplate);
+	virtual ~DefaultMaterial();
 
 	void* GetData() override { return &m_properties; }
 	uint32_t GetDataStride() override { return sizeof(MaterialProperties); }
 
 	virtual void SetTextureSlots(const std::vector<IndexedTexture>& indexedTexture) override; //the material should implement this method to write the texture indexes to the shader data
-	void SetAlbedoTexture(CTexture* texture);
 	void SetSpecularProperties(glm::vec4 properties);
 
-	virtual void OnSave() override;
+	virtual void OnLoad() override;
 
 	typedef MaterialProperties PropertiesType;
 private:
 	MaterialProperties	m_properties;
 
-	DECLARE_PROPERTY(float, Roughness, StandardMaterial);
-	DECLARE_PROPERTY(float, K, StandardMaterial);
-	DECLARE_PROPERTY(float, F0, StandardMaterial);
-	DECLARE_PROPERTY(CTexture*, AlbedoText, StandardMaterial);
+	DECLARE_PROPERTY(float, Roughness, DefaultMaterial);
+	DECLARE_PROPERTY(float, K, DefaultMaterial);
+	DECLARE_PROPERTY(float, F0, DefaultMaterial);
+	DECLARE_PROPERTY(CTexture*, AlbedoText, DefaultMaterial);
 
-	CTexture*			m_albedoTexture; //this should be serialized, but because is a test class we dont have to
 };
-
-//debug
-extern MaterialTemplateBase*  s_TestTemplate;
 
 template<typename BASE>
 class Property<Material*, BASE> : public PropertyGeneric
@@ -160,7 +198,7 @@ public:
 		TRAP(cobj);
 		MaterialTemplateBase* tmplMaterial = (cobj->*m_ptm)->GetTemplate();
 
-		auto prop = serializer->GetNewAttribute(m_label.c_str(), serializer->GetNewString(std::to_string(tmplMaterial->GetID())));
+		auto prop = serializer->GetNewAttribute(m_label.c_str(), serializer->GetNewString(tmplMaterial->GetName()));
 		objNode->append_attribute(prop);
 
 		tmplMaterial->Save(cobj->*m_ptm, serializer);
@@ -172,7 +210,8 @@ public:
 		BASE* cobj = dynamic_cast<BASE*>(obj);
 		TRAP(cobj);
 
-		cobj->*m_ptm = s_TestTemplate->Create(serializer);
+		MaterialTemplateBase* tmplMaterial = MaterialLibrary::GetInstance()->GetMaterialByName(prop->value());
+		cobj->*m_ptm = tmplMaterial->Create(serializer);
 	};
 
 private:

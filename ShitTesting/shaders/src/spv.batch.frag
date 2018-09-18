@@ -7,7 +7,7 @@ layout(location=1) out vec4 out_specular;
 layout(location=2) out vec4 out_normal;
 layout(location=3) out vec4 out_position;
 
-layout(set=0, binding=1) uniform sampler2D BatchTextures[12];
+layout(set=1, binding=1) uniform sampler2D BatchTextures[12];
 
 struct MaterialPropertis
 {
@@ -33,7 +33,7 @@ float Depth()
 void main()
 {
 	const uint index = Properties.AlbedoTexture;
-
+	
 	albedo = texture(BatchTextures[index], uv);
 	out_specular = vec4(Properties.Roughness, Properties.K, Properties.F0, 0.0f);
 	out_normal = normal;

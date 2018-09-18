@@ -1,11 +1,47 @@
 <scene>
-	<object material="2" castShadows="true" name="">
+	<object material="default" castShadows="true" name="monkey">
 		<mesh file="obj\\monkey.mb"/>
-		<StandardMaterial Roughness="20.000000" K="1.000000" F0="4.000000">
+		<DefaultMaterial Roughness="0.900000" K="0.100000" F0="0.500000">
 			<albedoText file="pussy.png" isSRGB="true"/>
-		</StandardMaterial>
-		<position x="0.000000" y="0.000000" z="0.000000"/>
+		</DefaultMaterial>
+		<position x="-1.5" y="-0.5" z="-3.0"/>
 		<scale x="1.000000" y="1.000000" z="1.000000"/>
+	</object>
+	
+	<object material="default" castShadows="true" name="metal_sphere">
+		<mesh file="obj\\sphere.mb"/>
+		<DefaultMaterial Roughness="0.45" K="1.000000" F0="0.500000">
+			<albedoText file="pussy.png" isSRGB="true"/>
+		</DefaultMaterial>
+		<position x="0.0" y="-0.5" z="-3.0"/>
+		<scale x="1.000000" y="1.000000" z="1.000000"/>
+	</object>
+	
+	<object material="default" castShadows="true" name="dragon">
+		<mesh file="obj\\dragon.mb"/>
+		<DefaultMaterial Roughness="1.000000" K="0.100000" F0="0.500000">
+			<albedoText file="grey.png" isSRGB="true"/>
+		</DefaultMaterial>
+		<position x="1.5" y="-1.0" z="-3.0"/>
+		<scale x="0.100000" y="0.100000" z="0.100000"/>
+	</object>
+	
+	<object material="default" castShadows="true" name="plane">
+		<mesh file="obj\\plane2.mb"/>
+		<DefaultMaterial Roughness="0.25" K="0.500000" F0="0.900000">
+			<albedoText file="grey.png" isSRGB="true"/>
+		</DefaultMaterial>
+		<position x="0.0" y="-1.0" z="-3.0"/>
+		<scale x="10.000000" y="1.000000" z="10.000000"/>
+	</object>
+	
+	<object material="default" castShadows="true" name="cube">
+		<mesh file="obj\\cube.mb"/>
+		<DefaultMaterial Roughness="0.950000" K="0.050000" F0="0.9">
+			<albedoText file="bricks2.png" isSRGB="true"/>
+		</DefaultMaterial>
+		<position x="0.0" y="0.0" z="-7.0"/>
+		<scale x="2.000000" y="2.000000" z="2.000000"/>
 	</object>
 </scene>
 

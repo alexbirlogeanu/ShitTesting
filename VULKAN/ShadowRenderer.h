@@ -16,7 +16,7 @@ class Object;
 class ShadowMapRenderer : public CRenderer
 {
 public:
-    ShadowMapRenderer(VkRenderPass renderPass, const std::vector<Object*>& shadowCasters);
+    ShadowMapRenderer(VkRenderPass renderPass);
     virtual ~ShadowMapRenderer();
 
     void Init() override;
@@ -29,38 +29,13 @@ protected:
 
     void ComputeProjMatrix(glm::mat4& proj, const glm::mat4& view);
     //these 2 methods are duplicate code. See ObjectRenderer
-    void InitNodesDescriptorSet();
-    void InitNodesMemory();
-    void UpdateShaderParams();
+
     void UpdateGraphicInterface() override;
 private:
-    //this paradigm is similar with the one in the objectRenderer. Maybe we can write it better
-    struct Node
-    {
-        Object*             obj;
-        VkDescriptorSet     descSet;
-        BufferHandle*		buffer;
-
-        Node()
-            : obj(nullptr)
-            , descSet(VK_NULL_HANDLE)
-            , buffer(nullptr)
-        {}
-
-        Node (Object* o)
-            : obj(o)
-            , descSet(VK_NULL_HANDLE)
-            , buffer(nullptr)
-        {}
-    };
-
     glm::mat4                       m_shadowViewProj;
 
     CGraphicPipeline                m_pipeline;
     VkDescriptorSetLayout           m_descriptorSetLayout;
-
-    BufferHandle*                   m_instanceBuffer;
-    std::vector<Node>               m_nodes;
 };
 
 

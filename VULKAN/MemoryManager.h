@@ -279,7 +279,7 @@ public:
 	bool MapMemoryContext(EMemoryContextType context); //TODO change to return the new mapped memory
 	void UnmapMemoryContext(EMemoryContextType context);
 
-	static VkDeviceSize ComputeTotalSize(std::vector<VkDeviceSize> sizes);
+	static VkDeviceSize ComputeTotalSize(const std::vector<VkDeviceSize>& sizes);
 protected:
 	MemoryManager();
 	virtual ~MemoryManager();

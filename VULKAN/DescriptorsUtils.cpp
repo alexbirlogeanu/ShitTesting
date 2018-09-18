@@ -40,6 +40,10 @@ void DescriptorSetLayout::AddBinding(unsigned int binding, VkDescriptorType type
 
 void DescriptorSetLayout::Construct()
 {
+	TRAP(m_descSetLayoutHandle == VK_NULL_HANDLE && "Warning!! Layout is already created, this change will have no effect!");
+	if (m_descSetLayoutHandle != VK_NULL_HANDLE)
+		return;
+
 	NewDescriptorSetLayout(m_bindings, &m_descSetLayoutHandle);
 }
 
@@ -51,7 +55,8 @@ DescriptorPool::DescriptorPool()
 	: m_descPoolHandle(VK_NULL_HANDLE)
 	, m_remainingSets(0)
 {
-
+	for (uint32_t i = 0; i < m_descriptorPoolSizeRemaining.size(); ++i)
+		m_descriptorPoolSizeRemaining[i].descriptorCount = 0;
 }
 
 DescriptorPool::~DescriptorPool()
@@ -64,7 +69,10 @@ void DescriptorPool::Construct(const DescriptorSetLayout& layoutType, uint32_t m
 	std::vector<VkDescriptorSetLayoutBinding> bindings = layoutType.GetBindings();
 
 	for (auto binding : bindings)
+	{
 		m_descriptorPoolSizeRemaining[binding.descriptorType].descriptorCount += binding.descriptorCount;
+		m_descriptorPoolSizeRemaining[binding.descriptorType].type = binding.descriptorType;
+	}
 
 	std::vector<VkDescriptorPoolSize> poolSize;
 
@@ -80,6 +88,34 @@ void DescriptorPool::Construct(const DescriptorSetLayout& layoutType, uint32_t m
 	NewDescriptorPool(poolSize, m_remainingSets, &m_descPoolHandle);
 }
 
+void DescriptorPool::Construct(const std::vector<DescriptorSetLayout>& layouts, uint32_t maxSets)
+{
+	for (const auto& layout : layouts)
+	{
+		std::vector<VkDescriptorSetLayoutBinding> bindings = layout.GetBindings();
+
+		for (auto binding : bindings)
+		{
+			m_descriptorPoolSizeRemaining[binding.descriptorType].descriptorCount += binding.descriptorCount;
+			m_descriptorPoolSizeRemaining[binding.descriptorType].type = binding.descriptorType;
+		}
+	}
+
+	std::vector<VkDescriptorPoolSize> poolSize;
+
+	for (auto& pSize : m_descriptorPoolSizeRemaining)
+		if (pSize.descriptorCount != 0)
+		{
+			pSize.descriptorCount *= maxSets;
+			poolSize.push_back(pSize);
+		}
+
+	m_remainingSets = maxSets * layouts.size();
+
+	NewDescriptorPool(poolSize, m_remainingSets, &m_descPoolHandle);
+}
+
+
 void DescriptorPool::Construct(const std::vector<VkDescriptorPoolSize>& poolSize, uint32_t maxSets)
 {
 	NewDescriptorPool(poolSize, maxSets, &m_descPoolHandle);
@@ -88,16 +124,22 @@ void DescriptorPool::Construct(const std::vector<VkDescriptorPoolSize>& poolSize
 bool DescriptorPool::CanAllocate(const DescriptorSetLayout& layoutType)
 {
 	std::vector<VkDescriptorSetLayoutBinding> bindings = layoutType.GetBindings();
-	std::array<VkDescriptorPoolSize, VkDescriptorType::VK_DESCRIPTOR_TYPE_RANGE_SIZE> poolSizeCopy = m_descriptorPoolSizeRemaining;
-
 	for (auto binding : bindings)
 	{
-		poolSizeCopy[binding.descriptorType].descriptorCount -= binding.descriptorCount;
-		if (poolSizeCopy[binding.descriptorType].descriptorCount < 0)
+		if (m_descriptorPoolSizeRemaining[binding.descriptorType].descriptorCount - binding.descriptorCount < 0)
 			return false;
 	}
 
 	return m_remainingSets > 0;
+}
+
+bool DescriptorPool::CanAllocate(const std::vector<DescriptorSetLayout>& layoutsType)
+{
+	for (auto layout : layoutsType)
+		if (!CanAllocate(layout))
+			return false;
+
+	return (m_remainingSets - layoutsType.size()) > 0;
 }
 
 VkDescriptorSet DescriptorPool::AllocateDescriptorSet(const DescriptorSetLayout& layoutType)
@@ -106,4 +148,20 @@ VkDescriptorSet DescriptorPool::AllocateDescriptorSet(const DescriptorSetLayout&
 	AllocDescriptorSets(m_descPoolHandle, layoutType.Get(), &newDescSet);
 	--m_remainingSets;
 	return newDescSet;
+}
+
+std::vector<VkDescriptorSet> DescriptorPool::AllocateDescriptorSet(const std::vector<DescriptorSetLayout>& layoutsTypes)
+{
+	std::vector<VkDescriptorSetLayout> vkLayouts;
+	vkLayouts.reserve(layoutsTypes.size());
+	for (auto layout : layoutsTypes)
+		vkLayouts.push_back(layout.Get());
+
+	std::vector<VkDescriptorSet> newDescSets;
+	newDescSets.resize(vkLayouts.size());
+	for (unsigned int i = 0; i < layoutsTypes.size(); ++i)
+	{
+		newDescSets[i] = AllocateDescriptorSet(layoutsTypes[i]);
+	}
+	return newDescSets;
 }

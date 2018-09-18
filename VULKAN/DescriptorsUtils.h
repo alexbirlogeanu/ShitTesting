@@ -33,11 +33,14 @@ public:
 	const VkDescriptorPool& Get() const { m_descPoolHandle; }
 
 	void Construct(const DescriptorSetLayout& layoutType, uint32_t maxSets);
+	void Construct(const std::vector<DescriptorSetLayout>& layouts, uint32_t maxSets);
 	void Construct(const std::vector<VkDescriptorPoolSize>& poolSize, uint32_t maxSets); //backwards compatibility
-
+	
 	//need methods to check for multiples sets
 	bool CanAllocate(const DescriptorSetLayout& layoutType);
+	bool CanAllocate(const std::vector<DescriptorSetLayout>& layoutsType);
 	VkDescriptorSet AllocateDescriptorSet(const DescriptorSetLayout& layoutType);
+	std::vector<VkDescriptorSet> AllocateDescriptorSet(const std::vector<DescriptorSetLayout>& layoutsTypes);
 private:
 	VkDescriptorPool																	m_descPoolHandle;
 	std::array<VkDescriptorPoolSize, VkDescriptorType::VK_DESCRIPTOR_TYPE_RANGE_SIZE>	m_descriptorPoolSizeRemaining;

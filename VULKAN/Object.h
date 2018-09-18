@@ -7,6 +7,7 @@
 #include "Batch.h"
 #include "Material.h"
 #include "Serializer.h"
+#include "Singleton.h"
 
 #include <string>
 #include <vector>
@@ -24,38 +25,9 @@ enum class ObjectType
     Count
 };
 
-//////////////////////////////////////////TEST Seriable
-
-class ObjectSer : public SeriableImpl<ObjectSer>
-{
-public:
-	ObjectSer();
-	virtual ~ObjectSer();
-
-private:
-	DECLARE_PROPERTY(Material*, ObjectMaterial, ObjectSer);
-	DECLARE_PROPERTY(glm::vec3, Position, ObjectSer);
-};
-
-
-
-
-///////////////////////////////////////////
-
-class ObjectFactory
-{
-public:
-	static void LoadXml(const std::string& file){}
-	static const std::vector<Object*>& GetObjects() { return m_objects; };
-private:
-	static std::vector<Object*> m_objects;
-};
-
 class Object :/* public CPickable,*/ public SeriableImpl<Object>
 {
 public:
-
-    bool GetIsShadowCaster() const { return m_isShadowCaster; }
     
     void RotateX(float dir)
     {
@@ -114,7 +86,7 @@ private:
 private:
 	DECLARE_PROPERTY(Mesh*, ObjectMesh, Object);
 	DECLARE_PROPERTY(Material*, ObjectMaterial, Object);
-	DECLARE_PROPERTY(bool, isShadowCaster, Object);
+	DECLARE_PROPERTY(bool, IsShadowCaster, Object);
 	DECLARE_PROPERTY(glm::vec3, worldPosition, Object);
 	DECLARE_PROPERTY(glm::vec3, scale, Object);
 	DECLARE_PROPERTY(std::string, debugName, Object);
@@ -127,8 +99,9 @@ private:
     glm::mat4               m_modelMatrix;
 };
 
-class ObjectSerializer : public Serializer
+class ObjectSerializer : public Serializer, public Singleton<ObjectSerializer>
 {
+	friend class Singleton<ObjectSerializer>;
 public:
 	ObjectSerializer();
 	virtual ~ObjectSerializer();
@@ -136,7 +109,9 @@ public:
 	virtual void Save(const std::string& filename) override;
 	virtual void Load(const std::string& filename) override;
 
+	const std::vector<Object*>& GetObjects() const { return m_objects; }
 	void AddObject(Object* obj);
+
 private:
 	std::vector<Object*>		m_objects;
 };
@@ -156,63 +131,21 @@ enum GBuffer //until refactoring change values into ao.cpp too
 class ObjectRenderer : public CRenderer
 {
 public:
-    ObjectRenderer(VkRenderPass renderPass, const std::vector<Object*>& objects); //hey, it works
+    ObjectRenderer(VkRenderPass renderPass);
     virtual ~ObjectRenderer();
 
     virtual void Render() override;
     virtual void Init() override;
 	virtual void PreRender() override;
 protected:
-    virtual void CreateDescriptorSetLayout() override;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override;
+	void CreateDescriptorSetLayout(); //we dont need this function for this kind of renderer ?? (something is obsolete)
 
     void UpdateResourceTable() override;
     void UpdateGraphicInterface() override;
 private:
-    //these 2 methods are duplicate code. See ShadowRenderer
-    void InitDescriptorNodes();
-    void InitMemoryOffsetNodes();
-
-    void SetupPipeline(const std::string& vertexFile, const std::string& fragmentFile, CGraphicPipeline& pipeline);
-
-    void UpdateShaderParams();
-private:
-    struct Node
-    {
-        Object*             obj;
-        VkDescriptorSet     descriptorSet;
-		BufferHandle*       buffer;
-
-        Node()
-            : obj(nullptr)
-            , descriptorSet(VK_NULL_HANDLE)
-            , buffer(nullptr)
-        {}
-
-        Node(Object* o)
-            : obj(o)
-            , descriptorSet(VK_NULL_HANDLE)
-            , buffer(nullptr)
-        {}
-    };
-
-    struct SBatch
-    {
-        std::string         debugMarker;
-        CGraphicPipeline    pipeline;
-        std::vector<Node>   nodes;
-    };
-
-    unsigned int                        m_numOfObjects;
     glm::mat4                           m_projMatrix;
 
-    //vulkan Render shit
-    VkDescriptorSetLayout               m_objectDescLayout;
-    BufferHandle*                       m_instanceDataBuffer;
-    VkSampler                           m_sampler;
-
-	std::array<SBatch, (unsigned int)ObjectType::Count>  m_batches;
-	Batch													m_solidBatch;
 };
 
 class CScene
