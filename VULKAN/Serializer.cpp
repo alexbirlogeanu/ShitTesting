@@ -46,7 +46,6 @@ bool Serializer::BeginSerializing(ISeriable* obj)
 
 		if (!m_currentNode)
 		{
-			m_HasReachedEoF = true;
 			return false;
 		}
 

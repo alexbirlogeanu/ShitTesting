@@ -37,8 +37,7 @@ private:
 private:
 	std::unordered_map<std::string, MaterialTemplateBase*>		m_materialTemplates;
 	
-	std::vector<DescriptorPool>									m_descriptorPools;
-	uint32_t													m_currentPoolIndex;
+	std::vector<DescriptorPool*>								m_descriptorPools;
 
 	std::vector<DescriptorSetLayout>							m_descriptorLayouts;
 };
@@ -142,42 +141,6 @@ protected:
 protected:
 	MaterialTemplateBase*			m_template;
 	std::vector<IndexedTexture>		m_textureSlots;
-};
-
-
-/////////////////TEST///////////////////
-
-struct MaterialProperties
-{
-	float		Roughness;
-	float		K;
-	float		F0;
-	uint32_t	AlbedoTexture;
-};
-
-class DefaultMaterial : public Material, public SeriableImpl<DefaultMaterial>
-{
-public:
-	DefaultMaterial(MaterialTemplateBase* matTemplate);
-	virtual ~DefaultMaterial();
-
-	void* GetData() override { return &m_properties; }
-	uint32_t GetDataStride() override { return sizeof(MaterialProperties); }
-
-	virtual void SetTextureSlots(const std::vector<IndexedTexture>& indexedTexture) override; //the material should implement this method to write the texture indexes to the shader data
-	void SetSpecularProperties(glm::vec4 properties);
-
-	virtual void OnLoad() override;
-
-	typedef MaterialProperties PropertiesType;
-private:
-	MaterialProperties	m_properties;
-
-	DECLARE_PROPERTY(float, Roughness, DefaultMaterial);
-	DECLARE_PROPERTY(float, K, DefaultMaterial);
-	DECLARE_PROPERTY(float, F0, DefaultMaterial);
-	DECLARE_PROPERTY(CTexture*, AlbedoText, DefaultMaterial);
-
 };
 
 template<typename BASE>

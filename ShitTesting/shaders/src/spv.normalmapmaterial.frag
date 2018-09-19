@@ -13,6 +13,8 @@ struct MaterialPropertis
 	float		K;
 	float		F0;
 	uint		AlbedoTexture;
+	uint		NormalMapTexture;
+	uint		Padding[3]; //not used
 };
 
 layout(set=1, binding=0) buffer MaterialParams
@@ -26,7 +28,7 @@ layout(location=0) in vec4 normal;
 layout(location=1) in vec4 worldPos;
 layout(location=2) in vec2 uv;
 layout(location=3) flat in uint BatchIndex;
-
+layout(location=4) in mat3 TBN;
 float Depth()
 {
 	float z = gl_FragCoord.z;
@@ -37,14 +39,17 @@ float Depth()
 
 void main()
 {
-	MaterialPropertis Properties = materials[BatchIndex];
+	MaterialPropertis properties = materials[BatchIndex];
+	uint albedoIndex = properties.AlbedoTexture;
+	uint normalMapIndex = properties.NormalMapTexture;
 	
-	const uint index = Properties.AlbedoTexture;
-	
-	albedo = texture(BatchTextures[index], uv);
-	out_specular = vec4(Properties.Roughness, Properties.K, Properties.F0, 0.0f);
-	out_normal = normal;
+	albedo = texture(BatchTextures[albedoIndex], uv);
+	vec3 sNormal = texture(BatchTextures[normalMapIndex], uv).rgb;
+	sNormal = normalize(sNormal * 2.0f - 1.0f); 
+	out_normal = vec4(normalize(TBN * sNormal), 0.0f);
 	out_position = worldPos;
+	out_specular =  vec4(properties.Roughness, properties.K, properties.F0, 0.0f);
 	
 	gl_FragDepth = Depth();
+	
 }

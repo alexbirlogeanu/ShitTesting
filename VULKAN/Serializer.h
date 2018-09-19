@@ -83,6 +83,7 @@ public:
 			serializer->EndSerializing(this);
 			return true;
 		}
+		TRAP(false);
 		return false;
 	}
 

@@ -25,21 +25,28 @@ layout(push_constant) uniform PushConstants
 	vec4 ViewPos;
 };
 
-
 //outs
 layout(location=0) out vec4 normal;
 layout(location=1) out vec4 worldPos;
 layout(location=2) out vec2 uv;
 layout(location=3) out uint BatchIndex;
-
+layout(location=4) out mat3 TBN;
 void main()
 {
 	uv = in_uv;
 	BatchIndex = gl_DrawID;
 	BatchCommons currentNode = commonData[BatchIndex];
 	
-	vec3 transNormal = inverse(transpose(mat3(currentNode.ModelMatrix))) * in_normal;
+	mat3 transWM = inverse(transpose(mat3(currentNode.ModelMatrix)));
+	vec3 transNormal = transWM * in_normal;
 	normal = vec4(normalize(transNormal), 0.0f);
+	
+	vec3 T = normalize( transWM * in_tangent.xyz);
+	vec3 B = normalize(transWM * in_bitangent.xyz);
+	vec3 N = normalize(transNormal);
+	
+	TBN = mat3(T, B, N);
+
 	worldPos = (currentNode.ModelMatrix * vec4(position, 1));
 	gl_Position = ProjViewMatrix * worldPos;
 }

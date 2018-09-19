@@ -55,4 +55,7 @@
 	<shader shaderfile="spv.ssrresolve.frag" out="ssrresolve.frag"/>
 	<shader shaderfile="spv.batch.vert" out="batch.vert"/>
 	<shader shaderfile="spv.batch.frag" out="batch.frag"/>
+	<shader shaderfile="spv.defaultmaterial.frag" out="defaultmaterial.frag"/>
+	<shader shaderfile="spv.normalmapmaterial.vert" out="normalmapmaterial.vert"/>
+	<shader shaderfile="spv.normalmapmaterial.frag" out="normalmapmaterial.frag"/>
 </shaderlist>

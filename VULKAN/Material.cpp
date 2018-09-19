@@ -3,19 +3,23 @@
 #include "Batch.h"
 #include "Object.h"
 
+#include "DefaultMaterial.h"
+#include "NormalMapMaterial.h"
+
 ////////////////////////////////////////////////////////////////////////////////
 //
 ///////////////////////////////////////////////////////////////////////////////
 
 MaterialLibrary::MaterialLibrary()
-	: m_currentPoolIndex(-1)
 {
-	m_materialTemplates.emplace("default", new MaterialTemplate<DefaultMaterial>("batch.vert", "batch.frag", "default"));
+	m_materialTemplates.emplace("default", new MaterialTemplate<DefaultMaterial>("batch.vert", "defaultmaterial.frag", "default"));
+	m_materialTemplates.emplace("normalmap", new MaterialTemplate<NormalMapMaterial>("normalmapmaterial.vert", "normalmapmaterial.frag", "normalmap"));
 }
 
 MaterialLibrary::~MaterialLibrary()
 {
-
+	for (auto entry : m_materialTemplates)
+		delete entry.second;
 }
 
 void MaterialLibrary::Initialize(CRenderer* renderer)
@@ -24,7 +28,7 @@ void MaterialLibrary::Initialize(CRenderer* renderer)
 	m_descriptorLayouts.resize(DescriptorIndex::Count);
 	m_descriptorLayouts[DescriptorIndex::Common].AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
 
-	m_descriptorLayouts[DescriptorIndex::Specific].AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
+	m_descriptorLayouts[DescriptorIndex::Specific].AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
 	m_descriptorLayouts[DescriptorIndex::Specific].AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 12);
 
 	for (unsigned int i = 0; i < DescriptorIndex::Count; ++i)
@@ -36,21 +40,29 @@ void MaterialLibrary::Initialize(CRenderer* renderer)
 
 std::vector<VkDescriptorSet> MaterialLibrary::AllocNewDescriptors()
 {
-	if (m_currentPoolIndex == -1 || !m_descriptorPools[m_currentPoolIndex].CanAllocate(m_descriptorLayouts))
+	DescriptorPool* pool = nullptr; //used to alloc new desc
+	for (unsigned int i = 0; i < m_descriptorPools.size(); ++i)
 	{
-		m_descriptorPools.push_back(DescriptorPool());
-		DescriptorPool& pool = m_descriptorPools[++m_currentPoolIndex];
-		pool.Construct(m_descriptorLayouts, 10); //magic number again
+		if (m_descriptorPools[i]->CanAllocate(m_descriptorLayouts))
+		{
+			pool = m_descriptorPools[i];
+			break;
+		}
 	}
 
-	VkDescriptorSet set = m_descriptorPools[m_currentPoolIndex].AllocateDescriptorSet(m_descriptorLayouts[0]);
-	VkDescriptorSet set2 = m_descriptorPools[m_currentPoolIndex].AllocateDescriptorSet(m_descriptorLayouts[1]);
+	if (!pool)
+	{
+		pool = new DescriptorPool();
+		pool->Construct(m_descriptorLayouts, 10);//magic number again
+	}
+
+	TRAP(pool);
 
 	std::vector<VkDescriptorSet> newDescSets;
 	newDescSets.resize(m_descriptorLayouts.size());
 	for (unsigned int i = 0; i < m_descriptorLayouts.size(); ++i)
 	{
-		newDescSets[i] = m_descriptorPools[m_currentPoolIndex].AllocateDescriptorSet(m_descriptorLayouts[i]);
+		newDescSets[i] = pool->AllocateDescriptorSet(m_descriptorLayouts[i]); //TODO! I have to look into the array version of this method and why it doesn't work
 	}
 
 	return  newDescSets;
@@ -115,8 +127,6 @@ std::vector<VkDescriptorSet> MaterialTemplateBase::GetNewDescriptorSets()
 //Material
 /////////////////////////////////////////////////////////////////////////////////////////////////////////	
 
-
-
 Material::Material(MaterialTemplateBase* matTemplate)
 	: m_template(matTemplate)
 {
@@ -149,49 +159,4 @@ void Material::WriteTextureIndex(const CTexture* text, uint32_t* addressToWrite)
 		TRAP(it->index != -1 && "text is not indexed. You skip a step, the step of indexing the texture unsing batch");
 		*addressToWrite = it->index;
 	}
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////
-//TEST: DefaultMaterial
-/////////////////////////////////////////////////////////////////////////////////////////////////////////	
-
-BEGIN_PROPERTY_MAP(DefaultMaterial)
-	IMPLEMENT_PROPERTY(float, Roughness, "Roughness", DefaultMaterial),
-	IMPLEMENT_PROPERTY(float, K, "K", DefaultMaterial),
-	IMPLEMENT_PROPERTY(float, F0, "F0", DefaultMaterial),
-	IMPLEMENT_PROPERTY(CTexture*, AlbedoText, "albedoText", DefaultMaterial)
-END_PROPERTY_MAP(DefaultMaterial)
-
-DefaultMaterial::DefaultMaterial(MaterialTemplateBase* matTemplate)
-	: Material(matTemplate)
-	, SeriableImpl<DefaultMaterial>("DefaultMaterial")
-{
-
-}
-
-DefaultMaterial::~DefaultMaterial()
-{
-
-}
-
-void DefaultMaterial::SetTextureSlots(const std::vector<IndexedTexture>& indexedTextures)
-{
-	//HARDCODED we know that the index of albedo texture is 0
-	m_textureSlots = indexedTextures;
-	WriteTextureIndex(GetAlbedoText(), &m_properties.AlbedoTexture);
-}
-
-void DefaultMaterial::SetSpecularProperties(glm::vec4 properties)
-{
-	m_properties.Roughness = properties.x;
-	m_properties.K = properties.y;
-	m_properties.F0 = properties.z;
-}
-
-void DefaultMaterial::OnLoad()
-{
-	m_properties.Roughness = GetRoughness();
-	m_properties.K = GetK();
-	m_properties.F0 = GetF0();
-	AddTextureSlot(GetAlbedoText());
 }

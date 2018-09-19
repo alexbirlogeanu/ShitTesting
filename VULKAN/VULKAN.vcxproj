@@ -129,10 +129,12 @@
     <ClInclude Include="ao.h" />
     <ClInclude Include="Batch.h" />
     <ClInclude Include="DebugMarkers.h" />
+    <ClInclude Include="DefaultMaterial.h" />
     <ClInclude Include="DescriptorsUtils.h" />
     <ClInclude Include="Material.h" />
     <ClInclude Include="MemoryManager.h" />
     <ClInclude Include="MeshLoader.h" />
+    <ClInclude Include="NormalMapMaterial.h" />
     <ClInclude Include="Object.h" />
     <ClInclude Include="PointLightRenderer2.h" />
     <ClInclude Include="ResourceLoader.h" />
@@ -163,10 +165,12 @@
     <ClCompile Include="Batch.cpp" />
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="DebugMarkers.cpp" />
+    <ClCompile Include="DefaultMaterial.cpp" />
     <ClCompile Include="DescriptorsUtils.cpp" />
     <ClCompile Include="Material.cpp" />
     <ClCompile Include="MemoryManager.cpp" />
     <ClCompile Include="MeshLoader.cpp" />
+    <ClCompile Include="NormalMapMaterial.cpp" />
     <ClCompile Include="Object.cpp" />
     <ClCompile Include="PointLightRenderer2.cpp" />
     <ClCompile Include="ResourceLoader.cpp" />
