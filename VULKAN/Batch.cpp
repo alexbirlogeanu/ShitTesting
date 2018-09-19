@@ -7,6 +7,8 @@
 #include "Texture.h"
 #include "Material.h"
 
+#include <unordered_set>
+
 BatchManager::BatchManager()
 {
 }
@@ -140,6 +142,7 @@ Batch::Batch(MaterialTemplateBase* materialTemplate)
 	, m_needCleanup(false)
 	, m_isReady(false)
 	, m_materialTemplate(materialTemplate)
+	, m_shadowCasterCommands(0)
 {
 }
 
@@ -166,54 +169,107 @@ void Batch::AddObject(Object* obj)
 
 void Batch::Construct()
 {
-	OrderOjects();
-	ConstructMeshes();
+	std::unordered_map<Mesh*, MeshBufferInfo> meshCommands;
+	//ConstructMeshes();
+	BuildMeshBuffers(meshCommands);
+	CreateIndirectCommandBuffer(meshCommands);
+
 	ConstructBatchSpecifics();
 	IndexTextures();
 	UpdateGraphicsInterface();
 	m_needReconstruct = false;
 }
 
-void Batch::OrderOjects()
+void Batch::CreateIndirectCommandBuffer(const std::unordered_map<Mesh*, MeshBufferInfo>& meshCommands)
 {
 	//order objects in m_objects based on the criteria of cast shadows or not. Our vector will be split in 2 parts, with the non-caster at the end
 	std::vector<Object*> nonCasters;
-	auto pred = [](const Object* obj){
-		return !obj->GetIsShadowCaster();
+	std::vector<Object*> casters;
+
+	for (Object* obj : m_objects)
+	{
+		if (obj->GetIsShadowCaster())
+			casters.push_back(obj);
+		else
+			nonCasters.push_back(obj);
+	}
+	m_objects.clear();
+
+	//after the shadow caster/ non shadow casters split, move the objects that use same mesh adjancently, by caster no caster category. We have to have the objects ordered that way because uniform buffer expects that object in the same draw command to be one after the other. 
+	//we order per category, because some objects can be set not to be draw in render shadows pass and we will add the indirect draw command at the back of the command vector
+	std::unordered_map<Mesh*, std::vector<Object*>> casterSplitter;
+	std::unordered_map<Mesh*, std::vector<Object*>> nonCasterSplitter;
+
+	auto orderer = [](const std::vector<Object*>& objects, std::unordered_map<Mesh*, std::vector<Object*>>& splitter)
+	{
+		for (Object* obj : objects)
+		{
+			auto& split = splitter[obj->GetObjectMesh()];
+			split.push_back(obj);
+		}
 	};
 
-	auto it = std::find_if(m_objects.begin(), m_objects.end(), pred);
-	while (it != m_objects.end())
+	orderer(casters, casterSplitter);
+	orderer(nonCasters, nonCasterSplitter);
+
+	uint32_t instances = 0;
+	auto createIndirectCommand = [&, meshCommands](const std::unordered_map<Mesh*, std::vector<Object*>> splitter)
 	{
-		nonCasters.push_back(*it);
-		m_objects.erase(it);
+		for (const auto& elem : splitter)
+		{
+			auto it = meshCommands.find(elem.first);
+			TRAP(it != meshCommands.end());
 
-		it = std::find_if(m_objects.begin(), m_objects.end(), pred);
-	}
+			const MeshBufferInfo& info = it->second;
+			const auto& objects = elem.second;
+			VkDrawIndexedIndirectCommand indirectCommand;
 
-	for (Object* obj : nonCasters)
-		m_objects.push_back(obj);
+			indirectCommand.firstIndex = info.firstIndex;
+			indirectCommand.vertexOffset = info.vertexOffset;
+			indirectCommand.indexCount = info.indexCount;
+			indirectCommand.firstInstance = instances; //??
+			indirectCommand.instanceCount = (uint32_t)objects.size(); //this are the vectors
+
+			instances += (uint32_t)objects.size();
+			m_indirectCommands.push_back(indirectCommand);
+
+			m_objects.insert(m_objects.end(), objects.begin(), objects.end());
+		}
+	};
+	createIndirectCommand(casterSplitter);
+	//save the number of commands that will be called in render shadow pass
+	m_shadowCasterCommands = (uint32_t)m_indirectCommands.size();
+	//append the non caster commands
+	createIndirectCommand(nonCasterSplitter);
+
+	m_indirectCommandBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::IndirectDrawCmdBuffer, m_indirectCommands.size() * sizeof(VkDrawIndexedIndirectCommand), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+
+	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::IndirectDrawCmdBuffer);
+	void* mem = m_indirectCommandBuffer->GetPtr<void*>();
+	memcpy(mem, m_indirectCommands.data(), m_indirectCommands.size() * sizeof(VkDrawIndexedIndirectCommand));
+	MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::IndirectDrawCmdBuffer);
 }
 
-void Batch::ConstructMeshes()
+void Batch::BuildMeshBuffers(std::unordered_map<Mesh*, MeshBufferInfo>& meshCommands)
 {
 	std::vector<VkDeviceSize> subBuffersSizes(2);
+	std::unordered_set<Mesh*> meshes;
 
 	subBuffersSizes[0] = subBuffersSizes[1] = 0;//unnecessary i think
 	for (Object* obj : m_objects)
+		meshes.insert(obj->GetObjectMesh());
+
+	for (Mesh* mesh : meshes)
 	{
-		Mesh* mesh = obj->GetObjectMesh();
 		subBuffersSizes[0] += (VkDeviceSize)mesh->GetVerticesMemorySize(); //in first part of the memory we keep the vertices
 		subBuffersSizes[1] += (VkDeviceSize)mesh->GetIndicesMemorySize(); //in the second part of the memory we keep the indices
 	}
 
 	m_batchBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::DeviceLocalBuffer, subBuffersSizes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 	m_staggingBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::BatchStaggingBuffer, subBuffersSizes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-	m_indirectCommandBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::IndirectDrawCmdBuffer, m_objects.size() * sizeof(VkDrawIndexedIndirectCommand), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 
-	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::IndirectDrawCmdBuffer);
 	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::BatchStaggingBuffer);
-
+	
 	m_batchVertexBuffer = m_batchBuffer->CreateSubbuffer(subBuffersSizes[0]);
 	m_batchIndexBuffer = m_batchBuffer->CreateSubbuffer(subBuffersSizes[1]);
 	BufferHandle* staggingVertexBuffer = m_staggingBuffer->CreateSubbuffer(subBuffersSizes[0]);
@@ -221,33 +277,32 @@ void Batch::ConstructMeshes()
 
 	SVertex* vertexMemory = staggingVertexBuffer->GetPtr<SVertex*>();
 	uint32_t* indexMemory = staggingIndexBuffer->GetPtr<uint32_t*>();
-	VkDrawIndexedIndirectCommand* indirectCommand = m_indirectCommandBuffer->GetPtr<VkDrawIndexedIndirectCommand*>();
 
 	uint32_t vertexOffset = 0;
 	uint32_t indexOffset = 0;
 
-	for (Object* obj : m_objects)
+	for (Mesh* mesh : meshes)
 	{
-		Mesh* mesh = obj->GetObjectMesh();
-
 		mesh->CopyLocalData(vertexMemory, indexMemory);
-		indirectCommand->firstIndex = indexOffset;
-		indirectCommand->vertexOffset = vertexOffset;
-		indirectCommand->indexCount = mesh->GetIndexCount();
-		indirectCommand->instanceCount = 1;
-		indirectCommand->firstInstance = 0;
+		
+		//we partially fill indirect command structure
+		MeshBufferInfo info;
+		info.firstIndex = indexOffset;
+		info.vertexOffset = vertexOffset;
+		info.indexCount = mesh->GetIndexCount();
 
-		++indirectCommand;
+		meshCommands.emplace(mesh, info);
+
 		vertexOffset += mesh->GetVertexCount();
 		indexOffset += mesh->GetIndexCount();
 		vertexMemory += mesh->GetVertexCount();
 		indexMemory += mesh->GetIndexCount();
 	}
 
-	MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::IndirectDrawCmdBuffer);
 	MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::BatchStaggingBuffer);
+
 	VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
-	
+
 	VkBufferMemoryBarrier copyBarrier;
 	copyBarrier = m_batchVertexBuffer->CreateMemoryBarrier(VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT);
 
@@ -263,13 +318,10 @@ void Batch::ConstructMeshes()
 	m_needCleanup = true;
 }
 
-
 void Batch::ConstructBatchSpecifics()
 {
-	//here we need to get material specifics and allocate a suitable amount of memory. But for now we just hardcode the late functionality
 	/*
 		Storage buffer will look like this
-		0x1eb
 		C_C_C_C_C_C_C_S_S_S_S_S_S_S
 		|            |			  |
 		 Common part  Specific Part
@@ -391,18 +443,8 @@ void Batch::Render(bool shadowPass)
 		return;
 
 	VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
-	uint32_t nShadowCastersObjects = (uint32_t)m_objects.size();
-	//we should have the objects vector with the first objects shadow casters
-	if (shadowPass)
-	{
-		auto firstNoShadowIt = std::find_if(m_objects.begin(), m_objects.end(), [](const Object* obj)
-		{
-			return !obj->GetIsShadowCaster();
-		});
+	uint32_t nShadowCastersObjects = (shadowPass) ? m_shadowCasterCommands : (uint32_t)m_indirectCommands.size();
 
-		if (firstNoShadowIt != m_objects.end())
-			nShadowCastersObjects = uint32_t(firstNoShadowIt - m_objects.begin());
-	}
 	VkDeviceSize offset = 0;
 	vk::CmdBindVertexBuffers(cmdBuffer, 0, 1, &m_batchVertexBuffer->Get(), &offset);
 	vk::CmdBindIndexBuffer(cmdBuffer, m_batchIndexBuffer->Get(), m_batchIndexBuffer->GetOffset(), VK_INDEX_TYPE_UINT32);

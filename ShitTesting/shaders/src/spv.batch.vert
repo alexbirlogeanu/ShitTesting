@@ -1,4 +1,4 @@
-#version 460
+#version 450
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 
@@ -35,7 +35,7 @@ layout(location=3) out uint BatchIndex;
 void main()
 {
 	uv = in_uv;
-	BatchIndex = gl_DrawID;
+	BatchIndex = gl_InstanceIndex;
 	BatchCommons currentNode = commonData[BatchIndex];
 	
 	vec3 transNormal = inverse(transpose(mat3(currentNode.ModelMatrix))) * in_normal;

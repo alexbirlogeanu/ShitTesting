@@ -1,4 +1,4 @@
-#version 460
+#version 450
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 
@@ -27,5 +27,5 @@ layout(push_constant) uniform PushConstants
 
 void main()
 {
-    gl_Position = ShadowProjViewMatrix * commons[gl_DrawID].ModelMatrix * vec4(position, 1.0f);
+    gl_Position = ShadowProjViewMatrix * commons[gl_InstanceIndex].ModelMatrix * vec4(position, 1.0f);
 }

@@ -62,9 +62,14 @@ public:
 	VkDeviceSize GetTotalBatchMemory() const { return m_totalBatchMemory; }
 
 private:
-	void OrderOjects();
-	void ConstructMeshes();
-	void ConstructPipeline(CRenderer* renderer, VkRenderPass renderPass, uint32_t subpassIndex); //TODO remove
+	struct MeshBufferInfo
+	{
+		uint32_t firstIndex;
+		uint32_t vertexOffset;
+		uint32_t indexCount;
+	};
+	void CreateIndirectCommandBuffer(const std::unordered_map<Mesh*, MeshBufferInfo>& meshCommands);
+	void BuildMeshBuffers(std::unordered_map<Mesh*, MeshBufferInfo>& meshCommands);
 	void ConstructBatchSpecifics();
 	void UpdateGraphicsInterface();
 	void IndexTextures();
@@ -98,5 +103,6 @@ private:
 	//need a buffer for uniforms. Also need to pack descriptors??
 	std::vector<VkDescriptorSet>			m_batchDescriptorSets;
 	std::vector<CTexture*>					m_batchTextures;
-
+	uint32_t								m_shadowCasterCommands;
+	std::vector<VkDrawIndexedIndirectCommand> m_indirectCommands;
 };

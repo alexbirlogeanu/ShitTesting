@@ -37,7 +37,7 @@
 	
 	<object material="normalmap" castShadows="true" name="cube">
 		<mesh file="obj\\cube.mb"/>
-		<NormalMapMaterial Roughness="0.950000" K="0.050000" F0="0.9">
+		<NormalMapMaterial  Roughness="0.950000" K="0.050000" F0="0.9">
 			<albedoText file="bricks2.png" isSRGB="true"/>
 			<normalMapText file="bricks2_normal.png" isSRGB="false"/>
 		</NormalMapMaterial>
@@ -45,15 +45,15 @@
 		<scale x="2.000000" y="2.000000" z="2.000000"/>
 	</object>
 	
-	<!--object material="normalmap" castShadows="true" name="mokey_bricks">
-		<mesh file="obj\\monkey.mb"/>
+	<object material="normalmap" castShadows="true" name="sphere_bricks">
+		<mesh file="obj\\sphere.mb"/>
 		<NormalMapMaterial Roughness="0.950000" K="0.050000" F0="0.9">
 			<albedoText file="bricks2.png" isSRGB="true"/>
 			<normalMapText file="bricks2_normal.png" isSRGB="false"/>
 		</NormalMapMaterial>
-		<position x="3.0" y="0.0" z="-2.0"/>
+		<position x="3.0" y="0.0" z="-3.0"/>
 		<scale x="1.000000" y="1.000000" z="1.000000"/>
-	</object-->
+	</object>
 	
 </scene>
 
