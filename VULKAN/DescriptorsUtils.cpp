@@ -110,7 +110,7 @@ void DescriptorPool::Construct(const std::vector<DescriptorSetLayout>& layouts, 
 			poolSize.push_back(pSize);
 		}
 
-	m_remainingSets = maxSets * layouts.size();
+	m_remainingSets = maxSets * uint32_t(layouts.size());
 
 	NewDescriptorPool(poolSize, m_remainingSets, &m_descPoolHandle);
 }

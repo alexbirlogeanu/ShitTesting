@@ -128,7 +128,7 @@ unsigned int MeshManager::CalculateStagginMemorySize()
 	for (auto m : m_pendingMeshes)
 		totalSize += m->MemorySizeNeeded();
 
-	return totalSize + m_pendingMeshes.size() * vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment;
+	return totalSize + uint32_t(m_pendingMeshes.size()) * vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////
@@ -222,11 +222,11 @@ unsigned int Mesh::MemorySizeNeeded() const
 
 unsigned int Mesh::GetVerticesMemorySize() const
 {
-	return m_vertexes.size() * sizeof(SVertex);
+	return uint32_t(m_vertexes.size()) * sizeof(SVertex);
 }
 unsigned int Mesh::GetIndicesMemorySize() const
 {
-	return m_indices.size() * sizeof(unsigned int);
+	return uint32_t(m_indices.size()) * sizeof(unsigned int);
 }
 
 void Mesh::CopyLocalData(BufferHandle* stagginVertexBuffer, BufferHandle* staggingIndexBuffer)

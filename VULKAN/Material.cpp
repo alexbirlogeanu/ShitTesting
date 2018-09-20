@@ -29,7 +29,7 @@ void MaterialLibrary::Initialize(CRenderer* renderer)
 	m_descriptorLayouts[DescriptorIndex::Common].AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
 
 	m_descriptorLayouts[DescriptorIndex::Specific].AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
-	m_descriptorLayouts[DescriptorIndex::Specific].AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 12);
+	m_descriptorLayouts[DescriptorIndex::Specific].AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, BATCH_MAX_TEXTURE);
 
 	for (unsigned int i = 0; i < DescriptorIndex::Count; ++i)
 		m_descriptorLayouts[i].Construct();

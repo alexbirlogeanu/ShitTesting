@@ -7,6 +7,7 @@
 #include "Texture.h"
 #include "Material.h"
 
+#include <iostream>
 #include <unordered_set>
 
 BatchManager::BatchManager()
@@ -72,8 +73,17 @@ void BatchManager::AddObject(Object* obj)
 		//get a suitable batch (for now we only have one)
 		std::vector<Batch*> batches = it->second;
 		for (uint32_t i = 0; i < batches.size(); ++i)
-			if (true/*need a condition check like batch->CanAdd(obj)*/)
+			if (batches[i]->CanAddObject(obj))
+			{
 				batches[i]->AddObject(obj);
+				return;
+			}
+
+		Batch* newBatch = CreateNewBatch(materialTemplate);
+		newBatch->AddObject(obj);
+		it->second.push_back(newBatch);
+
+		m_batches.push_back(newBatch);//keep all the batches in one place
 	}
 	else
 	{
@@ -123,6 +133,9 @@ void BatchManager::PreRender()
 //Batch
 ////////////////////////////////////////////////////////////////////
 
+uint32_t Batch::ms_memoryLimit = 4 << 20; //4 MB per batch
+uint32_t Batch::ms_texturesLimit = BATCH_MAX_TEXTURE;
+
 struct BatchCommons
 {
 	glm::mat4 ModelMtx;
@@ -155,22 +168,56 @@ void Batch::AddObject(Object* obj)
 {
 	m_objects.push_back(obj);
 	std::vector<VkDeviceSize> sizes(2);
+	std::unordered_set<Mesh*> meshes;
 
 	for (Object* obj : m_objects)
+		meshes.insert(obj->GetObjectMesh());
+		
+	for (Mesh* mesh : meshes)
 	{
-		Mesh* mesh = obj->GetObjectMesh();
 		sizes[0] += mesh->GetVerticesMemorySize(); //first part of memory will be vertexes
 		sizes[1] += mesh->GetIndicesMemorySize();  //second part will be indexes
 	}
 
 	m_totalBatchMemory = MemoryManager::ComputeTotalSize(sizes);
 	m_needReconstruct = true;
+
+	if (m_totalBatchMemory > ms_memoryLimit)
+		std::cout << "Warning!! Batch uses too much memory!! Maybe the batch contains only one detailed object. In this case we create descriptor sets for texture that are not used" << std::endl;
+}
+
+bool Batch::CanAddObject(Object* obj)
+{
+	std::vector<VkDeviceSize> newObjMeshSizes(2);
+	newObjMeshSizes[0] = obj->GetObjectMesh()->GetVerticesMemorySize();
+	newObjMeshSizes[1] = obj->GetObjectMesh()->GetIndicesMemorySize();
+
+	VkDeviceSize newMeshSize = MemoryManager::ComputeTotalSize(newObjMeshSizes);
+
+	if (newMeshSize + m_totalBatchMemory > ms_memoryLimit)
+		return false;
+
+	Material* material = obj->GetObjectMaterial();
+	TRAP(material->GetTemplate() == m_materialTemplate);
+
+	std::unordered_set<CTexture*> textures; 
+	for (Object* obj : m_objects)
+	{
+		const auto& textureSlots = obj->GetObjectMaterial()->GetTextureSlots();
+		for (const auto& slot : textureSlots)
+			textures.insert(slot.texture);
+	}
+
+	const auto& objTextSlots = material->GetTextureSlots();
+	for (const auto& slot : objTextSlots)
+		textures.insert(slot.texture);
+
+	return textures.size() <= ms_texturesLimit;
 }
 
 void Batch::Construct()
 {
 	std::unordered_map<Mesh*, MeshBufferInfo> meshCommands;
-	//ConstructMeshes();
 	BuildMeshBuffers(meshCommands);
 	CreateIndirectCommandBuffer(meshCommands);
 
@@ -178,6 +225,8 @@ void Batch::Construct()
 	IndexTextures();
 	UpdateGraphicsInterface();
 	m_needReconstruct = false;
+
+	m_debugMarkerName = m_materialTemplate->GetName() + "_" + std::to_string(m_totalBatchMemory % 100);
 }
 
 void Batch::CreateIndirectCommandBuffer(const std::unordered_map<Mesh*, MeshBufferInfo>& meshCommands)
@@ -357,10 +406,11 @@ void Batch::UpdateGraphicsInterface()
 
 	//fill with default textures
 	std::vector<VkDescriptorImageInfo> defaultTextures;
-	for (uint32_t i = (uint32_t)m_batchTextures.size(); i < 12; ++i) //magic MIKE
+	for (uint32_t i = (uint32_t)m_batchTextures.size(); i < ms_texturesLimit; ++i) //magic MIKE
 		defaultTextures.push_back(m_batchTextures[0]->GetTextureDescriptor());
 
-	wDesc.push_back(InitUpdateDescriptor(m_batchDescriptorSets[DescriptorIndex::Specific], 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, (uint32_t)m_batchTextures.size(), defaultTextures));
+	if (!defaultTextures.empty())
+		wDesc.push_back(InitUpdateDescriptor(m_batchDescriptorSets[DescriptorIndex::Specific], 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, (uint32_t)m_batchTextures.size(), defaultTextures));
 
 	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
 }
@@ -465,7 +515,9 @@ void Batch::Render(bool shadowPass)
 	vk::CmdBindVertexBuffers(cmdBuffer, 0, 1, &m_batchVertexBuffer->Get(), &offset);
 	vk::CmdBindIndexBuffer(cmdBuffer, m_batchIndexBuffer->Get(), m_batchIndexBuffer->GetOffset(), VK_INDEX_TYPE_UINT32);
 
+	StartDebugMarker(m_debugMarkerName);
 	vk::CmdDrawIndexedIndirect(cmdBuffer, m_indirectCommandBuffer->Get(), 0, nShadowCastersObjects, sizeof(VkDrawIndexedIndirectCommand));
+	EndDebugMarker(m_debugMarkerName);
 }
 
 void Batch::PrepareRendering(const CGraphicPipeline& pipeline, bool shadowPass)
@@ -479,6 +531,6 @@ void Batch::PrepareRendering(const CGraphicPipeline& pipeline, bool shadowPass)
 		vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.GetLayout(), 0, 1, &m_batchDescriptorSets[DescriptorIndex::Common], 0, nullptr);
 	else
 		vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.GetLayout(), 0, (uint32_t)m_batchDescriptorSets.size(), m_batchDescriptorSets.data(), 0, nullptr);
-	
+		
 	vk::CmdPushConstants(cmdBuffer, pipeline.GetLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(BatchParams), &m_batchParams);
 }

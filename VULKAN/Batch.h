@@ -23,6 +23,7 @@ public:
 	virtual ~BatchManager();
 
 	void AddObject(Object* obj);
+
 	//we need a list of parameters here (we have to know the pipeline, how much uniform memory per batch, or do we use a fixed size. I dont know it seems not too optim)
 	Batch* CreateNewBatch(MaterialTemplateBase* materialTemplate);
 
@@ -47,6 +48,7 @@ public:
 	virtual ~Batch();
 
 	void AddObject(Object* obj);
+	bool CanAddObject(Object* obj);
 
 	void Construct();
 	void Destruct();
@@ -105,4 +107,9 @@ private:
 	std::vector<CTexture*>					m_batchTextures;
 	uint32_t								m_shadowCasterCommands;
 	std::vector<VkDrawIndexedIndirectCommand> m_indirectCommands;
+
+	static uint32_t							ms_memoryLimit;
+	static uint32_t							ms_texturesLimit;
+
+	std::string								m_debugMarkerName;
 };

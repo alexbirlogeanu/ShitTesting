@@ -26,3 +26,5 @@
 
 //for shaderCompiler
 #define MSGSHADERCOMPILED 1
+
+#define BATCH_MAX_TEXTURE 12
