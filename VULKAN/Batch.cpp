@@ -148,7 +148,7 @@ Batch::Batch(MaterialTemplateBase* materialTemplate)
 
 Batch::~Batch()
 {
-
+	Destruct();
 }
 
 void Batch::AddObject(Object* obj)
@@ -409,6 +409,22 @@ void Batch::Destruct()
 {
 	//TODO
 	m_isReady = false;
+
+	if (!m_batchBuffer)
+		MemoryManager::GetInstance()->FreeHandle(m_batchBuffer);
+
+	if (!m_indirectCommandBuffer)
+		MemoryManager::GetInstance()->FreeHandle(m_indirectCommandBuffer);
+
+	if (!m_batchStorageBuffer)
+		MemoryManager::GetInstance()->FreeHandle(m_batchStorageBuffer);
+
+	m_materialTemplate = nullptr;
+
+	m_indirectCommands.clear();
+	m_objects.size();
+
+	// TODO m_batchDescriptorSets i dont know how to approach the problem with descriptor sets being cleared and new construction being allocated. even if a batch is deleted, descriptors remain untill de descriptor pool is deleted
 }
 
 void Batch::PreRender()
