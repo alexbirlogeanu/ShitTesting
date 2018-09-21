@@ -457,7 +457,6 @@ void Batch::Cleanup()
 
 void Batch::Destruct()
 {
-	//TODO
 	m_isReady = false;
 
 	if (!m_batchBuffer)

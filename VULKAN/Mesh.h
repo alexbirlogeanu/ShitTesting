@@ -120,6 +120,8 @@ private:
     BoundingBox						m_bbox;
     unsigned int					m_nbOfIndexes;
 
+	bool							m_usedInBatching;
+
     struct InputVertexDescription
     {
         VkPipelineVertexInputStateCreateInfo       vertexDescription;

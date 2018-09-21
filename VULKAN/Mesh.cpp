@@ -145,6 +145,7 @@ Mesh::Mesh()
 	, m_meshBuffer(nullptr)
 	, m_vertexSubBuffer(nullptr)
 	, m_indexSubBuffer(nullptr)
+	, m_usedInBatching(true)
 {
 }
 
@@ -155,6 +156,7 @@ Mesh::Mesh(const std::vector<SVertex>& vertexes, const std::vector<unsigned int>
 	, m_indexSubBuffer(nullptr)
     , m_vertexes(vertexes)
     , m_indices(indices)
+	, m_usedInBatching(false)
 {
     Create();
 }
@@ -164,6 +166,7 @@ Mesh::Mesh(const std::string filename) //use the binarized version
 	, m_meshBuffer(nullptr)
 	, m_vertexSubBuffer(nullptr)
 	, m_indexSubBuffer(nullptr)
+	, m_usedInBatching(false)
 {
 	LoadFromFile(filename);
 }
@@ -198,7 +201,9 @@ void Mesh::LoadFromFile(const std::string filename)
 void Mesh::Create()
 {
 	m_nbOfIndexes = (unsigned int)m_indices.size();
-	MeshManager::GetInstance()->RegisterForUploading(this);
+
+	if (!m_usedInBatching)
+		MeshManager::GetInstance()->RegisterForUploading(this);
 
 	CreateBoundigBox();
 }
