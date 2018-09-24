@@ -19,6 +19,8 @@ public:
 	//Construct
 	void AddBinding(unsigned int binding, VkDescriptorType type, VkShaderStageFlags flags, unsigned int count = 1);
 	void Construct();
+
+	bool IsValid() const { return m_descSetLayoutHandle != VK_NULL_HANDLE; }
 private:
 	std::vector<VkDescriptorSetLayoutBinding>	m_bindings;
 	VkDescriptorSetLayout						m_descSetLayoutHandle;

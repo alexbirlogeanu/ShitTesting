@@ -261,9 +261,11 @@ void CPipeline::AddPushConstant(VkPushConstantRange range)
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 CGraphicPipeline::CGraphicPipeline()
-    : m_vertexShader(VK_NULL_HANDLE)
-    , m_fragmentShader(VK_NULL_HANDLE)
-    , m_geometryShader(VK_NULL_HANDLE)    
+	: m_vertexShader(VK_NULL_HANDLE)
+	, m_fragmentShader(VK_NULL_HANDLE)
+	, m_geometryShader(VK_NULL_HANDLE)
+	, m_tesselationControlShader(VK_NULL_HANDLE)
+	, m_tesselationEvaluationShader(VK_NULL_HANDLE)
 {
     CreateVertexInput();
     CreateInputAssemblyState();
@@ -271,6 +273,7 @@ CGraphicPipeline::CGraphicPipeline()
     CreateRasterizationInfo();
     CreateMultisampleInfo();
     CreateDepthInfo();
+	CreateTesselationInfo();
 }
 
 CGraphicPipeline::~CGraphicPipeline()
@@ -305,7 +308,7 @@ void CGraphicPipeline::CreatePipeline()
     gpci.pStages = m_pipelineStages.data();
     gpci.pVertexInputState = &m_pipelineVertexInfo;
     gpci.pInputAssemblyState = &m_pipelineInputAssemblyInfo;
-    gpci.pTessellationState = nullptr; //no tesselation
+    gpci.pTessellationState = &m_pipelineTesselationInfo;
     gpci.pViewportState = &m_pipelineViewportInfo;
     gpci.pRasterizationState = &m_pipelineRasterizationInfo;
     gpci.pMultisampleState = &m_pipelineMultisampleInfo;
@@ -431,6 +434,13 @@ void CGraphicPipeline::CreateDynamicStateInfo() //before creation update the str
     m_pipelineDynamicState.pDynamicStates = m_dynamicStates.data();
 }
 
+void CGraphicPipeline::CreateTesselationInfo()
+{
+	cleanStructure(m_pipelineTesselationInfo);
+	m_pipelineTesselationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
+	m_pipelineTesselationInfo.patchControlPoints = 3;
+}
+
 void CGraphicPipeline::CleanInternal()
 {
     VkDevice dev = vk::g_vulkanContext.m_device;
@@ -500,6 +510,16 @@ void CGraphicPipeline::SetGeometryShaderFile(const std::string& file)
     m_geometryFilename = file;
 }
 
+void CGraphicPipeline::SetTesselationControlShaderFile(const std::string& file)
+{
+	m_tesselationControlFilename = file;
+}
+
+void CGraphicPipeline::SetTesselationEvaluationShaderFile(const std::string& file)
+{
+	m_tesselationEvaluationFilename = file;
+}
+
 void CGraphicPipeline::SetCullMode(VkCullModeFlagBits cullmode)
 {
     m_pipelineRasterizationInfo.cullMode = cullmode;
@@ -547,6 +567,11 @@ void CGraphicPipeline::AddDynamicState(VkDynamicState state)
     m_dynamicStates.push_back(state);
 }
 
+void CGraphicPipeline::SetPolygonMode(VkPolygonMode mode)
+{
+	m_pipelineRasterizationInfo.polygonMode = mode;
+}
+
 void CGraphicPipeline::CompileShaders()
 {
     TRAP(!m_vertexFilename.empty());
@@ -555,6 +580,12 @@ void CGraphicPipeline::CompileShaders()
         TRAP(CreateShaderModule(m_fragmentFilename, m_fragmentShader));
     if(!m_geometryFilename.empty())
         TRAP(CreateShaderModule(m_geometryFilename, m_geometryShader));
+
+	if (!m_tesselationControlFilename.empty())
+		TRAP(CreateShaderModule(m_tesselationControlFilename, m_tesselationControlShader));
+
+	if (!m_tesselationEvaluationFilename.empty())
+		TRAP(CreateShaderModule(m_tesselationEvaluationFilename, m_tesselationEvaluationShader));
 }
 
 void CGraphicPipeline::CreatePipelineStages()
@@ -568,6 +599,12 @@ void CGraphicPipeline::CreatePipelineStages()
 
     if(m_geometryShader != VK_NULL_HANDLE)
         m_pipelineStages.push_back(CreatePipelineStage(m_geometryShader, VK_SHADER_STAGE_GEOMETRY_BIT));
+
+	if (m_tesselationControlShader != VK_NULL_HANDLE)
+		m_pipelineStages.push_back(CreatePipelineStage(m_tesselationControlShader, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT));
+
+	if (m_tesselationEvaluationShader != VK_NULL_HANDLE)
+		m_pipelineStages.push_back(CreatePipelineStage(m_tesselationEvaluationShader, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -721,6 +758,9 @@ void CRenderer::Init()
 
 void CRenderer::CreateDescPool(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int maxSets)
 {
+	if (maxSets == 0)
+		return;
+
     VkDescriptorPoolCreateInfo descPoolCi;
     cleanStructure(descPoolCi);
     descPoolCi.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;

@@ -238,6 +238,12 @@ CTexture::CTexture()
 
 }
 
+CTexture::CTexture(const std::string& filename)
+	: m_image(nullptr)
+	, SeriableImpl<CTexture>("texture")
+{
+	SetFilename(filename);
+}
 const VkDescriptorImageInfo& CTexture::GetTextureDescriptor() const  
 {
     return m_textureInfo;

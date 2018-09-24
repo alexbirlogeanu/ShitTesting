@@ -250,6 +250,8 @@ public:
     void SetVertexShaderFile(const std::string& file);
     void SetFragmentShaderFile(const std::string file);
     void SetGeometryShaderFile(const std::string& file);
+	void SetTesselationControlShaderFile(const std::string& file);
+	void SetTesselationEvaluationShaderFile(const std::string& file);
     void SetCullMode(VkCullModeFlagBits cullmode);
     void AddBlendState(VkPipelineColorBlendAttachmentState blendState, unsigned int cnt = 1); //this should be in order
     void SetStencilOperations(VkStencilOp depthFail, VkStencilOp passOp, VkStencilOp failOp);
@@ -257,6 +259,7 @@ public:
     void SetLineWidth(float width);
     void SetStencilOp (VkCompareOp op);
     void AddDynamicState(VkDynamicState state);
+	void SetPolygonMode(VkPolygonMode mode);
 
     static VkPipelineColorBlendAttachmentState CreateDefaultBlendState()
     {
@@ -296,15 +299,20 @@ private:
     void CreateDepthInfo();
     void CreateColorBlendInfo();
     void CreateDynamicStateInfo();
+	void CreateTesselationInfo();
 
 private:
     VkShaderModule                                      m_vertexShader;
     VkShaderModule                                      m_fragmentShader;
     VkShaderModule                                      m_geometryShader;
+	VkShaderModule										m_tesselationControlShader;
+	VkShaderModule										m_tesselationEvaluationShader;
 
     std::string                                         m_vertexFilename;
     std::string                                         m_fragmentFilename;
     std::string                                         m_geometryFilename;
+	std::string											m_tesselationControlFilename;
+	std::string											m_tesselationEvaluationFilename;
 private:
     VkPipelineVertexInputStateCreateInfo                m_pipelineVertexInfo;
     VkPipelineInputAssemblyStateCreateInfo              m_pipelineInputAssemblyInfo;
@@ -316,6 +324,7 @@ private:
     VkPipelineRasterizationStateCreateInfo              m_pipelineRasterizationInfo;
     VkPipelineMultisampleStateCreateInfo                m_pipelineMultisampleInfo;
     VkPipelineDepthStencilStateCreateInfo               m_pipelineDepthStencilInfo;
+	VkPipelineTessellationStateCreateInfo				m_pipelineTesselationInfo;
 
     VkPipelineColorBlendStateCreateInfo                 m_pipelineBlendStateInfo;
     std::vector<VkPipelineColorBlendAttachmentState>    m_blendAttachmentState;
@@ -375,7 +384,7 @@ protected:
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)=0;
 
     virtual void UpdateResourceTable() {}
-    virtual void UpdateGraphicInterface() {} //= 0;
+    virtual void UpdateGraphicInterface() {}
 
     void Reload();
     void CreateDescPool(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int maxSets);

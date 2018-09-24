@@ -37,6 +37,8 @@
 #include "Object.h"
 #include "PointLightRenderer2.h"
 #include "ScreenSpaceReflectionRenderer.h"
+#include "TerrainRenderer.h"
+
 #include "MemoryManager.h"
 
 #define OUT_FORMAT VK_FORMAT_R16G16B16A16_SFLOAT
@@ -920,6 +922,7 @@ private:
     void Setup3DTextureRendering();
     void SetupVolumetricRendering();
 	void SetupScreenSpaceReflectionsRendering();
+	void SetupTerrainRendering();
 
     void CreateDeferredRenderPass(const FramebufferDescription& fbDesc);
     void CreateAORenderPass(const FramebufferDescription& fbDesc);
@@ -937,6 +940,7 @@ private:
     void Create3DTextureRenderPass(const FramebufferDescription& fbDesc);
     void CreateVolumetricRenderPass(const FramebufferDescription& fbDesc);
 	void CreateSSRRenderPass(const FramebufferDescription& fbDesc);
+	void CreateTerrainRenderPass(const FramebufferDescription& fbDesc);
 
     void CreateCommandBuffer();
   
@@ -997,6 +1001,7 @@ private:
     VkRenderPass                m_3DtextureRenderPass;
     VkRenderPass                m_volumetricRenderPass;
 	VkRenderPass				m_ssrRenderPass;
+	VkRenderPass				m_terrainRenderPass;
 
     VkQueue                     m_queue;
 
@@ -1039,6 +1044,8 @@ private:
     CSunRenderer*               m_sunRenderer;
     CUIRenderer*                m_uiRenderer;
 	ScreenSpaceReflectionsRenderer*	m_ssrRenderer;
+	TerrainRenderer*			m_terrainRenderer;
+
     CUIManager*                 m_uiManager;
 
     //bool                        m_pickRecorded;
@@ -1147,6 +1154,7 @@ CApplication::CApplication()
     Setup3DTextureRendering();
     SetupVolumetricRendering();
 	SetupScreenSpaceReflectionsRendering();
+	SetupTerrainRendering();
 
     GetPickManager()->Setup();
 
@@ -2014,6 +2022,23 @@ void CApplication::SetupParticleRendering()
 	 m_ssrRenderer->Init();
  }
 
+ void CApplication::SetupTerrainRendering()
+ {
+	 FramebufferDescription fbDesc;
+	 fbDesc.Begin(4);
+	 fbDesc.AddColorAttachmentDesc(0, g_commonResources.GetAs<ImageHandle*>(EResourceType_AlbedoImage));
+	 fbDesc.AddColorAttachmentDesc(1, g_commonResources.GetAs<ImageHandle*>(EResourceType_SpecularImage));
+	 fbDesc.AddColorAttachmentDesc(2, g_commonResources.GetAs<ImageHandle*>(EResourceType_NormalsImage));
+	 fbDesc.AddColorAttachmentDesc(3, g_commonResources.GetAs<ImageHandle*>(EResourceType_PositionsImage));
+	 fbDesc.AddDepthAttachmentDesc(g_commonResources.GetAs<ImageHandle*>(EResourceType_DepthBufferImage));
+	 fbDesc.End();
+
+	 CreateTerrainRenderPass(fbDesc);
+	 
+	 m_terrainRenderer = new TerrainRenderer(m_terrainRenderPass);
+	 m_terrainRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
+	 m_terrainRenderer->Init();
+ }
 
 void CApplication::CreateShadowRenderPass(const FramebufferDescription& fbDesc)
 {
@@ -2375,6 +2400,31 @@ void CApplication::CreateSSRRenderPass(const FramebufferDescription& fbDesc)
 	NewRenderPass(&m_ssrRenderPass, ad, subpasses, dependencies);
 }
 
+void CApplication::CreateTerrainRenderPass(const FramebufferDescription& fbDesc)
+{
+	std::vector<VkAttachmentDescription> ad;
+	ad.resize(fbDesc.m_colorAttachments.size() + 1);
+	
+	for (uint32_t i = 0; i < fbDesc.m_colorAttachments.size(); ++i)
+		AddAttachementDesc(ad[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[i].format, VK_ATTACHMENT_LOAD_OP_LOAD);
+
+	AddAttachementDesc(ad[fbDesc.m_colorAttachments.size()], VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format, VK_ATTACHMENT_LOAD_OP_LOAD);
+
+	std::vector<VkAttachmentReference> atRef;
+	for (unsigned int i = 0; i < fbDesc.m_colorAttachments.size(); ++i)
+		atRef.push_back(CreateAttachmentReference(i, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
+
+	atRef.push_back(CreateAttachmentReference(fbDesc.m_colorAttachments.size(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL));
+
+	std::vector<VkSubpassDescription> subpasses;
+	subpasses.push_back(CreateSubpassDesc(atRef.data(), (uint32_t)fbDesc.m_colorAttachments.size(), &atRef[fbDesc.m_colorAttachments.size()]));
+
+	std::vector<VkSubpassDependency> dependencies;
+	//dependencies.push_back(CreateSubpassDependency(VK_SUBPASS_EXTERNAL, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
+
+	NewRenderPass(&m_terrainRenderPass, ad, subpasses);
+}
+
 void CApplication::CreateCommandBuffer()
 {
     VkCommandPoolCreateInfo cmdPoolCi;
@@ -2598,6 +2648,7 @@ void CApplication::Render()
     RenderShadows();
 
     m_objectRenderer->Render();
+	m_terrainRenderer->Render();//TODO object renderer clear the GBuffer. I have to move it at the start of frame
 
     vk::CmdPipelineBarrier(vk::g_vulkanContext.m_mainCommandBuffer, 
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 
