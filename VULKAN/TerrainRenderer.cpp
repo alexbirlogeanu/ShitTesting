@@ -83,8 +83,8 @@ void TerrainRenderer::CreateDescriptorSetLayout()
 
 void TerrainRenderer::CreatePipeline()
 {
-	m_pipeline.SetVertexShaderFile("vert.spv");
-	m_pipeline.SetFragmentShaderFile("frag.spv");
+	m_pipeline.SetVertexShaderFile("terrain.vert");
+	m_pipeline.SetFragmentShaderFile("terrain.frag");
 	m_pipeline.SetTesselationControlShaderFile("tesselation.tesc");
 	m_pipeline.SetTesselationEvaluationShaderFile("tesselation.tese");
 	m_pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 4);

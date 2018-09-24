@@ -10,3 +10,4 @@ ShitTesting/shaders/bin/
 *.pdb
 *.idb
 *.log
+!/ShitTesting/obj/*
