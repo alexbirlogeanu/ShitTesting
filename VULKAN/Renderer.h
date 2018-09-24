@@ -260,6 +260,7 @@ public:
     void SetStencilOp (VkCompareOp op);
     void AddDynamicState(VkDynamicState state);
 	void SetPolygonMode(VkPolygonMode mode);
+	void SetTesselationPatchSize(uint32_t size);
 
     static VkPipelineColorBlendAttachmentState CreateDefaultBlendState()
     {

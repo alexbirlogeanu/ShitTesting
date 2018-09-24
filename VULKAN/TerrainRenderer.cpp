@@ -7,7 +7,7 @@
 
 struct TerrainParams
 {
-	glm::mat4 mvp;
+	glm::mat4 ViewProjMatrix;
 	glm::mat4 worldMatrix;
 	glm::vec4 materialProp; //x = roughness, y = k, z = F0
 	glm::vec4 viewPos;
@@ -69,13 +69,13 @@ void TerrainRenderer::PreRender()
 
 	params->materialProp = glm::vec4(0.95, 0.05, 0.9, 0.0f);
 	params->worldMatrix = modelMatrix;
-	params->mvp = projMatrix * ms_camera.GetViewMatrix() * modelMatrix;
+	params->ViewProjMatrix = projMatrix * ms_camera.GetViewMatrix();
 
 }
 
 void TerrainRenderer::CreateDescriptorSetLayout()
 {
-	m_descriptorLayout.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 1);
+	m_descriptorLayout.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, 1);
 	m_descriptorLayout.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1);
 
 	m_descriptorLayout.Construct();
@@ -85,12 +85,13 @@ void TerrainRenderer::CreatePipeline()
 {
 	m_pipeline.SetVertexShaderFile("vert.spv");
 	m_pipeline.SetFragmentShaderFile("frag.spv");
-	//m_pipeline.SetTesselationControlShaderFile("tesselation.tesc");
-	//m_pipeline.SetTesselationEvaluationShaderFile("tesselation.tese");
+	m_pipeline.SetTesselationControlShaderFile("tesselation.tesc");
+	m_pipeline.SetTesselationEvaluationShaderFile("tesselation.tese");
 	m_pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 4);
-	m_pipeline.SetPolygonMode(VK_POLYGON_MODE_FILL);
+	m_pipeline.SetPolygonMode(VK_POLYGON_MODE_LINE);
 	m_pipeline.SetDepthTest(true);
-	m_pipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	m_pipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_PATCH_LIST);
+	m_pipeline.SetTesselationPatchSize(3);
 	m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
 	m_pipeline.CreatePipelineLayout(m_descriptorLayout.Get());
 	m_pipeline.Init(this, m_renderPass, 0);

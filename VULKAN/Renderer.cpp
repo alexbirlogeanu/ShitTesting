@@ -572,6 +572,11 @@ void CGraphicPipeline::SetPolygonMode(VkPolygonMode mode)
 	m_pipelineRasterizationInfo.polygonMode = mode;
 }
 
+void CGraphicPipeline::SetTesselationPatchSize(uint32_t size)
+{
+	m_pipelineTesselationInfo.patchControlPoints = size;
+}
+
 void CGraphicPipeline::CompileShaders()
 {
     TRAP(!m_vertexFilename.empty());

@@ -60,4 +60,6 @@
 	<shader shaderfile="spv.normalmapmaterial.frag" out="normalmapmaterial.frag"/>
 	<shader shaderfile="spv.tesselation.tesc" out="tesselation.tesc"/>
 	<shader shaderfile="spv.tesselation.tese" out="tesselation.tese"/>
+	<shader shaderfile="spv.terrain.vert" out="terrain.vert"/>
+	<shader shaderfile="spv.terrain.frag" out="terrain.frag"/>
 </shaderlist>
