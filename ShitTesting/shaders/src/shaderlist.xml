@@ -62,4 +62,5 @@
 	<shader shaderfile="spv.tesselation.tese" out="tesselation.tese"/>
 	<shader shaderfile="spv.terrain.vert" out="terrain.vert"/>
 	<shader shaderfile="spv.terrain.frag" out="terrain.frag"/>
+	<shader shaderfile="spv.terrain.geom" out="terrain.geom"/>
 </shaderlist>

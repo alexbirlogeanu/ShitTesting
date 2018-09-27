@@ -108,12 +108,14 @@ public:
 	VkImageView  GetImageView() const;
 	void CreateTexture(const SImageData& imageData, bool ownData);
 
+	void SetSamplerFilter(VkFilter filter) { m_filter = filter; };
 protected:
     //void CleanUp();
 protected:
 	ImageHandle*			m_image;
     VkSampler               m_textSampler;
     VkDescriptorImageInfo   m_textureInfo;
+	VkFilter				m_filter;
 
 	DECLARE_PROPERTY(std::string, Filename, CTexture);
 	DECLARE_PROPERTY(bool, IsSRGB, CTexture);

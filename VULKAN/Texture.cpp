@@ -227,6 +227,7 @@ END_PROPERTY_MAP(CTexture)
 CTexture::CTexture(const SImageData& image, bool ownData)
 	: m_image(nullptr)
 	, SeriableImpl<CTexture>("texture")
+	, m_filter(VK_FILTER_LINEAR)
 {
     CreateTexture(image, ownData);
 }
@@ -234,6 +235,7 @@ CTexture::CTexture(const SImageData& image, bool ownData)
 CTexture::CTexture()
 	: m_image(nullptr)
 	, SeriableImpl<CTexture>("texture")
+	, m_filter(VK_FILTER_LINEAR)
 {
 
 }
@@ -241,6 +243,7 @@ CTexture::CTexture()
 CTexture::CTexture(const std::string& filename)
 	: m_image(nullptr)
 	, SeriableImpl<CTexture>("texture")
+	, m_filter(VK_FILTER_LINEAR)
 {
 	SetFilename(filename);
 }
@@ -304,7 +307,11 @@ void CTexture::CreateTexture(const SImageData& imageData, bool ownData)
 
 	m_image = MemoryManager::GetInstance()->CreateImage(EMemoryContextType::Textures, imgTextInfo, imageData.fileName);
 
-    CreateLinearSampler(m_textSampler);
+	if (m_filter == VK_FILTER_LINEAR)
+		CreateLinearSampler(m_textSampler);
+	else
+		CreateNearestSampler(m_textSampler);
+
     SetObjectDebugName(m_image->GetView(), std::string("View_") + imageData.fileName); //this doesn't create anything ??
 
     m_textureInfo.sampler = m_textSampler;

@@ -23,12 +23,14 @@ private:
 	virtual void UpdateGraphicInterface() override;
 
 	void CreatePipeline();
+	void CreateGrid();
 private:
 	CGraphicPipeline				m_pipeline;
 	BufferHandle*					m_terrainParamsBuffer;
-	//Test tesselation part
+	
 	Mesh*							m_grid;
 	CTexture*						m_texture;
+	CTexture*						m_heightMap;
 
 	DescriptorSetLayout				m_descriptorLayout;
 	VkDescriptorSet					m_descSet;

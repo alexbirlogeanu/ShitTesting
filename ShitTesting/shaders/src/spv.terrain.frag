@@ -8,6 +8,7 @@ layout(location=2) out vec4 out_normal;
 layout(location=3) out vec4 out_position;
 
 layout(set=0, binding=1) uniform sampler2D text;
+layout(set = 0, binding = 2) uniform sampler2D HeightMap;
 
 layout(location=0) in vec4 normal;
 layout(location=1) in vec4 worldPos;
