@@ -40,6 +40,7 @@
 #include "TerrainRenderer.h"
 
 #include "MemoryManager.h"
+#include "Input.h"
 
 #define OUT_FORMAT VK_FORMAT_R16G16B16A16_SFLOAT
 //#define OUT_FORMAT VK_FORMAT_B8G8R8A8_UNORM
@@ -960,7 +961,7 @@ private:
     void CreateQueryPools();
 
     void SetupParticles();
-
+	void RegisterSpecialInputListeners(); //TODO find a better solution at refactoring
 	//TESTING
 	void RenderCameraFrustrum();
 
@@ -1125,6 +1126,7 @@ CApplication::CApplication()
     CreateSurface();
     CreateSwapChains();
 
+	InputManager::CreateInstance();
 	MemoryManager::CreateInstance();
 	MeshManager::CreateInstance();
 	CTextureManager::CreateInstance();
@@ -1221,6 +1223,7 @@ CApplication::~CApplication()
 	CTextureManager::DestroyInstance();
 	MeshManager::DestroyInstance();
 	MemoryManager::DestroyInstance();
+	InputManager::DestroyInstance();
 
     vk::DestroyCommandPool(dev, m_commandPool, nullptr);
     vk::DestroySurfaceKHR(vk::g_vulkanContext.m_instance, m_surface, nullptr);
@@ -1236,6 +1239,7 @@ void CApplication::Run()
 	MaterialLibrary::GetInstance()->Initialize(m_objectRenderer);
     CreateResources();
     CreateQueryPools();
+	RegisterSpecialInputListeners();
 	//RenderCameraFrustrum();
 
     DWORD start;
@@ -1257,6 +1261,7 @@ void CApplication::Run()
         }
         UpdateCamera();
         m_uiManager->Update();
+		InputManager::GetInstance()->Update();
 
         Render();
 
@@ -2420,9 +2425,9 @@ void CApplication::CreateTerrainRenderPass(const FramebufferDescription& fbDesc)
 	subpasses.push_back(CreateSubpassDesc(atRef.data(), (uint32_t)fbDesc.m_colorAttachments.size(), &atRef[fbDesc.m_colorAttachments.size()]));
 
 	std::vector<VkSubpassDependency> dependencies;
-	//dependencies.push_back(CreateSubpassDependency(VK_SUBPASS_EXTERNAL, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
+	dependencies.push_back(CreateSubpassDependency(VK_SUBPASS_EXTERNAL, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_DEPENDENCY_BY_REGION_BIT));
 
-	NewRenderPass(&m_terrainRenderPass, ad, subpasses);
+	NewRenderPass(&m_terrainRenderPass, ad, subpasses, dependencies);
 }
 
 void CApplication::CreateCommandBuffer()
@@ -2548,6 +2553,16 @@ void CApplication::SetupParticles()
     m_particlesRenderer->Register(m_smokeParticleSystem);
 }
 
+void CApplication::RegisterSpecialInputListeners()
+{
+	std::vector<WPARAM> cameraKeys{ 'A', 'S', 'D', 'W', VK_SPACE };
+	InputManager::GetInstance()->MapKeysPressed(cameraKeys, InputManager::KeyPressedCallback(&ms_camera, &CCamera::OnCameraKeyPressed));
+
+	std::vector<WPARAM> dirLightKeys{ VK_UP, VK_DOWN, VK_RIGHT, VK_LEFT, 'P', VK_OEM_PLUS, VK_OEM_MINUS };
+	InputManager::GetInstance()->MapKeysPressed(dirLightKeys, InputManager::KeyPressedCallback(&directionalLight, &CDirectionalLight::OnKeyboardPressed));
+	InputManager::GetInstance()->MapMouseButton(InputManager::MouseButtonsCallback(&directionalLight, &CDirectionalLight::OnMouseEvent));
+}
+
 void CApplication::CreateResources()
 {
     bool isSrgb = true;
@@ -2660,7 +2675,7 @@ void CApplication::Render()
     m_shadowResolveRenderer->Render();
 
     m_lightRenderer->Render();
-	m_pointLightRenderer2->Render();
+	//m_pointLightRenderer2->Render();
     m_sunRenderer->Render();
     m_skyRenderer->Render();
     m_particlesRenderer->Render();
@@ -2792,30 +2807,11 @@ void CApplication::ProcMsg(UINT uMsg, WPARAM wParam,LPARAM lParam)
         return;
     }
 
-    if(uMsg == WM_RBUTTONDOWN )
-    {
-        WORD key = GET_KEYSTATE_WPARAM(wParam);
-        if (key == MK_SHIFT)
-            m_particlesRenderer->ToggleSim();
-       /* else 
-        {
-           if (key == MK_CONTROL)
-               directionalLight.Shift(1.0f);
-           else
-               directionalLight.Rotate(1.0f);
-        }*/
-        return;
-    }
+	bool isMouseEvent = false;
 
     if(uMsg == WM_LBUTTONUP )
     {
         GetPickManager()->RegisterPick(glm::uvec2(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)));
-        return;
-    }
-
-    if(uMsg == WM_MBUTTONDOWN )
-    {
-        directionalLight.ToggleDebug();
         return;
     }
 
@@ -2840,57 +2836,7 @@ void CApplication::ProcMsg(UINT uMsg, WPARAM wParam,LPARAM lParam)
 
     if(uMsg == WM_KEYDOWN)
     {
-        float lightMoveFactor = 0.5f;
         GetPickManager()->RegisterKey((unsigned int)wParam);
-
-        if (m_sunRenderer->RegisterPick((unsigned int)wParam))
-            return;
-
-        if(wParam == VK_UP)
-        {
-            directionalLight.Shift(lightMoveFactor);
-            return;
-        }
-        else if(wParam == VK_DOWN)
-        {
-            directionalLight.Shift(-lightMoveFactor);
-            return;
-        }
-        else if(wParam == VK_RIGHT)
-        {
-            directionalLight.Rotate(lightMoveFactor);
-            return;
-        }
-        else if(wParam == VK_LEFT)
-        {
-            directionalLight.Rotate(-lightMoveFactor);
-            return;
-        }
-
-        if (wParam == VK_SPACE)
-        {
-            ms_camera.Reset();
-            return;
-        }
-
-        if (wParam == 'A')
-        {
-            ms_camera.Translate(glm::vec3(-1, 0.0f, 0.0f));
-        }
-        if (wParam == 'D')
-        {
-            ms_camera.Translate(glm::vec3(1, 0.0f, 0.0f));
-        }
-
-        if (wParam == 'W')
-        {
-             ms_camera.Translate(glm::vec3(0.0f, 0.0f, 1));
-        }
-
-        if (wParam == 'S')
-        {
-            ms_camera.Translate(glm::vec3(0.0f, 0.0f, -1));
-        }
 
         if (wParam == VK_F2)
         {
@@ -2922,20 +2868,7 @@ void CApplication::ProcMsg(UINT uMsg, WPARAM wParam,LPARAM lParam)
             m_uiManager->ToggleDisplayInfo();
         }
 
-        if (wParam == VK_OEM_PLUS)
-        {
-            directionalLight.ChangeLightIntensity(0.5f);
-        }
-
-        if (wParam == VK_OEM_MINUS)
-        {
-            directionalLight.ChangeLightIntensity(-0.5f);
-        }
-
-        if (wParam == 'P')
-        {
-            directionalLight.ChangeLightColor();
-        }
+		InputManager::GetInstance()->RegisterKeyboardEvent(wParam);
     }
 }
 

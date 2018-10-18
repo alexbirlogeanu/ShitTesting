@@ -1,5 +1,6 @@
 #include "Lights.h"
 #include "UI.h"
+#include "Input.h"
 
 CDirectionalLight::CDirectionalLight() 
     : m_alpha(45.0f) //degrees
@@ -90,6 +91,52 @@ void CDirectionalLight::CreateDebug(CUIManager* manager)
 
     UpdateDebug();
 }
+
+bool CDirectionalLight::OnKeyboardPressed(const KeyInput& keyInput)
+{
+	const float lightMoveFactor = 0.5f;
+	WPARAM key = keyInput.GetKeyPressed();
+
+	switch (key)
+	{
+		case VK_UP:
+			Shift(lightMoveFactor);
+			break;
+		case VK_DOWN:
+			Shift(-lightMoveFactor);
+			break;
+		case VK_RIGHT:
+			Rotate(lightMoveFactor);
+			break;
+		case VK_LEFT:
+			Rotate(-lightMoveFactor);
+			break;
+		case 'P':
+			ChangeLightColor();
+			break;
+		case VK_OEM_PLUS:
+			ChangeLightIntensity(0.5f);
+			break;
+		case VK_OEM_MINUS:
+			ChangeLightIntensity(-0.5f);
+			break;
+		default:
+			return false;
+	}
+
+	return true;
+}
+
+bool CDirectionalLight::OnMouseEvent(const MouseInput& mouseInput)
+{
+	if (mouseInput.IsButtonDown(MouseInput::Middle))
+	{
+		ToggleDebug();
+		return true;
+	}
+	return false;
+}
+
 
 void CDirectionalLight::UpdateDebug()
 {

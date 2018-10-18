@@ -11,6 +11,8 @@
 
 #define MAX_PARTICLES_PER_SYSTEM 100
 class BufferHandle;
+class MouseInput;
+
 class CParticle
 {
 public:
@@ -179,6 +181,8 @@ public:
 
     void Register(CParticleSystem* system);
     void RegisterDebugManager(CUIManager* manager);
+
+	bool OnMouseEvent(const MouseInput& mouseInput);
 protected:
     struct SParticlesParams
     {

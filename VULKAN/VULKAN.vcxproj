@@ -128,9 +128,11 @@
     <ClInclude Include="3DTexture.h" />
     <ClInclude Include="ao.h" />
     <ClInclude Include="Batch.h" />
+    <ClInclude Include="Callback.h" />
     <ClInclude Include="DebugMarkers.h" />
     <ClInclude Include="DefaultMaterial.h" />
     <ClInclude Include="DescriptorsUtils.h" />
+    <ClInclude Include="Input.h" />
     <ClInclude Include="Material.h" />
     <ClInclude Include="MemoryManager.h" />
     <ClInclude Include="MeshLoader.h" />
@@ -168,6 +170,7 @@
     <ClCompile Include="DebugMarkers.cpp" />
     <ClCompile Include="DefaultMaterial.cpp" />
     <ClCompile Include="DescriptorsUtils.cpp" />
+    <ClCompile Include="Input.cpp" />
     <ClCompile Include="Material.cpp" />
     <ClCompile Include="MemoryManager.cpp" />
     <ClCompile Include="MeshLoader.cpp" />

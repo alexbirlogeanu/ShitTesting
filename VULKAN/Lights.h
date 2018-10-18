@@ -2,9 +2,13 @@
 #include "glm/glm.hpp"
 #include <array>
 
+
 class CUIVector;
 class CUIAxisSystem;
 class CUIManager;
+class KeyInput;
+class MouseInput;
+
 class CDirectionalLight
 {
 public:
@@ -23,6 +27,9 @@ public:
 
     void ToggleDebug();
     void CreateDebug(CUIManager* manager);
+
+	bool OnKeyboardPressed(const KeyInput& key);
+	bool OnMouseEvent(const MouseInput& mouseInput);
 private:
     void Update();
     void UpdateDebug();

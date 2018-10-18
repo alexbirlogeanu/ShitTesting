@@ -33,14 +33,12 @@ vec3 ComputeNormal(vec3 o, vec3 p1, vec3 p2)
 
 void main()
 {
-	vec4 normals[3];
-	normals[0] = vec4(ComputeNormal(gl_in[0].gl_Position.xyz, gl_in[2].gl_Position.xyz,gl_in[1].gl_Position.xyz), 0.0f);
-	normals[1] = vec4(ComputeNormal(gl_in[1].gl_Position.xyz, gl_in[0].gl_Position.xyz,gl_in[2].gl_Position.xyz), 0.0f);
-	normals[2] = vec4(ComputeNormal(gl_in[2].gl_Position.xyz, gl_in[1].gl_Position.xyz,gl_in[0].gl_Position.xyz), 0.0f);
+	vec3 normal = ComputeNormal(gl_in[0].gl_Position.xyz, gl_in[2].gl_Position.xyz,gl_in[1].gl_Position.xyz);
+	
 	
 	for (uint i = 0; i < 3; ++i)
 	{
-		fg_normal = normals[i];
+		fg_normal = vec4(normal, 0.0f);
 		fg_worldPos = gl_in[i].gl_Position;
 		fg_material = te_material[i];
 		fg_uv = te_uv[i];

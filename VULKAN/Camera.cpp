@@ -1,4 +1,7 @@
 #include "Camera.h"
+
+#include "Input.h"
+
 //////////////////////////////////////////////////////////////////////////////////////
 //CFrustrum
 //////////////////////////////////////////////////////////////////////////////////////
@@ -111,4 +114,20 @@ void CCamera::UpdateViewMatrix()
     m_up = glm::normalize(m_up);
 
     m_viewMatrix = glm::lookAt(m_position, m_position + m_front, m_up);
+}
+
+bool CCamera::OnCameraKeyPressed(const KeyInput& key)
+{
+	if (key.IsKeyPressed('A'))
+		Translate(glm::vec3(-1, 0.0f, 0.0f));
+	else if (key.IsKeyPressed('D'))
+		Translate(glm::vec3(1, 0.0f, 0.0f));
+	else if (key.IsKeyPressed('W'))
+		Translate(glm::vec3(0.0f, 0.0f, 1));
+	else if (key.IsKeyPressed('S'))
+		Translate(glm::vec3(0.0f, 0.0f, -1));
+	else if (key.IsKeyPressed(VK_SPACE))
+		Reset();
+
+	return true;
 }

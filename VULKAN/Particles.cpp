@@ -9,7 +9,7 @@
 #include "Mesh.h"
 #include "Utils.h"
 #include "Texture.h"
-
+#include "Input.h"
 
 
 float randFloat()
@@ -285,6 +285,8 @@ CParticlesRenderer::CParticlesRenderer(VkRenderPass renderPass)
 {
     PerspectiveMatrix(m_projMatrix);
     ConvertToProjMatrix(m_projMatrix);
+
+	InputManager::GetInstance()->MapMouseButton(InputManager::MouseButtonsCallback(this, &CParticlesRenderer::OnMouseEvent));
 }
 
 CParticlesRenderer::~CParticlesRenderer()
@@ -440,6 +442,16 @@ void CParticlesRenderer::Register(CParticleSystem* system)
 void CParticlesRenderer::RegisterDebugManager(CUIManager* manager)
 {
     m_uiManager = manager;
+}
+
+bool CParticlesRenderer::OnMouseEvent(const MouseInput& mouseInput)
+{
+	if (mouseInput.IsButtonDown(MouseInput::Middle) && mouseInput.IsSpecialKeyPressed(SpecialKey::Shift))
+	{
+		ToggleSim();
+		return true;
+	}
+	return false;
 }
 
 void CParticlesRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)

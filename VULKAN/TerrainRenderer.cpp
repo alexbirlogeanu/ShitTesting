@@ -10,7 +10,7 @@ struct TerrainParams
 	glm::mat4 ViewProjMatrix;
 	glm::mat4 worldMatrix;
 	glm::vec4 materialProp; //x = roughness, y = k, z = F0
-	glm::vec4 viewPos;
+	glm::vec4 extra;
 };
 
 TerrainRenderer::TerrainRenderer(VkRenderPass renderPass)
@@ -77,6 +77,7 @@ void TerrainRenderer::PreRender()
 	params->worldMatrix = modelMatrix;
 	params->ViewProjMatrix = projMatrix * ms_camera.GetViewMatrix();
 
+	params->extra = glm::vec4(m_xDisplacement, m_yDisplacement, m_heightmapDelta);
 }
 
 void TerrainRenderer::CreateDescriptorSetLayout()
@@ -90,16 +91,16 @@ void TerrainRenderer::CreateDescriptorSetLayout()
 
 void TerrainRenderer::CreatePipeline()
 {
-	/*m_pipeline.SetVertexShaderFile("vert.spv");
+	m_pipeline.SetVertexShaderFile("vert.spv");
 	m_pipeline.SetFragmentShaderFile("frag.spv");
-	m_pipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);*/
+	m_pipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
-	m_pipeline.SetVertexShaderFile("terrain.vert");
-	m_pipeline.SetFragmentShaderFile("terrain.frag");
-	m_pipeline.SetTesselationControlShaderFile("tesselation.tesc");
-	m_pipeline.SetTesselationEvaluationShaderFile("tesselation.tese");
-	m_pipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_PATCH_LIST);
-	m_pipeline.SetGeometryShaderFile("terrain.geom");
+	//m_pipeline.SetVertexShaderFile("terrain.vert");
+	//m_pipeline.SetFragmentShaderFile("terrain.frag");
+	//m_pipeline.SetTesselationControlShaderFile("tesselation.tesc");
+	//m_pipeline.SetTesselationEvaluationShaderFile("tesselation.tese");
+	//m_pipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_PATCH_LIST);
+	//m_pipeline.SetGeometryShaderFile("terrain.geom");
 	m_pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 4);
 	m_pipeline.SetPolygonMode(VK_POLYGON_MODE_FILL);
 	m_pipeline.SetDepthTest(true);
@@ -121,8 +122,8 @@ void TerrainRenderer::CreateGrid()
 
 	const uint32_t xDivision = 512;
 	const uint32_t yDivision = 512;
-	const float xLength = 40.0f;
-	const float yLength = 40.0f;
+	const float xLength = 20.0f;
+	const float yLength = 20.0f;
 
 	const float xStride = xLength / xDivision;
 	const float yStride = yLength / yDivision;
@@ -132,6 +133,9 @@ void TerrainRenderer::CreateGrid()
 	vertices.reserve((xDivision + 1) * (yDivision + 1));
 
 	uint32_t imageDataStride = GetBytesFromFormat(heightMap.format);
+	m_xDisplacement = xStride;
+	m_yDisplacement = yStride;
+	m_heightmapDelta = glm::vec2(1) / glm::vec2(xDivision, yDivision);
 
 	for (uint32_t x = 0; x <= xDivision; ++x)
 	{
@@ -139,9 +143,13 @@ void TerrainRenderer::CreateGrid()
 		{
 			glm::vec3 normal(0.0f, 1.0f, 0.0f);
 			glm::vec2 uv(float(x) / float(xDivision), float(y) / float(yDivision));
-			glm::vec2 heightMapUV = uv * glm::vec2(heightMap.width, heightMap.height);
-			float height = heightMap.data[imageDataStride * (uint32_t(heightMapUV.y) * heightMap.width + uint32_t(heightMapUV.x))];
-			height = height / 265.0f * 2.0f;
+			float height;
+			{
+				//glm::vec2 heightMapUV = uv * glm::vec2(heightMap.width, heightMap.height);
+				//height = heightMap.data[imageDataStride * (uint32_t(heightMapUV.y) * heightMap.width + uint32_t(heightMapUV.x))];
+				//height = height / 265.0f * 2.0f;
+			}
+			height = 0.0f;
 			glm::vec3 pos(float(x) * xStride, height, float(y) * yStride);
 			pos -= glm::vec3(xDisplacement, 1.0f, yDisplacement); //set the grid center in 0,0
 

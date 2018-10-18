@@ -468,7 +468,7 @@ namespace vk {
         CheckInstanceForNeededExtension(mandatoryExtensions);
 
         std::vector<char*> layersName(1, "VK_LAYER_LUNARG_standard_validation");
-        layersName.push_back("VK_LAYER_RENDERDOC_Capture");
+        //layersName.push_back("VK_LAYER_RENDERDOC_Capture");
 
         VkInstanceCreateInfo instCrtInfo;
         cleanStructure(instCrtInfo);
@@ -511,7 +511,7 @@ namespace vk {
     bool CheckDeviceExtentions(std::vector<const char*>& deviceMandatoryExt)
     {
         deviceMandatoryExt.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-        deviceMandatoryExt.push_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
+        //deviceMandatoryExt.push_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
 		deviceMandatoryExt.push_back("VK_KHR_shader_draw_parameters");
 		
         std::vector<VkExtensionProperties> deviceExtProperties;

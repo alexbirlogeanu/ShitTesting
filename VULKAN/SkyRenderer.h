@@ -26,6 +26,8 @@ enum ESunFB
 class CTexture;
 class CUITextContainer;
 class CUIManager;
+class KeyInput;
+
 class CSunRenderer : public CRenderer
 {
 public:
@@ -37,7 +39,7 @@ public:
 	virtual void PreRender() override;
 
     void SetSunTexture(CTexture* t) { m_sunTexture = t; UpdateSunDescriptors(); }
-    bool RegisterPick(unsigned int key);
+	bool OnKeyPressed(const KeyInput& key);
 
     void CreateEditInfo(CUIManager* manager);
 protected:

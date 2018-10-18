@@ -1,6 +1,7 @@
 #include "SkyRenderer.h"
 #include "Texture.h"
 #include "UI.h"
+#include "Input.h"
 
 CSunRenderer::CSunRenderer(VkRenderPass renderPass)
     : CRenderer(renderPass, "SunRenderPass")
@@ -26,6 +27,9 @@ CSunRenderer::CSunRenderer(VkRenderPass renderPass)
     m_lightShaftWeight = 1.55f;
     m_lightShaftExposure = 0.04f;
     m_lightShaftSamples = 16.0f;
+
+	std::vector<WPARAM> keys{ '1', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', 'F', 'G'};
+	InputManager::GetInstance()->MapKeysPressed(keys, InputManager::KeyPressedCallback(this, &CSunRenderer::OnKeyPressed));
 }
 
 CSunRenderer::~CSunRenderer()
@@ -169,8 +173,9 @@ void CSunRenderer::UpdateGraphicInterface()
     //UpdateSunDescriptors();
 };
 
-bool CSunRenderer::RegisterPick(unsigned int key)
+bool CSunRenderer::OnKeyPressed(const KeyInput& keyInput)
 {
+	WPARAM key = keyInput.GetKeyPressed();
     TRAP(m_editInfo);
     if(key == '1')
     {

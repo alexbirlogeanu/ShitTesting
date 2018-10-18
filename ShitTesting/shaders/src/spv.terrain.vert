@@ -22,8 +22,10 @@ layout(location=1) out vec2 uv;
 void main()
 {	
 	uv = in_uv;
+	const float maxHeight = 2.0f;
 	material = param.materialProp;
 	vec3 transNormal = inverse(transpose(mat3(param.worldMatrix))) * in_normal;
     gl_Position = (param.worldMatrix * vec4(position, 1));
+	gl_Position.y += texture(HeightMap, uv).r * maxHeight;
 	//gl_Position.y = 0.0f;
 }

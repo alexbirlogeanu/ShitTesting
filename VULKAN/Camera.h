@@ -5,6 +5,8 @@
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtc/constants.hpp"
 
+class KeyInput;
+
 class CFrustrum
 {
 public:
@@ -66,6 +68,8 @@ public:
     void Rotate(float x, float y);
     void Translate(glm::vec3 translateUnits);
     void Reset();
+
+	bool OnCameraKeyPressed(const KeyInput& key);
 private:
     void UpdateViewMatrix();
 private:

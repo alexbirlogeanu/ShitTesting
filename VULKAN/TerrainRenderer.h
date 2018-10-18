@@ -34,4 +34,9 @@ private:
 
 	DescriptorSetLayout				m_descriptorLayout;
 	VkDescriptorSet					m_descSet;
+
+	//temporary
+	float							m_xDisplacement;
+	float							m_yDisplacement;
+	glm::vec2						m_heightmapDelta;
 };
