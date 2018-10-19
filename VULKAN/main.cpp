@@ -2807,23 +2807,32 @@ void CApplication::ProcMsg(UINT uMsg, WPARAM wParam,LPARAM lParam)
         return;
     }
 
-	bool isMouseEvent = false;
 
-    if(uMsg == WM_LBUTTONUP )
+	if (uMsg > WM_LBUTTONUP && uMsg <= WM_MOUSELAST)
     {
-        GetPickManager()->RegisterPick(glm::uvec2(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)));
+		switch (uMsg)
+		{
+		case WM_LBUTTONDOWN:
+			InputManager::GetInstance()->RegisterMouseEvent(MouseInput::Left, MouseInput::ButtonState::Down, wParam, lParam);
+			break;
+		case WM_LBUTTONUP:
+			InputManager::GetInstance()->RegisterMouseEvent(MouseInput::Left, MouseInput::ButtonState::Up, wParam, lParam);
+			break;
+		case WM_MBUTTONDOWN:
+			InputManager::GetInstance()->RegisterMouseEvent(MouseInput::Middle, MouseInput::ButtonState::Down, wParam, lParam);
+			break;
+		case WM_MBUTTONUP:
+			InputManager::GetInstance()->RegisterMouseEvent(MouseInput::Middle, MouseInput::ButtonState::Up, wParam, lParam);
+			break;
+		case WM_RBUTTONDOWN:
+			InputManager::GetInstance()->RegisterMouseEvent(MouseInput::Right, MouseInput::ButtonState::Down, wParam, lParam);
+			break;
+		case WM_RBUTTONUP:
+			InputManager::GetInstance()->RegisterMouseEvent(MouseInput::Right, MouseInput::ButtonState::Up, wParam, lParam);
+			break;
+		}
         return;
     }
-
-    /* if(uMsg == WM_MOUSEWHEEL)
-    {
-    WORD key = GET_KEYSTATE_WPARAM(wParam);
-    float step = float(GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA);
-    if (key == MK_CONTROL)
-    directionalLight.Shift(step);
-    else
-    directionalLight.Rotate(step);
-    }*/
 
     if(uMsg == WM_COPYDATA)
     {
@@ -2836,8 +2845,6 @@ void CApplication::ProcMsg(UINT uMsg, WPARAM wParam,LPARAM lParam)
 
     if(uMsg == WM_KEYDOWN)
     {
-        GetPickManager()->RegisterKey((unsigned int)wParam);
-
         if (wParam == VK_F2)
         {
             m_centerCursor = !m_centerCursor;
@@ -2853,20 +2860,15 @@ void CApplication::ProcMsg(UINT uMsg, WPARAM wParam,LPARAM lParam)
             m_screenshotRequested = true;
         }
 
-        if (wParam == VK_F4)
-        {
-            GetPickManager()->ToggleEditMode();
-        }
-
         if (wParam == VK_F5)
         {
             m_enableFog = !m_enableFog;
         }
 
-        if (wParam == VK_TAB)
+       /* if (wParam == VK_TAB)
         {
             m_uiManager->ToggleDisplayInfo();
-        }
+        }*/
 
 		InputManager::GetInstance()->RegisterKeyboardEvent(wParam);
     }

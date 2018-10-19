@@ -17,6 +17,7 @@ class Mesh;
 class CTexture;
 class ImageHandle;
 class BufferHandle;
+class KeyInput;
 class C3DTextureRenderer : public CRenderer //give a proper name
 {
 public:
@@ -51,6 +52,7 @@ protected:
         glm::vec4 Waves[8]; // x - A, y - freq, zw - Velocity
     };
 
+	bool OnKeyPressed(const KeyInput& input);
 private:
    
     unsigned int                m_width;
@@ -71,6 +73,7 @@ private:
     VkDescriptorSet             m_generateDescSet;
 
     bool                        m_needGenerateTexture;
+	bool						m_isEnabled;
 };
 
 class CVolumetricRenderer : public CRenderer
@@ -89,6 +92,8 @@ protected:
 
     void CreateCullPipeline(CGraphicPipeline& pipeline, VkCullModeFlagBits cullmode);
     void UpdateShaderParams();
+
+	bool OnKeyPressed(const KeyInput& input);
 private:
     CGraphicPipeline               m_frontCullPipeline;
     CGraphicPipeline               m_backCullPipeline;
@@ -104,4 +109,6 @@ private:
 
     VkSampler               m_sampler;
     Mesh*                   m_cube;
+
+	bool					m_isEnabled;
 };

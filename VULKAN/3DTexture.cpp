@@ -1,9 +1,9 @@
 #include "3DTexture.h"
 #include "Mesh.h"
 #include "Texture.h"
+#include "Input.h"
 
 #include <random>
-
 C3DTextureRenderer::C3DTextureRenderer (VkRenderPass renderPass)
     : CRenderer(renderPass)
     , m_generateDescLayout(VK_NULL_HANDLE)
@@ -14,7 +14,9 @@ C3DTextureRenderer::C3DTextureRenderer (VkRenderPass renderPass)
     , m_depth(TEXTURE3DLAYERS)
     , m_uniformBuffer(nullptr)
     , m_needGenerateTexture(true)
+	, m_isEnabled(false)
 {
+	InputManager::GetInstance()->MapKeyPressed(VK_F5, InputManager::KeyPressedCallback(this, &C3DTextureRenderer::OnKeyPressed));
 }
 
 C3DTextureRenderer::~C3DTextureRenderer()
@@ -66,7 +68,7 @@ void C3DTextureRenderer::PreRender()
 
 void C3DTextureRenderer::Render()
 {
-    if (m_needGenerateTexture)
+    if (m_needGenerateTexture && m_isEnabled)
     {
         BeginMarkerSection("GenerateShitty3DTexture");
         PrepareTexture();
@@ -218,6 +220,17 @@ void C3DTextureRenderer::CopyTexture()
 {
 }
 
+bool C3DTextureRenderer::OnKeyPressed(const KeyInput& input)
+{
+	if (input.IsKeyPressed(VK_F5))
+	{
+		m_isEnabled = !m_isEnabled;
+		return true;
+	}
+	return false;
+}
+
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 //CVolumetricRendering
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -238,7 +251,9 @@ CVolumetricRenderer::CVolumetricRenderer(VkRenderPass renderPass)
     , m_sampler(VK_NULL_HANDLE)
     , m_uniformBuffer(nullptr)
     , m_cube(nullptr)
+	, m_isEnabled(false)
 {
+	InputManager::GetInstance()->MapKeyPressed(VK_F5, InputManager::KeyPressedCallback(this, &CVolumetricRenderer::OnKeyPressed));
 }
 
 CVolumetricRenderer::~CVolumetricRenderer()
@@ -413,4 +428,14 @@ void CVolumetricRenderer::UpdateShaderParams()
     params->ModelMatrix = modelMatrix;
     params->ProjMatrix = proj;
     params->ViewMatrix = ms_camera.GetViewMatrix();
+}
+
+bool CVolumetricRenderer::OnKeyPressed(const KeyInput& input)
+{
+	if (input.IsKeyPressed(VK_F5))
+	{
+		m_isEnabled = !m_isEnabled;
+		return true;
+	}
+	return false;
 }
