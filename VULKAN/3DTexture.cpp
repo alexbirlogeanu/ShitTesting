@@ -437,5 +437,6 @@ bool CVolumetricRenderer::OnKeyPressed(const KeyInput& input)
 		m_isEnabled = !m_isEnabled;
 		return true;
 	}
+
 	return false;
 }

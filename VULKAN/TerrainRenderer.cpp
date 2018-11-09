@@ -68,7 +68,7 @@ void TerrainRenderer::PreRender()
 {
 	TerrainParams* params = m_terrainParamsBuffer->GetPtr<TerrainParams*>();
 
-	glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, -3.0f));
+	glm::mat4 modelMatrix = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, -3.0f)), glm::vec3(5.0f));
 	glm::mat4 projMatrix;
 	PerspectiveMatrix(projMatrix);
 	ConvertToProjMatrix(projMatrix);
@@ -82,7 +82,7 @@ void TerrainRenderer::PreRender()
 
 void TerrainRenderer::CreateDescriptorSetLayout()
 {
-	m_descriptorLayout.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 1);
+	m_descriptorLayout.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, 1);
 	m_descriptorLayout.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1);
 	m_descriptorLayout.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1);
 
@@ -91,15 +91,16 @@ void TerrainRenderer::CreateDescriptorSetLayout()
 
 void TerrainRenderer::CreatePipeline()
 {
-	m_pipeline.SetVertexShaderFile("vert.spv");
+	/*m_pipeline.SetVertexShaderFile("vert.spv");
 	m_pipeline.SetFragmentShaderFile("frag.spv");
-	m_pipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	m_pipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);*/
 
-	//m_pipeline.SetVertexShaderFile("terrain.vert");
-	//m_pipeline.SetFragmentShaderFile("terrain.frag");
-	//m_pipeline.SetTesselationControlShaderFile("tesselation.tesc");
-	//m_pipeline.SetTesselationEvaluationShaderFile("tesselation.tese");
-	//m_pipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_PATCH_LIST);
+	m_pipeline.SetVertexShaderFile("terrain.vert");
+	m_pipeline.SetFragmentShaderFile("terrain.frag");
+	m_pipeline.SetTesselationControlShaderFile("tesselation.tesc");
+	m_pipeline.SetTesselationEvaluationShaderFile("tesselation.tese");
+	m_pipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_PATCH_LIST);
+	m_pipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
 	//m_pipeline.SetGeometryShaderFile("terrain.geom");
 	m_pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 4);
 	m_pipeline.SetPolygonMode(VK_POLYGON_MODE_FILL);
@@ -108,11 +109,14 @@ void TerrainRenderer::CreatePipeline()
 	m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
 	m_pipeline.CreatePipelineLayout(m_descriptorLayout.Get());
 	m_pipeline.Init(this, m_renderPass, 0);
+
+
 }
 
 void TerrainRenderer::CreateGrid()
 {
-	//m_grid = new Mesh("obj\\monkey.mb");
+	m_grid = new Mesh("obj\\monkey.mb");
+	return;
 	SImageData heightMap;
 	Read2DTextureData(heightMap, std::string(TEXTDIR) + "terrain.png", false);
 	
@@ -120,8 +124,8 @@ void TerrainRenderer::CreateGrid()
 	std::vector<SVertex> vertices;
 	std::vector<uint32_t> indices;
 
-	const uint32_t xDivision = 512;
-	const uint32_t yDivision = 512;
+	const uint32_t xDivision = 16;
+	const uint32_t yDivision = 16;
 	const float xLength = 20.0f;
 	const float yLength = 20.0f;
 
@@ -176,7 +180,7 @@ void TerrainRenderer::CreateGrid()
 			indices.push_back(tl);
 		}
 	}
-
+	delete[] heightMap.data;
 	m_grid = new Mesh(vertices, indices);
 }
 
