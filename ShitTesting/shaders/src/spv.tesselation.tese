@@ -2,7 +2,7 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 
-layout (triangles, equal_spacing, cw) in;
+layout (triangles, fractional_odd_spacing, ccw) in;
 
 layout(std140, set = 0, binding = 0) uniform in_params
 {
@@ -40,7 +40,7 @@ layout(location=0) out vec4 fg_normal;
 layout(location=1) out vec4 fg_worldPos; 
 layout(location=2) out vec4 fg_material; 
 layout(location=3) out vec2 fg_uv;
-
+layout(location=4) out vec4 fg_color;
 
 
 vec2 interpolate2D(vec2 v0, vec2 v1, vec2 v2)
@@ -71,9 +71,9 @@ void main()
 	float v2 = pow(v, 2.0f);
 	float w2 = pow(w, 2.0f);
 	
-	fg_normal.xyz = te_normal[1] * w2
-		+ te_normal[2] * u2 
-		+ te_normal[0] * v2
+	fg_normal.xyz = te_normal[0] * u2
+		+ te_normal[1] * v2
+		+ te_normal[2] * w2 
 		+ oPatch.n110 * w * u
 		+ oPatch.n011 * u * v
 		+ oPatch.n101 * w * v;
@@ -82,18 +82,23 @@ void main()
 	fg_normal = vec4(interpolate3D(te_normal[0], te_normal[1], te_normal[2]), 0.0f);
 	fg_normal = normalize(fg_normal);	
 	
-	vec3 worldPos = w3 * oPatch.b300 
-		+ u3 * oPatch.b030 
-		+ v3 * oPatch.b003 
-		+ 3.0f * w2 * u * oPatch.b210 
-		+ 3.0f * w * u2 * oPatch.b120 
-		+ 3.0f * w2 * v * oPatch.b201 
-		+ 3.0f * u2 * v * oPatch.b021 
-		+ 3.0f * w * v2 * oPatch.b102 
-		+ 3.0f * u * v2 * oPatch.b012 
+	//oPatch.b003 = vec3(gl_in[0].gl_Position); //P0
+	//oPatch.b300 = vec3(gl_in[1].gl_Position); //P1
+	//oPatch.b030 = vec3(gl_in[2].gl_Position); //P2
+	
+	vec3 worldPos = v3 * oPatch.b300 
+		+ w3 * oPatch.b030 
+		+ u3 * oPatch.b003 
+		+ 3.0f * v2 * w * oPatch.b210 
+		+ 3.0f * v * w2 * oPatch.b120 
+		+ 3.0f * v2 * u * oPatch.b201
+		+ 3.0f * v * u2 * oPatch.b102
+		+ 3.0f * w2 * u * oPatch.b021 
+		+ 3.0f * u2 * w * oPatch.b012 
 		+ 6 * w * u * v * oPatch.b111;
 	fg_worldPos = vec4(worldPos, 1.0f);
 	//vec4 origPos = vec4(interpolate3D(vec3(gl_in[0].gl_Position), vec3(gl_in[1].gl_Position), vec3(gl_in[2].gl_Position)), u3);
 	//fg_normal = fg_worldPos - origPos;
+	fg_color = vec4(u, v, w, 1.0f);
 	gl_Position = param.ViewProjMatrix * param.worldMatrix * fg_worldPos;
 }

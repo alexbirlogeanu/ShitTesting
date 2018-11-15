@@ -259,8 +259,10 @@ public:
     void SetLineWidth(float width);
     void SetStencilOp (VkCompareOp op);
     void AddDynamicState(VkDynamicState state);
-	void SetPolygonMode(VkPolygonMode mode);
 	void SetTesselationPatchSize(uint32_t size);
+	void SetWireframeSupport(bool allowWireframe);
+
+	void SwitchWireframe(bool isWireframe);
 
     static VkPipelineColorBlendAttachmentState CreateDefaultBlendState()
     {
@@ -314,6 +316,9 @@ private:
     std::string                                         m_geometryFilename;
 	std::string											m_tesselationControlFilename;
 	std::string											m_tesselationEvaluationFilename;
+
+	bool												m_allowWireframe;
+	bool												m_isWireframe;
 private:
     VkPipelineVertexInputStateCreateInfo                m_pipelineVertexInfo;
     VkPipelineInputAssemblyStateCreateInfo              m_pipelineInputAssemblyInfo;
@@ -334,6 +339,9 @@ private:
     std::vector<VkDynamicState>                         m_dynamicStates;
 
     std::vector<VkPipelineShaderStageCreateInfo>        m_pipelineStages;
+
+	VkPipeline											m_wireframePipeline;
+	VkPipeline											m_solidPipeline;
 };
 
 class CComputePipeline : public CPipeline

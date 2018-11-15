@@ -52,14 +52,14 @@ vec3 ComputeMidNormal(int i, int j)
 	vec3 Ni = vs_normal[i];
 	vec3 Nj = vs_normal[j];
 	vec3 Pij = Pj - Pi;
-	return normalize(Ni + Nj - 2 * ((Pij * (Ni + Nj)) / (Pij * Pij)) * Pij);
+	return Ni + Nj - 2 * ((Pij * (Ni + Nj)) / (Pij * Pij)) * Pij;
 }
 
 void ComputeControlPoints()
 {
-	oPatch.b003 = vec3(gl_in[0].gl_Position); //P0
-	oPatch.b300 = vec3(gl_in[1].gl_Position); //P1
-	oPatch.b030 = vec3(gl_in[2].gl_Position); //P2
+	oPatch.b003 = vec3(gl_in[2].gl_Position); //P0
+	oPatch.b300 = vec3(gl_in[0].gl_Position); //P1
+	oPatch.b030 = vec3(gl_in[1].gl_Position); //P2
 	
 	// Edges are names according to the opposing vertex 
    /*  vec3 EdgeB300 = oPatch.WorldPos_B003 - oPatch.WorldPos_B030; 
@@ -96,8 +96,8 @@ void ComputeControlPoints()
 	oPatch.b012 = ComputeMidPoint(oPatch.b003, oPatch.b030, vs_normal[2]);
 	
 	oPatch.n101 = ComputeMidNormal(1, 0);
-	oPatch.n110 = ComputeMidNormal(2, 1);
-	oPatch.n011 = ComputeMidNormal(0, 2);
+	oPatch.n110 = ComputeMidNormal(1, 2);
+	oPatch.n011 = ComputeMidNormal(2, 0);
 	
 	vec3 center = (oPatch.b030 + oPatch.b003 + oPatch.b300) / 3.0f;
 	oPatch.b111 = (oPatch.b021 + oPatch.b012 + oPatch.b102 + oPatch.b201 + oPatch.b210 + oPatch.b120) / 6.0;
@@ -111,11 +111,11 @@ void main()
 	te_normal[gl_InvocationID] = vs_normal[gl_InvocationID];
 	gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position; //we pass the world position that comes from VS
 	
-	//if (gl_InvocationID == 0)
+	if (gl_InvocationID == 0)
 		ComputeControlPoints();
 	
-	int outerTessLevel = 10;
-	int innerTessLevel = 10;
+	int outerTessLevel = 2;
+	int innerTessLevel = 2;
 	gl_TessLevelOuter[0] = outerTessLevel;
 	gl_TessLevelOuter[1] = outerTessLevel;
 	gl_TessLevelOuter[2] = outerTessLevel;

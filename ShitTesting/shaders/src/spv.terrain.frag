@@ -14,7 +14,7 @@ layout(location=0) in vec4 normal;
 layout(location=1) in vec4 worldPos;
 layout(location=2) in vec4 material;
 layout(location=3) in vec2 uv;
-
+layout(location=4) in vec4 debug;
 float Depth()
 {
 	float z = gl_FragCoord.z;
@@ -26,6 +26,7 @@ float Depth()
 void main()
 {  
 	albedo = texture(text, uv);
+	//albedo = debug;
 	out_normal = normal;
 	out_position = worldPos;
 	out_specular = material;

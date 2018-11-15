@@ -5,6 +5,8 @@
 #include "glm/glm.hpp"
 #include "Texture.h"
 
+#include "Input.h"
+
 struct TerrainParams
 {
 	glm::mat4 ViewProjMatrix;
@@ -48,6 +50,8 @@ void TerrainRenderer::Init()
 	AllocDescriptorSets(m_descriptorPool, m_descriptorLayout.Get(), &m_descSet);
 
 	CreatePipeline();
+
+	InputManager::GetInstance()->MapKeyPressed('M', InputManager::KeyPressedCallback(this, &TerrainRenderer::OnSwitchToWireframe));
 }
 
 void TerrainRenderer::Render()
@@ -68,12 +72,12 @@ void TerrainRenderer::PreRender()
 {
 	TerrainParams* params = m_terrainParamsBuffer->GetPtr<TerrainParams*>();
 
-	glm::mat4 modelMatrix = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, -3.0f)), glm::vec3(5.0f));
+	glm::mat4 modelMatrix = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.5f, -3.0f)), glm::vec3(5.0f));
 	glm::mat4 projMatrix;
 	PerspectiveMatrix(projMatrix);
 	ConvertToProjMatrix(projMatrix);
 
-	params->materialProp = glm::vec4(0.95, 0.05, 0.9, 0.0f);
+	params->materialProp = glm::vec4(0.90, 0.1, 0.5, 0.0f);
 	params->worldMatrix = modelMatrix;
 	params->ViewProjMatrix = projMatrix * ms_camera.GetViewMatrix();
 
@@ -91,26 +95,19 @@ void TerrainRenderer::CreateDescriptorSetLayout()
 
 void TerrainRenderer::CreatePipeline()
 {
-	/*m_pipeline.SetVertexShaderFile("vert.spv");
-	m_pipeline.SetFragmentShaderFile("frag.spv");
-	m_pipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);*/
-
 	m_pipeline.SetVertexShaderFile("terrain.vert");
 	m_pipeline.SetFragmentShaderFile("terrain.frag");
 	m_pipeline.SetTesselationControlShaderFile("tesselation.tesc");
 	m_pipeline.SetTesselationEvaluationShaderFile("tesselation.tese");
 	m_pipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_PATCH_LIST);
-	m_pipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
-	//m_pipeline.SetGeometryShaderFile("terrain.geom");
+	//m_pipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
 	m_pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 4);
-	m_pipeline.SetPolygonMode(VK_POLYGON_MODE_FILL);
+	m_pipeline.SetWireframeSupport(true);
 	m_pipeline.SetDepthTest(true);
 	m_pipeline.SetTesselationPatchSize(3);
 	m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
 	m_pipeline.CreatePipelineLayout(m_descriptorLayout.Get());
 	m_pipeline.Init(this, m_renderPass, 0);
-
-
 }
 
 void TerrainRenderer::CreateGrid()
@@ -182,6 +179,14 @@ void TerrainRenderer::CreateGrid()
 	}
 	delete[] heightMap.data;
 	m_grid = new Mesh(vertices, indices);
+}
+
+bool TerrainRenderer::OnSwitchToWireframe(const KeyInput& key)
+{
+	m_drawWireframe = !m_drawWireframe;
+	m_pipeline.SwitchWireframe(m_drawWireframe);
+
+	return true;
 }
 
 void TerrainRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)

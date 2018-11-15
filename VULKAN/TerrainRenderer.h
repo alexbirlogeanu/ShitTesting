@@ -6,6 +6,8 @@
 
 class Mesh;
 class BufferHandle;
+class KeyInput;
+
 class TerrainRenderer : public CRenderer
 {
 public:
@@ -24,6 +26,8 @@ private:
 
 	void CreatePipeline();
 	void CreateGrid();
+
+	bool OnSwitchToWireframe(const KeyInput& key);
 private:
 	CGraphicPipeline				m_pipeline;
 	BufferHandle*					m_terrainParamsBuffer;
@@ -39,4 +43,6 @@ private:
 	float							m_xDisplacement;
 	float							m_yDisplacement;
 	glm::vec2						m_heightmapDelta;
+
+	bool							m_drawWireframe;
 };

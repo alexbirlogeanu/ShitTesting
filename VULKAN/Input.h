@@ -79,8 +79,8 @@ public:
 
 	void MapMouseButton(MouseButtonsCallback cb);
 
-	void RegisterKeyboardEvent(WPARAM key); //TODO! need to establish the parameters
-	void RegisterMouseEvent(MouseInput::Button b, MouseInput::ButtonState state, WPARAM wparam, LPARAM lparam); //TODO! need to establish the parameters
+	void RegisterKeyboardEvent(WPARAM key);
+	void RegisterMouseEvent(MouseInput::Button b, MouseInput::ButtonState state, WPARAM wparam, LPARAM lparam);
 
 	void Update();
 private:

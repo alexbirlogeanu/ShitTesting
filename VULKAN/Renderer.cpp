@@ -266,6 +266,9 @@ CGraphicPipeline::CGraphicPipeline()
 	, m_geometryShader(VK_NULL_HANDLE)
 	, m_tesselationControlShader(VK_NULL_HANDLE)
 	, m_tesselationEvaluationShader(VK_NULL_HANDLE)
+	, m_wireframePipeline(VK_NULL_HANDLE)
+	, m_allowWireframe(false)
+	, m_isWireframe(false)
 {
     CreateVertexInput();
     CreateInputAssemblyState();
@@ -299,11 +302,13 @@ void CGraphicPipeline::CreatePipeline()
     CreateColorBlendInfo();
     CreateDynamicStateInfo();
 
+	VkPipelineCreateFlags createFlags = (m_allowWireframe) ? VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT : 0;
+
     VkGraphicsPipelineCreateInfo gpci;
     cleanStructure(gpci);
     gpci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     gpci.pNext = nullptr;
-    gpci.flags = 0;
+	gpci.flags = createFlags;
     gpci.stageCount = (uint32_t)m_pipelineStages.size();
     gpci.pStages = m_pipelineStages.data();
     gpci.pVertexInputState = &m_pipelineVertexInfo;
@@ -319,9 +324,23 @@ void CGraphicPipeline::CreatePipeline()
     gpci.renderPass = m_renderPass;
     gpci.subpass = m_subpassIndex;
     gpci.basePipelineHandle = VK_NULL_HANDLE;
-    gpci.basePipelineIndex = 0;
+    gpci.basePipelineIndex = -1;
 
-    VULKAN_ASSERT(vk::CreateGraphicsPipelines(vk::g_vulkanContext.m_device, VK_NULL_HANDLE, 1, &gpci, nullptr, &m_pipeline));
+	VULKAN_ASSERT(vk::CreateGraphicsPipelines(vk::g_vulkanContext.m_device, VK_NULL_HANDLE, 1, &gpci, nullptr, &m_solidPipeline));
+	
+	if (m_allowWireframe)
+	{
+		VkPipelineRasterizationStateCreateInfo wireRasterizationInfo = m_pipelineRasterizationInfo;
+		wireRasterizationInfo.polygonMode = VK_POLYGON_MODE_LINE;
+
+		gpci.flags = VK_PIPELINE_CREATE_DERIVATIVE_BIT;
+		gpci.pRasterizationState = &wireRasterizationInfo;
+		gpci.basePipelineHandle = m_solidPipeline;
+
+		VULKAN_ASSERT(vk::CreateGraphicsPipelines(vk::g_vulkanContext.m_device, VK_NULL_HANDLE, 1, &gpci, nullptr, &m_wireframePipeline));
+	}
+
+	SwitchWireframe(m_isWireframe);
 };
 
 void CGraphicPipeline::CreateVertexInput()
@@ -451,6 +470,18 @@ void CGraphicPipeline::CleanInternal()
 
     if(m_geometryShader != VK_NULL_HANDLE)
         vk::DestroyShaderModule(dev, m_geometryShader, nullptr);
+
+	if (m_tesselationControlShader != VK_NULL_HANDLE)
+		vk::DestroyShaderModule(dev, m_tesselationControlShader, nullptr);
+
+	if (m_tesselationEvaluationShader != VK_NULL_HANDLE)
+		vk::DestroyShaderModule(dev, m_tesselationEvaluationShader, nullptr);
+
+	if (m_isWireframe)
+		vk::DestroyPipeline(dev, m_solidPipeline, nullptr);
+	else if (m_wireframePipeline != VK_NULL_HANDLE)
+		vk::DestroyPipeline(dev, m_wireframePipeline, nullptr);
+
 }
 
 void CGraphicPipeline::SetVertexInputState(VkPipelineVertexInputStateCreateInfo& state)
@@ -567,14 +598,20 @@ void CGraphicPipeline::AddDynamicState(VkDynamicState state)
     m_dynamicStates.push_back(state);
 }
 
-void CGraphicPipeline::SetPolygonMode(VkPolygonMode mode)
-{
-	m_pipelineRasterizationInfo.polygonMode = mode;
-}
-
 void CGraphicPipeline::SetTesselationPatchSize(uint32_t size)
 {
 	m_pipelineTesselationInfo.patchControlPoints = size;
+}
+
+void CGraphicPipeline::SetWireframeSupport(bool allowWireframe)
+{
+	m_allowWireframe = allowWireframe;
+}
+
+void CGraphicPipeline::SwitchWireframe(bool isWireframe)
+{
+	m_isWireframe = isWireframe;
+	m_pipeline = (m_isWireframe && m_allowWireframe) ? m_wireframePipeline : m_solidPipeline;
 }
 
 void CGraphicPipeline::CompileShaders()
