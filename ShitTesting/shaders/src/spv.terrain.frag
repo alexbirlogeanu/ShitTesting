@@ -11,10 +11,11 @@ layout(set=0, binding=1) uniform sampler2D text;
 layout(set = 0, binding = 2) uniform sampler2D HeightMap;
 
 layout(location=0) in vec4 normal;
-layout(location=1) in vec4 worldPos;
-layout(location=2) in vec4 material;
-layout(location=3) in vec2 uv;
+layout(location=1) in vec4 material;
+layout(location=2) in vec2 uv;
+layout(location=3) in vec4 worldPos;
 layout(location=4) in vec4 debug;
+
 float Depth()
 {
 	float z = gl_FragCoord.z;

@@ -179,7 +179,7 @@ bool CSunRenderer::OnKeyPressed(const KeyInput& keyInput)
     TRAP(m_editInfo);
     if(key == '1')
     {
-        m_isEditMode ^= true;
+		m_isEditMode = !m_isEditMode;
         m_editInfo->SetVisible(m_isEditMode);
         UpdateEditInfo();
     }

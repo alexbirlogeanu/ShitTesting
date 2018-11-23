@@ -7,6 +7,7 @@
 class Mesh;
 class BufferHandle;
 class KeyInput;
+class MouseInput;
 
 class TerrainRenderer : public CRenderer
 {
@@ -27,9 +28,19 @@ private:
 	void CreatePipeline();
 	void CreateGrid();
 
-	bool OnSwitchToWireframe(const KeyInput& key);
+	void SwitchToWireframe();
+	void SwitchPipeline();
+	void ChangeTesselationLevel(int units);
+	void ChangeTesselationFactor(int units);
+
+	bool OnEditEnable(const KeyInput& key);
+
+	bool OnMouseInput(const MouseInput& mouseInput);
 private:
-	CGraphicPipeline				m_pipeline;
+	CGraphicPipeline				m_tessellatedPipeline;
+	CGraphicPipeline				m_simplePipeline;
+	CGraphicPipeline*				m_activePipeline;
+
 	BufferHandle*					m_terrainParamsBuffer;
 	
 	Mesh*							m_grid;
@@ -39,10 +50,8 @@ private:
 	DescriptorSetLayout				m_descriptorLayout;
 	VkDescriptorSet					m_descSet;
 
-	//temporary
-	float							m_xDisplacement;
-	float							m_yDisplacement;
-	glm::vec2						m_heightmapDelta;
+	glm::vec4						m_tesselationParameters;
 
 	bool							m_drawWireframe;
+	bool							m_editMode;
 };

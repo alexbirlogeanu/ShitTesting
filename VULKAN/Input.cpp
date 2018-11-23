@@ -37,11 +37,18 @@ void InputManager::RegisterMouseEvent(MouseInput::Button b, MouseInput::ButtonSt
 {
 	m_mouseInput.SetPoint(glm::uvec2(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)));
 	m_mouseInput.SetButtonState(b, state);
+	m_mouseInput.SetWheelDelta(GET_WHEEL_DELTA_WPARAM(wparam) / WHEEL_DELTA);
 
+	SetMouseSpecialKeyState(wparam);
+}
+
+
+void InputManager::SetMouseSpecialKeyState(WPARAM wparam)
+{
 	WORD keyMask = GET_KEYSTATE_WPARAM(wparam);
-	if ((keyMask | MK_SHIFT))
+	if ((keyMask & MK_SHIFT))
 		m_mouseInput.SetSpecialKeyPressed(SpecialKey::Shift);
-	else if (keyMask | MK_CONTROL)
+	else if (keyMask & MK_CONTROL)
 		m_mouseInput.SetSpecialKeyPressed(SpecialKey::Ctrl);
 }
 

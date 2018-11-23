@@ -8,4 +8,5 @@
 	<mesh file="obj\\sphere.obj"/>
 	<mesh file="obj\\monkey.obj"/>
 	<mesh file="obj\\grid.obj"/>
+	<mesh file="obj\\trig.obj"/>
 </meshes>

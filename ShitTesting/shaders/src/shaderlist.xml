@@ -63,4 +63,5 @@
 	<shader shaderfile="spv.terrain.vert" out="terrain.vert"/>
 	<shader shaderfile="spv.terrain.frag" out="terrain.frag"/>
 	<shader shaderfile="spv.terrain.geom" out="terrain.geom"/>
+	<shader shaderfile="spv.terrain_debug.vert" out="terrain_debug.vert"/>
 </shaderlist>

@@ -1057,7 +1057,6 @@ private:
     bool                        m_centerCursor;
     bool                        m_hideCursor;
     bool                        m_mouseMoved;
-    bool                        m_enableFog;
     float                       m_normMouseDX;
     float                       m_normMouseDY;
     float                       dt;
@@ -1118,7 +1117,6 @@ CApplication::CApplication()
     , m_normMouseDX(0.0f)
     , m_normMouseDY(0.0f)
     , m_needReset(false)
-    , m_enableFog(false)
 {
     vk::Load();
     InitWindow();
@@ -2680,11 +2678,8 @@ void CApplication::Render()
     m_skyRenderer->Render();
     m_particlesRenderer->Render();
 
-    if (m_enableFog)
-    {
-        m_3dTextureRenderer->Render();
-        m_volumetricRenderer->Render();
-    }
+    m_3dTextureRenderer->Render();
+    m_volumetricRenderer->Render();
 
     GetPickManager()->Update();
 
@@ -2808,7 +2803,7 @@ void CApplication::ProcMsg(UINT uMsg, WPARAM wParam,LPARAM lParam)
     }
 
 
-	if (uMsg > WM_LBUTTONUP && uMsg <= WM_MOUSELAST)
+	if (uMsg > WM_MOUSEFIRST && uMsg <= WM_MOUSELAST)
     {
 		switch (uMsg)
 		{
@@ -2829,6 +2824,9 @@ void CApplication::ProcMsg(UINT uMsg, WPARAM wParam,LPARAM lParam)
 			break;
 		case WM_RBUTTONUP:
 			InputManager::GetInstance()->RegisterMouseEvent(MouseInput::Right, MouseInput::ButtonState::Up, wParam, lParam);
+			break;
+		case WM_MOUSEWHEEL:
+			InputManager::GetInstance()->RegisterMouseEvent(MouseInput::Wheel, MouseInput::ButtonState::None, wParam, lParam);
 			break;
 		}
         return;
@@ -2858,11 +2856,6 @@ void CApplication::ProcMsg(UINT uMsg, WPARAM wParam,LPARAM lParam)
         if (wParam == VK_F5)
         {
             m_screenshotRequested = true;
-        }
-
-        if (wParam == VK_F5)
-        {
-            m_enableFog = !m_enableFog;
         }
 
        /* if (wParam == VK_TAB)

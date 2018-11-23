@@ -9,6 +9,7 @@ layout(std140, set = 0, binding = 0) uniform in_params
 	vec4 materialProp; //x = roughness, y = k, z = F0
 	vec4 extra;
 }param;
+
 layout(set = 0, binding = 2) uniform sampler2D HeightMap;
 
 layout(location=0) in vec3 position;

@@ -304,11 +304,17 @@ void CVolumetricRenderer::Init()
 
 void CVolumetricRenderer::PreRender()
 {
+	if (!m_isEnabled)
+		return;
+
 	UpdateShaderParams();
 }
 
 void CVolumetricRenderer::Render()
 {
+	if (!m_isEnabled)
+		return;
+
     VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
     StartRenderPass();
     

@@ -2,14 +2,14 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 
-layout (triangles, equal_spacing, cw) in;
+layout (triangles, fractional_odd_spacing, cw) in;
 
 layout(std140, set = 0, binding = 0) uniform in_params
 {
 	mat4 ViewProjMatrix;
-	mat4 worldMatrix;
-	vec4 materialProp; //x = roughness, y = k, z = F0
-	vec4 extra;
+	mat4 WorldMatrix;
+	vec4 MaterialProp; //x = roughness, y = k, z = F0
+	vec4 TesselationParams;  //x - outter, y - inner tessellation, z - tessellation factor
 }param;
 
 struct OutputPatch
@@ -35,9 +35,9 @@ layout(location=2) in vec2 te_uv[];
 layout(location=3) in OutputPatch iPatch[];
 
 layout(location=0) out vec4 fg_normal;
-layout(location=1) out vec4 fg_worldPos; 
-layout(location=2) out vec4 fg_material; 
-layout(location=3) out vec2 fg_uv;
+layout(location=1) out vec4 fg_material; 
+layout(location=2) out vec2 fg_uv;
+layout(location=3) out vec4 fg_worldPos; 
 layout(location=4) out vec4 fg_color;
 
 
@@ -52,11 +52,10 @@ vec3 interpolate3D(vec3 v0, vec3 v1, vec3 v2)
 }
 void main()
 {
-	fg_uv = interpolate2D(te_uv[0], te_uv[1], te_uv[2]);
-	fg_material = te_material[0];
+	const float tesFactor = param.TesselationParams.z;
 	
-	//fg_normal = vec4(oPatch.debug1, 0.0f);
-	//fg_material = vec4(oPatch.debug2, 0.0f);
+	fg_uv = interpolate2D(te_uv[1], te_uv[2], te_uv[0]);
+	fg_material = te_material[0];
 	
 	float u = gl_TessCoord.x;
 	float v = gl_TessCoord.y; 
@@ -68,8 +67,22 @@ void main()
 	float v3 = v2 * v;
 	float w3 = w2 * w;
 	
-	fg_normal = vec4(interpolate3D(te_normal[0], te_normal[1], te_normal[2]), 0.0f);
-	fg_normal = normalize(fg_normal);	
+	
+	vec3 n200 = te_normal[0];
+	vec3 n020 = te_normal[1];
+	vec3 n002 = te_normal[2];
+	vec3 n110 = normalize(vec3(iPatch[0].n110, iPatch[1].n110, iPatch[2].n110));
+	vec3 n011 = normalize(vec3(iPatch[0].n011, iPatch[1].n011, iPatch[2].n011));
+	vec3 n101 = normalize(vec3(iPatch[0].n101, iPatch[1].n101, iPatch[2].n101));
+	
+	vec3 pnNormal = n200 * w2 + n020 * u2 + n002 * v2
+					+ n110 * w * u + n011 * u * v + n101 * w * v;
+	
+	vec3 barNormal = interpolate3D(te_normal[1], te_normal[2], te_normal[0]);
+	vec3 finalNormal = mix(barNormal, pnNormal, tesFactor);
+	vec3 transNormal = inverse(transpose(mat3(param.WorldMatrix))) * finalNormal;
+	
+	fg_normal = vec4(normalize(transNormal), 0.0f);
 	
 	vec3 b300 = vec3(iPatch[0].b300, iPatch[1].b300, iPatch[2].b300);
 	vec3 b030 = vec3(iPatch[0].b030, iPatch[1].b030, iPatch[2].b030);
@@ -82,10 +95,6 @@ void main()
 	vec3 b012 = vec3(iPatch[0].b012, iPatch[1].b012, iPatch[2].b012);
 	vec3 b111 = vec3(iPatch[0].b111, iPatch[1].b111, iPatch[2].b111);
 	
-	/* oPatch.b300 = vec3(gl_in[0].gl_Position); //P0
-	oPatch.b030 = vec3(gl_in[1].gl_Position); //P1
-	oPatch.b003 = vec3(gl_in[2].gl_Position); //P2 */
-	
 	 vec3 worldPos = b300 * w3
 		+ b030 * u3 
 		+ b003 * v3
@@ -97,10 +106,9 @@ void main()
 		+ b012 * 3.0f * u * v2
 		+ b111 * 6.0f * u * v * w;
 		
-	vec3 origPos = interpolate3D(vec3(gl_in[0].gl_Position), vec3(gl_in[1].gl_Position), vec3(gl_in[2].gl_Position));
-	fg_worldPos = vec4(worldPos, 1.0f);
-	//vec4 origPos = vec4(interpolate3D(vec3(gl_in[0].gl_Position), vec3(gl_in[1].gl_Position), vec3(gl_in[2].gl_Position)), u3);
-	//fg_normal = fg_worldPos - origPos;
+	vec3 origPos = interpolate3D(vec3(gl_in[1].gl_Position), vec3(gl_in[2].gl_Position), vec3(gl_in[0].gl_Position));
+	fg_worldPos = param.WorldMatrix * vec4(mix(origPos, worldPos, tesFactor), 1.0f);
+
 	fg_color = vec4(u, v, w, 1.0f);
-	gl_Position = param.ViewProjMatrix * param.worldMatrix * fg_worldPos;
+	gl_Position = param.ViewProjMatrix * fg_worldPos;
 }
