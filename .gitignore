@@ -10,5 +10,5 @@ ShitTesting/shaders/bin/
 *.pdb
 *.idb
 *.log
-*.mb
-!/ShitTesting/obj/*
+/ShitTesting/obj/*.mb
+!/ShitTesting/obj/*.obj
