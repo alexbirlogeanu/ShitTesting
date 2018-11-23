@@ -44,7 +44,7 @@ void TerrainRenderer::Init()
 	m_texture->SetSamplerFilter(VK_FILTER_NEAREST);
 	ResourceLoader::GetInstance()->LoadTexture(&m_texture);
 
-	m_heightMap = new CTexture("terrain.png");
+	m_heightMap = new CTexture("terrain3.png");
 	m_heightMap->SetIsSRGB(false);
 	ResourceLoader::GetInstance()->LoadTexture(&m_heightMap);
 
@@ -77,7 +77,7 @@ void TerrainRenderer::PreRender()
 {
 	TerrainParams* params = m_terrainParamsBuffer->GetPtr<TerrainParams*>();
 
-	glm::mat4 modelMatrix = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.5f, -3.0f)), glm::vec3(1.0f));
+	glm::mat4 modelMatrix = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -5.0f, -3.0f)), glm::vec3(1.0f));
 	glm::mat4 projMatrix;
 	PerspectiveMatrix(projMatrix);
 	ConvertToProjMatrix(projMatrix);
@@ -140,9 +140,9 @@ void TerrainRenderer::CreateGrid()
 	//m_grid = new Mesh("obj\\monkey.mb");
 	//return;
 	SImageData heightMap;
-	Read2DTextureData(heightMap, std::string(TEXTDIR) + "terrain.png", false);
+	Read2DTextureData(heightMap, std::string(TEXTDIR) + "terrain3.png", false);
 	
-	const float heightMax = 2.0f;
+	const float heightMax = 7.0f;
 	std::vector<SVertex> vertices;
 	std::vector<uint32_t> indices;
 
