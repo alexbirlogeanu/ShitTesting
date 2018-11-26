@@ -304,7 +304,7 @@ void TerrainRenderer::LoadTextures()
 	m_splatterTexture->SetIsSRGB(false);
 	ResourceLoader::GetInstance()->LoadTexture(&m_splatterTexture);
 
-	std::string textFilename[] = {"grass2.png", "rock.png", "sand.png"};
+	std::string textFilename[] = {"grass2.png", "rock3.png", "sand.png"};
 	for (const auto& fn : textFilename)
 	{
 		CTexture* text = new CTexture(fn);
