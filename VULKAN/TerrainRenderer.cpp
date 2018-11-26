@@ -10,9 +10,10 @@
 struct TerrainParams
 {
 	glm::mat4 ViewProjMatrix;
-	glm::mat4 worldMatrix;
-	glm::vec4 materialProp; //x = roughness, y = k, z = F0
-	glm::vec4 tesselationParams; //x - outter, y - inner tessellation, z - tessellation factor
+	glm::mat4 WorldMatrix;
+	glm::vec4 MaterialProp; //x = roughness, y = k, z = F0
+	glm::vec4 TesselationParams; //x - outter, y - inner tessellation, z - tessellation factor
+	glm::vec4 PatchParams; //xy - number of cells that are in terrain texture patch, zw - total number of cells in a terrain grid
 };
 
 TerrainRenderer::TerrainRenderer(VkRenderPass renderPass)
@@ -20,8 +21,7 @@ TerrainRenderer::TerrainRenderer(VkRenderPass renderPass)
 	, m_grid(nullptr)
 	, m_descSet(VK_NULL_HANDLE)
 	, m_terrainParamsBuffer(nullptr)
-	, m_texture(nullptr)
-	, m_heightMap(nullptr)
+	, m_splatterTexture(nullptr)
 	, m_activePipeline(nullptr)
 	, m_editMode(false)
 	, m_tesselationParameters(13.0f, 7.0f, 0.8f, 0.0f)
@@ -37,16 +37,10 @@ TerrainRenderer::~TerrainRenderer()
 
 void TerrainRenderer::Init()
 {
-	CRenderer::Init();
 	CreateGrid();
+	LoadTextures();
 
-	m_texture = new CTexture("red.png");
-	m_texture->SetSamplerFilter(VK_FILTER_NEAREST);
-	ResourceLoader::GetInstance()->LoadTexture(&m_texture);
-
-	m_heightMap = new CTexture("terrain3.png");
-	m_heightMap->SetIsSRGB(false);
-	ResourceLoader::GetInstance()->LoadTexture(&m_heightMap);
+	CRenderer::Init();
 
 	m_terrainParamsBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(TerrainParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
@@ -82,18 +76,19 @@ void TerrainRenderer::PreRender()
 	PerspectiveMatrix(projMatrix);
 	ConvertToProjMatrix(projMatrix);
 
-	params->materialProp = glm::vec4(0.90, 0.1, 0.5, 0.0f);
-	params->worldMatrix = modelMatrix;
+	params->MaterialProp = glm::vec4(0.90, 0.1, 0.5, 0.0f);
+	params->WorldMatrix = modelMatrix;
 	params->ViewProjMatrix = projMatrix * ms_camera.GetViewMatrix();
 
-	params->tesselationParams = m_tesselationParameters;
+	params->TesselationParams = m_tesselationParameters;
+	params->PatchParams = m_terrainPatchParameters;
 }
 
 void TerrainRenderer::CreateDescriptorSetLayout()
 {
-	m_descriptorLayout.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, 1);
+	m_descriptorLayout.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1);
 	m_descriptorLayout.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1);
-	m_descriptorLayout.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1);
+	m_descriptorLayout.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, (uint32_t)m_terrainTextures.size());
 
 	m_descriptorLayout.Construct();
 }
@@ -136,9 +131,6 @@ void TerrainRenderer::CreatePipeline()
 //shit function
 void TerrainRenderer::CreateGrid()
 {
-	//m_grid = new Mesh("obj\\trig.mb");
-	//m_grid = new Mesh("obj\\monkey.mb");
-	//return;
 	SImageData heightMap;
 	Read2DTextureData(heightMap, std::string(TEXTDIR) + "terrain3.png", false);
 	
@@ -146,8 +138,8 @@ void TerrainRenderer::CreateGrid()
 	std::vector<SVertex> vertices;
 	std::vector<uint32_t> indices;
 
-	const uint32_t xDivision = 32;
-	const uint32_t yDivision = 32;
+	const uint32_t xDivision = 40;
+	const uint32_t yDivision = 40;
 	const float xLength = 20.0f;
 	const float yLength = 20.0f;
 
@@ -299,8 +291,26 @@ void TerrainRenderer::CreateGrid()
 			indices.push_back(tl);
 		}
 	}
+
+	m_terrainPatchParameters = glm::vec4(18.0f, 18.0f, xDivision, yDivision);
+
 	delete[] heightMap.data;
 	m_grid = new Mesh(vertices, indices);
+}
+
+void TerrainRenderer::LoadTextures()
+{
+	m_splatterTexture = new CTexture("terrain_splatter.png");
+	m_splatterTexture->SetIsSRGB(false);
+	ResourceLoader::GetInstance()->LoadTexture(&m_splatterTexture);
+
+	std::string textFilename[] = {"grass2.png", "rock.png", "sand.png"};
+	for (const auto& fn : textFilename)
+	{
+		CTexture* text = new CTexture(fn);
+		ResourceLoader::GetInstance()->LoadTexture(&text);
+		m_terrainTextures.push_back(text);
+	}
 }
 
 void TerrainRenderer::SwitchToWireframe()
@@ -336,6 +346,18 @@ void TerrainRenderer::ChangeTesselationFactor(int units)
 	m_tesselationParameters.z = glm::clamp(factor + float(units) * 0.1f, 0.0f, 1.0f);
 }
 
+void TerrainRenderer::ChangePatchSize(int units)
+{
+	auto computeNewSize = [](int oldSize, int delta, int maxSize)
+	{
+		return glm::clamp(oldSize + delta, 1, maxSize);
+	};
+
+	glm::vec2 maxSize(m_terrainPatchParameters.z, m_terrainPatchParameters.w);
+	m_terrainPatchParameters.x = (float)computeNewSize(int(m_terrainPatchParameters.x), units, int(maxSize.x));
+	m_terrainPatchParameters.y = (float)computeNewSize(int(m_terrainPatchParameters.y), units, int(maxSize.y));
+}
+
 bool TerrainRenderer::OnEditEnable(const KeyInput& key)
 {
 	m_editMode = !m_editMode;
@@ -357,6 +379,8 @@ bool TerrainRenderer::OnMouseInput(const MouseInput& mouseInput)
 	{
 		if (mouseInput.IsSpecialKeyPressed(SpecialKey::Shift))
 			ChangeTesselationFactor(mouseInput.GetWheelDelta());
+		else if (mouseInput.IsSpecialKeyPressed(SpecialKey::Ctrl))
+			ChangePatchSize(mouseInput.GetWheelDelta());
 		else
 			ChangeTesselationLevel(mouseInput.GetWheelDelta());
 	}
@@ -368,7 +392,8 @@ void TerrainRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSi
 {
 	maxSets = 1;
 	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1);
-	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2);
+	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1);
+	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, (uint32_t)m_terrainTextures.size());
 }
 
 void TerrainRenderer::UpdateResourceTable()
@@ -381,11 +406,14 @@ void TerrainRenderer::UpdateGraphicInterface()
 	std::vector<VkWriteDescriptorSet> wDesc;
 
 	VkDescriptorBufferInfo buffInfo = m_terrainParamsBuffer->GetDescriptor();
-	VkDescriptorImageInfo textInfo = m_texture->GetTextureDescriptor();
+	std::vector<VkDescriptorImageInfo> textInfos;
+
+	for (auto text : m_terrainTextures)
+		textInfos.push_back(text->GetTextureDescriptor());
 
 	wDesc.push_back(InitUpdateDescriptor(m_descSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfo));
-	wDesc.push_back(InitUpdateDescriptor(m_descSet, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &textInfo));
-	wDesc.push_back(InitUpdateDescriptor(m_descSet, 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &m_heightMap->GetTextureDescriptor()));
+	wDesc.push_back(InitUpdateDescriptor(m_descSet, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &m_splatterTexture->GetTextureDescriptor()));
+	wDesc.push_back(InitUpdateDescriptor(m_descSet, 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, textInfos));
 
 	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
 }

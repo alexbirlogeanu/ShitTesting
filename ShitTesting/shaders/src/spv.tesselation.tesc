@@ -10,6 +10,7 @@ layout(std140, set = 0, binding = 0) uniform TerrainParams
 	mat4 WorldMatrix;
 	vec4 MaterialProp; //x = roughness, y = k, z = F0
 	vec4 TesselationParams; //x - outter, y - inner tessellation, z - tessellation factor
+	vec4 PatchParams; //xy - number of cells that are in terrain texture patch, zw - total number of cells in a terrain grid
 };
 
 layout(location=0) in vec4 vs_normal[];

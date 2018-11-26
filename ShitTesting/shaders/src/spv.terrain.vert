@@ -8,10 +8,8 @@ layout(std140, set = 0, binding = 0) uniform in_params
 	mat4 WorldMatrix;
 	vec4 MaterialProp; //x = roughness, y = k, z = F0
 	vec4 TesselationParams;
+	vec4 PatchParams; //xy - number of cells that are in terrain texture patch, zw - total number of cells in a terrain grid
 }param;
-
-
-layout(set = 0, binding = 2) uniform sampler2D HeightMap;
 
 layout(location=0) in vec3 position;
 layout(location=1) in vec2 in_uv;

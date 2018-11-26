@@ -27,11 +27,13 @@ private:
 
 	void CreatePipeline();
 	void CreateGrid();
+	void LoadTextures();
 
 	void SwitchToWireframe();
 	void SwitchPipeline();
 	void ChangeTesselationLevel(int units);
 	void ChangeTesselationFactor(int units);
+	void ChangePatchSize(int units);
 
 	bool OnEditEnable(const KeyInput& key);
 
@@ -44,13 +46,14 @@ private:
 	BufferHandle*					m_terrainParamsBuffer;
 	
 	Mesh*							m_grid;
-	CTexture*						m_texture;
-	CTexture*						m_heightMap;
+	std::vector<CTexture*>			m_terrainTextures;
+	CTexture*						m_splatterTexture;
 
 	DescriptorSetLayout				m_descriptorLayout;
 	VkDescriptorSet					m_descSet;
 
 	glm::vec4						m_tesselationParameters;
+	glm::vec4						m_terrainPatchParameters; //use for texturing. Packs following data: xy - number of cells that are in a patch, zw - total number of cells that are in a terrain grid
 
 	bool							m_drawWireframe;
 	bool							m_editMode;

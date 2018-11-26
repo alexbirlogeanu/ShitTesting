@@ -7,8 +7,18 @@ layout(location=1) out vec4 out_specular;
 layout(location=2) out vec4 out_normal;
 layout(location=3) out vec4 out_position;
 
-layout(set=0, binding=1) uniform sampler2D text;
-layout(set = 0, binding = 2) uniform sampler2D HeightMap;
+layout(std140, set = 0, binding = 0) uniform TerrainParams
+{
+	mat4 ViewProjMatrix;
+	mat4 WorldMatrix;
+	vec4 MaterialProp; //x = roughness, y = k, z = F0
+	vec4 TesselationParams; //x - outter, y - inner tessellation, z - tessellation factor
+	vec4 PatchParams; //xy - number of cells that are in terrain texture patch, zw - total number of cells in a terrain grid
+};
+
+layout(set = 0, binding = 1) uniform sampler2D SplatterTexture;
+layout(set = 0, binding = 2) uniform sampler2D Textures[3];
+
 
 layout(location=0) in vec4 normal;
 layout(location=1) in vec4 material;
@@ -24,9 +34,29 @@ float Depth()
 	return (2 * near) / (far + near - z * (far - near));
 }
 
+vec2 GetPatchCoordinates()
+{
+	vec2 uvPatchRange = PatchParams.xy / PatchParams.zw; // from global uv mapping 
+	ivec2 patchNumber = ivec2(uv / uvPatchRange);
+	vec2 patchMinRange = patchNumber * uvPatchRange;
+	vec2 patchMaxRange = (patchNumber + 1) * uvPatchRange;
+	
+	return (uv - patchMinRange) / (patchMaxRange - patchMinRange);
+	
+}
+
+vec4 SplatTextures()
+{
+	vec2 patchUV = GetPatchCoordinates();
+	vec3 coef = texture(SplatterTexture, uv).rgb;
+	vec3 finalColor = coef.r * texture(Textures[0], patchUV).rgb + coef.g * texture(Textures[1], patchUV).rgb + coef.b * texture(Textures[2], patchUV).rgb;
+	
+	return vec4(finalColor, 1.0f);
+}
+
 void main()
 {  
-	albedo = texture(text, uv);
+	albedo = SplatTextures();
 	//albedo = debug;
 	out_normal = normal;
 	out_position = worldPos;
