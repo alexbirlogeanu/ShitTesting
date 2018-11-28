@@ -17,7 +17,10 @@ public:
 
 	virtual void Init() override;
 	virtual void Render() override;
+	virtual void RenderShadows() override;
+
 	virtual void PreRender() override;
+
 private:
 	virtual void CreateDescriptorSetLayout() override;
 	virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override;
@@ -39,9 +42,16 @@ private:
 
 	bool OnMouseInput(const MouseInput& mouseInput);
 private:
+	struct ShadowParams
+	{
+		glm::mat4 ShadowProjViewMatrix;
+		glm::mat4 ModelMatrix;
+	};
+
 	CGraphicPipeline				m_tessellatedPipeline;
 	CGraphicPipeline				m_simplePipeline;
 	CGraphicPipeline*				m_activePipeline;
+	CGraphicPipeline				m_shadowPipeline;
 
 	BufferHandle*					m_terrainParamsBuffer;
 	
@@ -50,10 +60,13 @@ private:
 	CTexture*						m_splatterTexture;
 
 	DescriptorSetLayout				m_descriptorLayout;
+	DescriptorSetLayout				m_shadowDescLayout;
+
 	VkDescriptorSet					m_descSet;
 
 	glm::vec4						m_tesselationParameters;
 	glm::vec4						m_terrainPatchParameters; //use for texturing. Packs following data: xy - number of cells that are in a patch, zw - total number of cells that are in a terrain grid
+	ShadowParams					m_pushConstants;
 
 	bool							m_drawWireframe;
 	bool							m_editMode;

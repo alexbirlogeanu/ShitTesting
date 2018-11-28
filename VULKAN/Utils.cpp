@@ -344,7 +344,7 @@ void NewDescriptorSetLayout(const std::vector<VkDescriptorSetLayoutBinding>& bin
     cleanStructure(crtInfo);
 	crtInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     crtInfo.bindingCount = (uint32_t)bindings.size();
-    crtInfo.pBindings = bindings.data();
+	crtInfo.pBindings = (bindings.empty())? nullptr : bindings.data();
 
     VULKAN_ASSERT(vk::CreateDescriptorSetLayout(vk::g_vulkanContext.m_device, &crtInfo, nullptr, layout));
 }

@@ -373,6 +373,7 @@ public:
     virtual void Init(); //this is an anti pattern. Fix it
     virtual void Render() = 0;
 	virtual void PreRender(){};
+	virtual void RenderShadows() {} //need to refactor this thing
 
     void StartRenderPass();
     void EndRenderPass();

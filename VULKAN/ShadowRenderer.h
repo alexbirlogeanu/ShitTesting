@@ -13,7 +13,7 @@ class Mesh;
 class CTexture;
 class Object;
 
-class ShadowMapRenderer : public CRenderer
+class ShadowMapRenderer : public CRenderer //this one have to be refactor. Maybe will not need this anymore
 {
 public:
     ShadowMapRenderer(VkRenderPass renderPass);

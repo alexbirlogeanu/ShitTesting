@@ -23,7 +23,7 @@ public:
         FPCount
     };
 
-    CFrustrum(float near, float far);
+    CFrustrum(float N, float F);
     virtual ~CFrustrum();
 
     void Update(glm::vec3 p, glm::vec3 dir, glm::vec3 up, glm::vec3 right, float fov);

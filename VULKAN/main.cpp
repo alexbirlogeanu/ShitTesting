@@ -2733,6 +2733,7 @@ void CApplication::RenderShadows()
 {
     m_shadowRenderer->StartRenderPass();
     m_shadowRenderer->Render();
+	m_terrainRenderer->RenderShadows();
     m_shadowRenderer->EndRenderPass();
 }
 

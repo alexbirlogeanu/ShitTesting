@@ -24,6 +24,7 @@ ShadowMapRenderer::~ShadowMapRenderer()
 void ShadowMapRenderer::Init()
 {
     CRenderer::Init();
+	g_commonResources.SetAs<VkRenderPass>(&m_renderPass, EResourceType_ShadowRenderPass); //kinda tricky if i forgot that the order of renderers matters.
 
 	VkPushConstantRange pushConstRange;
 	pushConstRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
@@ -100,10 +101,10 @@ void ShadowMapRenderer::PreRender()
 
 	glm::vec3 right = glm::cross(lightDir, glm::vec3(0.0f, 1.0f, 0.0f));
 	glm::mat4 view = glm::lookAt(eye, ms_camera.GetPos(), glm::cross(lightDir, right));
-	glm::mat4 proj;
+	glm::mat4 proj;// = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.1f, 25.0f);
 	ComputeProjMatrix(proj, view);
 
-	//= glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.1f, 25.0f);
+	
 	m_shadowViewProj = proj * view;
 }
 
@@ -128,6 +129,7 @@ void ShadowMapRenderer::UpdateResourceTable()
 
 	TRAP(m_pipeline.IsValid());
 	g_commonResources.SetAs<CGraphicPipeline>(&m_pipeline, EResourceType_ShadowRenderPipeline);
+
 }
 
 void ShadowMapRenderer::CreateDescriptorSetLayout()

@@ -51,7 +51,8 @@ enum EResourceType
 	EResourceType_AfterPostProcessImage,
 	EResourceType_VolumetricImage,
 	EResourceType_ShadowProjViewMat,
-	EResourceType_ShadowRenderPipeline,
+	EResourceType_ShadowRenderPipeline, //this is not good here
+	EResourceType_ShadowRenderPass,
 	EResourceType_Count
 };
 

@@ -6,9 +6,9 @@
 //CFrustrum
 //////////////////////////////////////////////////////////////////////////////////////
 
-CFrustrum::CFrustrum(float near, float far)
-    : m_near(near)
-    , m_far(far)
+CFrustrum::CFrustrum(float N, float F)
+    : m_near(N)
+    , m_far(F)
 {
 }
 

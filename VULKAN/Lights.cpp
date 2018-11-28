@@ -40,7 +40,6 @@ void CDirectionalLight::ChangeLightIntensity(float step)
 void CDirectionalLight::ToggleDebug()
 {
     m_displayDebug = !m_displayDebug;
-    UpdateDebug();
 }
 
 glm::vec4 CDirectionalLight::GetLightIradiance() const
@@ -78,8 +77,6 @@ void CDirectionalLight::Update()
     m_direction = glm::vec3(sin(alpha) * cos(beta), sin(alpha) * sin(beta), cos(alpha));
     m_direction = m_TBN * m_direction;
     m_direction = glm::normalize(m_direction);
-
-    UpdateDebug();
 }
 
 void CDirectionalLight::CreateDebug(CUIManager* manager)

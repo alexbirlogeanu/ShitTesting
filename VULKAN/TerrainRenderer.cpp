@@ -67,11 +67,26 @@ void TerrainRenderer::Render()
 	EndRenderPass();
 }
 
+void TerrainRenderer::RenderShadows()
+{
+	m_pushConstants.ShadowProjViewMatrix = g_commonResources.GetAs<glm::mat4>(EResourceType_ShadowProjViewMat);
+
+	VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
+
+	vk::CmdBindPipeline(cmdBuffer, m_shadowPipeline.GetBindPoint(), m_shadowPipeline.Get());
+	vk::CmdPushConstants(cmdBuffer, m_shadowPipeline.GetLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ShadowParams), &m_pushConstants);
+
+	m_grid->Render();
+
+}
+
 void TerrainRenderer::PreRender()
 {
 	TerrainParams* params = m_terrainParamsBuffer->GetPtr<TerrainParams*>();
 
 	glm::mat4 modelMatrix = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -5.0f, -3.0f)), glm::vec3(1.0f));
+	m_pushConstants.ModelMatrix = modelMatrix;
+
 	glm::mat4 projMatrix;
 	PerspectiveMatrix(projMatrix);
 	ConvertToProjMatrix(projMatrix);
@@ -91,6 +106,8 @@ void TerrainRenderer::CreateDescriptorSetLayout()
 	m_descriptorLayout.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, (uint32_t)m_terrainTextures.size());
 
 	m_descriptorLayout.Construct();
+
+	m_shadowDescLayout.Construct(); //its empty. use push constants
 }
 
 void TerrainRenderer::CreatePipeline()
@@ -124,6 +141,18 @@ void TerrainRenderer::CreatePipeline()
 	m_simplePipeline.Init(this, m_renderPass, 0);
 
 	m_activePipeline = &m_tessellatedPipeline;
+
+	VkRenderPass shadowRenderPass = g_commonResources.GetAs<VkRenderPass>(EResourceType_ShadowRenderPass);
+
+	m_shadowPipeline.SetVertexInputState(Mesh::GetVertexDesc());
+	m_shadowPipeline.SetViewport(SHADOWW, SHADOWH);
+	m_shadowPipeline.SetScissor(SHADOWW, SHADOWH);
+	m_shadowPipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
+	m_shadowPipeline.SetVertexShaderFile("shadow_terrain.vert");
+	m_shadowPipeline.AddPushConstant({VK_SHADER_STAGE_VERTEX_BIT, 0, 256});
+
+	m_shadowPipeline.CreatePipelineLayout(m_shadowDescLayout.Get());
+	m_shadowPipeline.Init(this, shadowRenderPass, 0);
 }
 
 
@@ -138,8 +167,8 @@ void TerrainRenderer::CreateGrid()
 	std::vector<SVertex> vertices;
 	std::vector<uint32_t> indices;
 
-	const uint32_t xDivision = 40;
-	const uint32_t yDivision = 40;
+	const uint32_t xDivision = 64;
+	const uint32_t yDivision = 64;
 	const float xLength = 20.0f;
 	const float yLength = 20.0f;
 
