@@ -52,10 +52,6 @@ void CParticleSpawner::SpawnParticle(CParticle* p)
     p->Properties = glm::vec4(pLifeSpan, pLifeSpan, m_fadeTime, pSize);
 }
 
-void CParticleSpawner::CreateDebugElements(CUIManager* manager)
-{
-    //manager->CreateAxisSystemItem(m_worldPosition, m_tangent / 2.0f, m_bitangent / 2.0f, m_normal / 2.0f);
-}
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //CConeSpawner
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -202,12 +198,6 @@ void CParticleSystem::Update(float dt)
 
 void CParticleSystem::CreateDebugElements(CUIManager* manager)
 {
-    //glm::vec3 spanwDir  = glm::vec3(0.5f, 0.5f, 0.5f);
-    //spanwDir = glm::normalize(m_TBN * spanwDir);
-
-    //m_systemAxis = manager->CreateAxisSystemItem(m_worldPosition, m_tangent / 2.0f, m_bitangent / 2.0f, m_normal / 2.0f);
-    TRAP(m_spawner);
-    m_spawner->CreateDebugElements(manager);
 }
 
 void CParticleSystem::SetUpdatePipeline(VkPipeline pipeline)
