@@ -7,127 +7,17 @@
 #include "glm/glm.hpp"
 #include "Renderer.h"
 #include "Mesh.h"
+#include "UiUtils.h"
+#include "DescriptorsUtils.h"
 
 #include <unordered_map>
 #include <string>
 #include <array>
 
-template<typename T>
-class CDirtyValue
-{
-public:
-    T c;
-    T p;
-    
-    CDirtyValue() 
-        : c(0)
-        , p(0)
-        , m_forceDirty(true)
-    {
-    }
-
-    bool IsDirty() { return m_forceDirty || (c != p); }
-    void Set(T value) { p = c; c = value; }
-    void Reset() { p = c; m_forceDirty = false; }
-    void SetDirty() { m_forceDirty = true; }
-private:
-    bool m_forceDirty;
-};
-
-typedef rapidxml::xml_document<char>  TXmlDocument;
-typedef rapidxml::xml_node<char>      TXmlNode;
-typedef rapidxml::xml_attribute<char> TXmlAttribute;
-
 class CTexture;
-struct SFontMetadata
-{
-    std::string     Name;
-    float           TextWidth;
-    float           TextHeight;
-    float           GlyphSize;
-    unsigned int    CharsCount;
-    glm::vec2       TexelSize;
-};
-
-class CFont2;
-class CFontImporter
-{
-public:
-    CFontImporter(std::string fntXml);
-    virtual ~CFontImporter();
-
-    CFont2* GetFont();
-    void BuildFont();
-
-private:
-    void GatherPointsOfInterests(TXmlDocument* doc);
-    void GatherMetadata();
-    void LoadFontTexture();
-    void GetGlyphs();
-    void ParseGlyphs(TXmlNode* charNode);
-private:
-    struct xmlPOI
-    {
-        xmlPOI()
-        {
-            charsNode = commonNode = infoNode = pagesNode = nullptr;
-        }
-
-        TXmlNode* charsNode;
-        TXmlNode* infoNode;
-        TXmlNode* commonNode;
-        TXmlNode* pagesNode;
-    };
-
-    xmlPOI          m_xmlPointOfInterests;
-
-    CFont2*          m_importedFont;
-    std::string     m_fntXml;
-    char*           m_xmlContent;
-    SFontMetadata   m_fontMetadata;
-    CTexture*       m_fontTexture;
-
-};
-
-struct SGlyph
-{
-    unsigned char   Id;
-    glm::vec2       Size; //in pixels
-    glm::vec2       TopLeftUV;
-    glm::vec2       TopRightUV;
-    glm::vec2       BotRightUV;
-    glm::vec2       BotLeftUV;
-};
-
-class CFont2
-{
-public:
-    typedef std::vector<SVertex> UIString;
-    virtual ~CFont2();
-
-    float GetGlyphPixelsSize() const { return m_metaData.GlyphSize; }
-    void GetUIString(const std::string& text, UIString& uiString);
-
-    VkImageView  GetFontImageView() const { return m_fontTexture->GetImageView(); }
-private:
-    CFont2();
-    
-    void SetMetadata(const SFontMetadata& metadata) { m_metaData = metadata;};
-    void SetFontTexture(CTexture* text) { TRAP(text); m_fontTexture = text;}
-    void AddGlyph(unsigned char id, glm::vec2 pos, glm::vec2 size);
-    SGlyph& GetGlyph(unsigned char c);
-
-    void Validate();
-
-    friend class CFontImporter;
-private:
-    SFontMetadata                               m_metaData;
-    CTexture*                                   m_fontTexture;
-
-    std::unordered_map<unsigned char, SGlyph>   m_glyphs;
-};
-
 class Mesh;
+class CFont2;
+class BufferHandle;
 
 class CUIItem
 {
@@ -142,8 +32,9 @@ public:
     bool GetVisible() const { return m_isVisible; }
 
 protected:
-    virtual void Render() = 0;
-    virtual void Update() = 0;
+    virtual void Render(CGraphicPipeline* pipeline) = 0;
+    virtual void PreRender() = 0;
+
     friend class CUIManager;
     friend class CUIRenderer;
 protected:
@@ -153,101 +44,43 @@ protected:
 class CUIText : public CUIItem
 {
 public:
-    virtual ~CUIText();
-    const std::string& GetText() const { return m_text; }
-    const glm::uvec2& GetPosition() const { return m_screenPosInPixels; }
+	virtual ~CUIText();
+	const std::string& GetText() const { return m_text; }
+	const glm::uvec2& GetPosition() const { return m_screenPosInPixels; }
 
-    void SetText(const std::string& text);
-    void SetPosition(glm::uvec2& pos);
+	void SetText(const std::string& text);
+	void SetPosition(glm::uvec2& pos);
+
+	bool IsDirty() const { return m_isDirty; }
 private:
-    CUIText(CFont2* font, const std::string& text, glm::uvec2 screenPos, unsigned int maxChar);
+	CUIText(CFont2* font, const std::string& text, glm::uvec2 screenPos);
 
-    void Update() override;
+	virtual void PreRender() override;
+	void Create(VkDescriptorSet descSet);
 
-    void CreateMesh();
-    void UpdateMesh();
+	void Render(CGraphicPipeline* pipeline) override;
 
-    void Render() override;
-
-    friend class CUIManager;
-    friend class CUIRenderer;
+	friend class CUIManager;
+	friend class CUIRenderer;
 private:
-    glm::uvec2      m_screenPosInPixels;
-    std::string     m_text;
+	struct UITextGlyph
+	{
+		glm::vec4	TextCoords; //uv - start uv from Font texture, st - delta uv of the glyph (width, height ) / font_texture_size.xy
+		glm::vec4	ScreenPosition;  //xy - screen space start pos of the glyph in pixels, zw glyph height
+	};
 
-    CFont2*         m_font;
-    Mesh*           m_textMesh;
+	glm::uvec2      m_screenPosInPixels;
+	std::string     m_text;
 
-    unsigned int    m_maxCharPerString;
+	CFont2*         m_font;
+	Mesh*           m_textMesh;
+	uint32_t		m_charactersCapacity;
 
-    bool            m_isDirty;
-    
-};
+	VkDescriptorSet m_descriptorSet;
 
-class CUITextContainer : public CUIItem
-{
-public:
-    CUIText* GetTextItem(unsigned int index);
-    void SetTextItem(unsigned int index, const std::string& text);
-
-    virtual ~CUITextContainer();
-private:
-    CUITextContainer(std::vector<CUIText*>& texts);
-
-    void Update() override;
-    void Render() override;
-
-    friend class CUIManager;
-private:
-    std::vector<CUIText*>   m_textItems;
-};
-
-class CUIVector : public CUIItem
-{
-public:
-    virtual ~CUIVector();
-
-    void SetColor(glm::vec4 color);
-    void SetPosition(glm::vec3 position);
-    void SetVector(glm::vec3 dir);
-private:
-    CUIVector(glm::vec3 pos, glm::vec3 vector, glm::vec4 color);
-
-    virtual void Render() override;
-    virtual void Update() override;
-
-    unsigned char GetColorComponent(float component);
-    friend class CUIManager;
-    friend class CUIRenderer;
-private:
-    glm::vec3       m_position;
-    glm::vec3       m_vector;
-    glm::vec4       m_color;
-
-    Mesh*           m_mesh;
-
-    unsigned int    m_vertexCount;
-
-    bool            m_dirty;
-};
-
-class CUIAxisSystem : public CUIItem
-{
-public:
-    virtual ~CUIAxisSystem();
-
-    void SetPosition(glm::vec3 pos);
-private:
-    CUIAxisSystem(CUIVector* x, CUIVector* y, CUIVector* z);
-
-    virtual void Render() override;
-    virtual void Update() override;
-    friend class CUIManager;
-    friend class CUIRenderer;
-private:
-    CUIVector*      m_xAxis;
-    CUIVector*      m_yAxis;
-    CUIVector*      m_zAxis;
+	BufferHandle*	m_shaderParameters;
+	bool			m_isDirty;
+	uint32_t		m_padding;
 };
 
 class CUIRenderer : public CRenderer
@@ -265,70 +98,35 @@ private:
     virtual void CreateDescriptorSetLayout() override;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets);
 
+	void AddNewDescriptorPool(std::vector<std::pair<DescriptorSetLayout*, uint32_t>> layoutsNumber);
+
     void AddUIText(CUIText* item);
     void RemoveUIText(CUIText* item);
 
-    void AddUIVector(CUIVector* item);
-    void RemoveUIVector(CUIVector* item);
+	void UpdateGraphicInterface() override;
+
+	VkDescriptorSet AllocTextDescriptorSet();
 
     friend class CUIManager;
 private:
-    void UpdateUIItemsDescSet();
-    void UpdateCommonDescSet();
-    void UpdateCommonParams();
 
 private:
-    struct CommonShaderParams
-    {
-        glm::vec4 ScreenSize;
-        glm::mat4 ProjViewMatrix;
-    };
-
-    struct UiItemsShaderParams
-    {
-        glm::vec4 ScreenPosition;
-
-        bool IsDirty(glm::uvec2& other)
-        {
-            return ScreenPosition.x != (float)other.x || ScreenPosition.y != (float)other.y;
-        }
-    };
-
-    struct UINode
-    {
-        CUIText*                uiItem;
-        UiItemsShaderParams     uiParams;
-        BufferHandle*           buffer;
-        VkDescriptorSet         descSet;
-
-        UINode() 
-            : uiItem(nullptr)
-        {}
-
-        void Invalidate() { uiItem = nullptr; }
-        bool IsValid() const { return uiItem != nullptr; }
-    };
-
-    VkDescriptorSetLayout           m_uiItemDescLayout;
-    VkDescriptorSetLayout           m_commonDescSetLayout;
-    std::vector<VkDescriptorSet>    m_uiItemDescSet;
-    VkDescriptorSet                 m_commonDescSet;
-    VkSampler                       m_sampler;
-
-    BufferHandle*                   m_uiItemUniformBuffer;
-
-    BufferHandle*                   m_commonUniformBuffer;
-
-    std::array<UINode, MAXUIITEMS>  m_uiNodes;
-    CGraphicPipeline                m_textElemPipeline;
-
-    std::vector<CUIVector*>         m_uiVectors;            
-    CGraphicPipeline                m_vectorElemPipeline;
+	CGraphicPipeline				m_vectorElemPipeline;
+	CGraphicPipeline				m_textElemPipeline;
 
     glm::mat4                       m_projMatrix;
 
+	DescriptorSetLayout				m_textElemDescriptorLayout;
+	DescriptorSetLayout				m_globalsDescSetLayout;;
+	VkDescriptorSet					m_globalsDescriptorSet;
+	BufferHandle*					m_globalsBuffer;
+
+	std::vector<DescriptorPool*>	m_uiElemDescriptorPool;
+
+	VkSampler						m_sampler;
     CFont2*                         m_usedFont;
-    bool                            m_needUpdateCommon;
+
+	std::vector<CUIText*>			m_uiTexts;
 };
 
 class CUIManager
@@ -337,10 +135,7 @@ public:
     CUIManager();
     virtual ~CUIManager();
 
-    CUIText* CreateTextItem(const std::string& text, glm::uvec2 screenPos, unsigned int maxChars = 16);
-    CUIVector* CreateVectorItem(glm::vec3 position, glm::vec3 vector, glm::vec4 color = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
-    CUIAxisSystem* CreateAxisSystemItem(glm::vec3 position, glm::vec3 x, glm::vec3 y, glm::vec3 z);
-    CUITextContainer* CreateTextContainerItem(std::vector<std::string>& texts, glm::uvec2 screenStartPos, unsigned int yPadding, unsigned int maxChars = 16 );
+    CUIText* CreateTextItem(const std::string& text, glm::uvec2 screenPos);
 
     void SetupRenderer(CUIRenderer* uiRenderer);
 
@@ -371,7 +166,7 @@ private:
         EWidget_MaxChars = 48
     };
 
-    CUITextContainer*       m_displayInfo;
+   // CUITextContainer*       m_displayInfo;
 
     CDirtyValue<bool>       m_showUi;
 };

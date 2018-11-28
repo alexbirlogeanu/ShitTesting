@@ -39,7 +39,7 @@ private:
 	
 	std::vector<DescriptorPool*>								m_descriptorPools;
 
-	std::vector<DescriptorSetLayout>							m_descriptorLayouts;
+	std::vector<DescriptorSetLayout*>							m_descriptorLayouts;
 };
 
 

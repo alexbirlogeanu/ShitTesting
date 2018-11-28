@@ -2,9 +2,6 @@
 #include "glm/glm.hpp"
 #include <array>
 
-
-class CUIVector;
-class CUIAxisSystem;
 class CUIManager;
 class KeyInput;
 class MouseInput;
@@ -32,7 +29,6 @@ public:
 	bool OnMouseEvent(const MouseInput& mouseInput);
 private:
     void Update();
-    void UpdateDebug();
 private:
     glm::vec3 m_direction;
     glm::mat3 m_TBN;
@@ -50,8 +46,6 @@ private:
     glm::vec3       m_normal;
     glm::vec3       m_tangent;
     glm::vec3       m_bitangent;
-    CUIVector*      m_debugDirVector;
-    CUIAxisSystem*  m_debugLightAxisSystem;
     glm::vec3       m_debugPosition;
     bool            m_displayDebug;
 };

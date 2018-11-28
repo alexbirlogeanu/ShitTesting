@@ -3,7 +3,7 @@
 #extension GL_ARB_shading_language_420pack : enable
 
 layout(location=0) in vec3 position;
-layout(location=5) in vec4 in_color; //not used
+layout(location=5) in vec4 in_color;
 
 layout(set=0, binding=0) uniform CommonParams
 {

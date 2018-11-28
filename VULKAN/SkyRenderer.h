@@ -24,7 +24,6 @@ enum ESunFB
     ESunFB_Count
 };
 class CTexture;
-class CUITextContainer;
 class CUIManager;
 class KeyInput;
 
@@ -107,5 +106,5 @@ protected:
 
     //EDit mode & debug
     bool                        m_isEditMode;
-    CUITextContainer*           m_editInfo;
+    //CUITextContainer*           m_editInfo;
 };

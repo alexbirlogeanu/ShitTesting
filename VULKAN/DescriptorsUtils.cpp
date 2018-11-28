@@ -22,7 +22,7 @@ void NewDescriptorPool(const std::vector<VkDescriptorPoolSize>& poolSize, uint32
 ///////////////////////////////////////////////////////////////////////////////////////
 
 DescriptorSetLayout::DescriptorSetLayout()
-	:m_descSetLayoutHandle(VK_NULL_HANDLE)
+	: m_descSetLayoutHandle(VK_NULL_HANDLE)
 {
 
 }
@@ -88,11 +88,11 @@ void DescriptorPool::Construct(const DescriptorSetLayout& layoutType, uint32_t m
 	NewDescriptorPool(poolSize, m_remainingSets, &m_descPoolHandle);
 }
 
-void DescriptorPool::Construct(const std::vector<DescriptorSetLayout>& layouts, uint32_t maxSets)
+void DescriptorPool::Construct(const std::vector<DescriptorSetLayout*>& layouts, uint32_t maxSets)
 {
 	for (const auto& layout : layouts)
 	{
-		std::vector<VkDescriptorSetLayoutBinding> bindings = layout.GetBindings();
+		std::vector<VkDescriptorSetLayoutBinding> bindings = layout->GetBindings();
 
 		for (auto binding : bindings)
 		{
@@ -133,10 +133,10 @@ bool DescriptorPool::CanAllocate(const DescriptorSetLayout& layoutType)
 	return m_remainingSets > 0;
 }
 
-bool DescriptorPool::CanAllocate(const std::vector<DescriptorSetLayout>& layoutsType)
+bool DescriptorPool::CanAllocate(const std::vector<DescriptorSetLayout*>& layoutsType)
 {
 	for (auto layout : layoutsType)
-		if (!CanAllocate(layout))
+		if (!CanAllocate(*layout))
 			return false;
 
 	return (m_remainingSets - layoutsType.size()) > 0;
@@ -154,7 +154,7 @@ std::vector<VkDescriptorSet> DescriptorPool::AllocateDescriptorSet(const std::ve
 {
 	std::vector<VkDescriptorSetLayout> vkLayouts;
 	vkLayouts.reserve(layoutsTypes.size());
-	for (auto layout : layoutsTypes)
+	for (auto& layout : layoutsTypes)
 		vkLayouts.push_back(layout.Get());
 
 	std::vector<VkDescriptorSet> newDescSets;

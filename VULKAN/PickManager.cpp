@@ -433,29 +433,29 @@ void CPickManager::Update()
      infoTexts[Title] = std::string("Object Edit Mode");
      //infoTexts[Selected] = std::string("Current selected: ");
 
-     m_editModeInfo = manager->CreateTextContainerItem(infoTexts, glm::uvec2(1000, 200), 5, 36);
-     m_editModeInfo->SetVisible(m_editMode);
+     //m_editModeInfo = manager->CreateTextContainerItem(infoTexts, glm::uvec2(1000, 200), 5, 36);
+    // m_editModeInfo->SetVisible(m_editMode);
  }
 
  void CPickManager::UpdateEditInfo()
  {
-     m_editModeInfo->SetTextItem(Selected, "Current selected: " + std::to_string(m_selectedID));
-     for(unsigned int i = SlotStart; i <= SlotsEnd; ++i)
-        m_editModeInfo->SetTextItem(i, "");
-     if(m_pickedObject)
-     {
-        std::vector<std::string> desc;
-        m_pickedObject->GetPickableDescription(desc);
-        for(unsigned int i = 0; i < desc.size() && (i + SlotStart < Count); ++i)
-            m_editModeInfo->SetTextItem(i + SlotStart, desc[i]);
-     }
+     //m_editModeInfo->SetTextItem(Selected, "Current selected: " + std::to_string(m_selectedID));
+     //for(unsigned int i = SlotStart; i <= SlotsEnd; ++i)
+       // m_editModeInfo->SetTextItem(i, "");
+     //if(m_pickedObject)
+     //{
+     //   std::vector<std::string> desc;
+     //   m_pickedObject->GetPickableDescription(desc);
+     //   for(unsigned int i = 0; i < desc.size() && (i + SlotStart < Count); ++i)
+     //       //m_editModeInfo->SetTextItem(i + SlotStart, desc[i]);
+     //}
 
  }
 
  void CPickManager::ToggleEditMode()
  {
      m_editMode = !m_editMode;
-     m_editModeInfo->SetVisible(m_editMode);
+    // m_editModeInfo->SetVisible(m_editMode);
  }
 
 void CPickManager::SetupRenderpass(const FramebufferDescription& fbDesc)

@@ -404,7 +404,7 @@ protected:
     CFrameBuffer*                                       m_framebuffer;
     VkRenderPass                                        m_renderPass;
 
-    VkDescriptorPool                                    m_descriptorPool;
+    VkDescriptorPool                                    m_descriptorPool; //change to class DescriptorPool
 private:
     bool                                                m_initialized;
     bool                                                m_ownFramebuffer;

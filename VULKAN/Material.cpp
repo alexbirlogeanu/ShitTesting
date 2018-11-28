@@ -26,13 +26,16 @@ void MaterialLibrary::Initialize(CRenderer* renderer)
 {
 	///CreateDescriptor layouts
 	m_descriptorLayouts.resize(DescriptorIndex::Count);
-	m_descriptorLayouts[DescriptorIndex::Common].AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
 
-	m_descriptorLayouts[DescriptorIndex::Specific].AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
-	m_descriptorLayouts[DescriptorIndex::Specific].AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, BATCH_MAX_TEXTURE);
+	m_descriptorLayouts[DescriptorIndex::Common] = new DescriptorSetLayout();
+	m_descriptorLayouts[DescriptorIndex::Common]->AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
+
+	m_descriptorLayouts[DescriptorIndex::Specific] = new DescriptorSetLayout();
+	m_descriptorLayouts[DescriptorIndex::Specific]->AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
+	m_descriptorLayouts[DescriptorIndex::Specific]->AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, BATCH_MAX_TEXTURE);
 
 	for (unsigned int i = 0; i < DescriptorIndex::Count; ++i)
-		m_descriptorLayouts[i].Construct();
+		m_descriptorLayouts[i]->Construct();
 
 	for (auto tmpl : m_materialTemplates)
 		tmpl.second->CreatePipeline(renderer);
@@ -62,7 +65,7 @@ std::vector<VkDescriptorSet> MaterialLibrary::AllocNewDescriptors()
 	newDescSets.resize(m_descriptorLayouts.size());
 	for (unsigned int i = 0; i < m_descriptorLayouts.size(); ++i)
 	{
-		newDescSets[i] = pool->AllocateDescriptorSet(m_descriptorLayouts[i]); //TODO! I have to look into the array version of this method and why it doesn't work
+		newDescSets[i] = pool->AllocateDescriptorSet(*m_descriptorLayouts[i]); //TODO! I have to look into the array version of this method and why it doesn't work
 	}
 
 	return  newDescSets;
@@ -74,7 +77,7 @@ std::vector<VkDescriptorSetLayout> MaterialLibrary::GetDescriptorLayouts() const
 	layouts.reserve(m_descriptorLayouts.size());
 	for (const auto& layout : m_descriptorLayouts)
 	{
-		layouts.push_back(layout.Get());
+		layouts.push_back(layout->Get());
 	}
 
 	return layouts;

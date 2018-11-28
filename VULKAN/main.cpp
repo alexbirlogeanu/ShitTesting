@@ -962,8 +962,6 @@ private:
 
     void SetupParticles();
 	void RegisterSpecialInputListeners(); //TODO find a better solution at refactoring
-	//TESTING
-	void RenderCameraFrustrum();
 
     void CreateResources();
     void UpdateCamera();
@@ -1239,6 +1237,8 @@ void CApplication::Run()
     CreateQueryPools();
 	RegisterSpecialInputListeners();
 	//RenderCameraFrustrum();
+
+	m_uiManager->CreateTextItem("Sa ma sugi de penis", glm::uvec2(50, 50));    
 
     DWORD start;
     DWORD stop;
@@ -2876,121 +2876,8 @@ glm::vec4 GetPlaneFrom(glm::vec4 p1, glm::vec4 p2, glm::vec4 p3)
 	return glm::vec4(normal, d);
 }
 
-void CApplication::RenderCameraFrustrum()
-{
-	glm::mat4 proj = glm::perspective(glm::radians(45.0f), 16.0f / 9.f, 0.1f, 3.0f);
-	PerspectiveMatrix(proj);
-	ConvertToProjMatrix(proj);
-
-	glm::mat4 view = glm::lookAt(glm::vec3(10.f, 1.f, 0.0f), glm::vec3(0.f, 1.f, -1.f), glm::vec3(0.f, 1.f, 0.f));
-	glm::mat4 projViewMatrix = proj * view;
-	glm::mat4 invProjViewMatrix = glm::inverse(projViewMatrix);
-
-	glm::vec4 colors[] = { glm::vec4(1.0f, 0.f, 0.0f, 1.0f),
-		glm::vec4(0.0f, 1.f, 0.0f, 1.0f),
-		glm::vec4(0.0f, 0.f, 1.0f, 1.0f),
-		glm::vec4(1.0f, 1.f, 0.0f, 1.0f) };
-
-	unsigned int n = 8;
-	float l = 2 / float(n);
-	for (unsigned int x = 0; x < n; ++x)
-		for (unsigned int y = 0; y < n; ++y)
-		{
-			glm::vec4 ndcPoints[] = { glm::vec4(-1.f + x * l, -1.f + y * l, 0.f, 1.f),
-									glm::vec4(-1.f + (x + 1.f) * l, -1.f + y * l, 0.f, 1.f),
-									glm::vec4(-1.f + (x + 1.f) * l, -1.f + (y + 1.f) * l, 0.f, 1.f),
-									glm::vec4(-1.f + x * l, -1.f + (y + 1.f) * l, 0.f, 1.f),
-									glm::vec4(-1.f + x * l, -1.f + y * l, 1.f, 1.f),
-									glm::vec4(-1.f + (x + 1.f) * l, -1.f + y * l, 1.f, 1.f),
-									glm::vec4(-1.f + (x + 1.f) * l, -1.f + (y + 1.f) * l, 1.f, 1.f),
-									glm::vec4(-1.f + x * l, -1.f + (y + 1.f) * l, 1.f, 1.f) };
-
-			glm::vec4 worldPoints[8];
-			for (unsigned int i = 0; i < 8; ++i)
-			{
-				worldPoints[i] = invProjViewMatrix * ndcPoints[i];
-				//worldPoints[i] = glm::inverse(proj) * ndcPoints[i];
-				worldPoints[i] /= worldPoints[i].w;
-			}
-
-			glm::vec4 color = colors[(x + y) % 4];
-
-			//build near/far planes
-			for (unsigned int i = 0; i < 3; ++i)
-			{
-				m_uiManager->CreateVectorItem(glm::vec3(worldPoints[i]), glm::vec3(worldPoints[i + 1] - worldPoints[i]), color);
-			}
-
-			//close the loop
-			m_uiManager->CreateVectorItem(glm::vec3(worldPoints[3]), glm::vec3(worldPoints[0] - worldPoints[3]), color);
-
-			for (unsigned int i = 4; i < 7; ++i)
-			{
-				m_uiManager->CreateVectorItem(glm::vec3(worldPoints[i]), glm::vec3(worldPoints[i + 1] - worldPoints[i]), color);
-			}
-
-			//close the loop
-			m_uiManager->CreateVectorItem(glm::vec3(worldPoints[7]), glm::vec3(worldPoints[4] - worldPoints[7]), color);
-
-			//build the sides
-			for (unsigned int i = 0; i < 4; ++i)
-			{
-				m_uiManager->CreateVectorItem(glm::vec3(worldPoints[i]), glm::vec3(worldPoints[i + 4] - worldPoints[i]), color);
-			}
-
-			glm::vec4 planes[6];
-			//near
-			planes[0] = GetPlaneFrom(worldPoints[2], worldPoints[0], worldPoints[1]);
-			//far
-			planes[1] = GetPlaneFrom(worldPoints[6], worldPoints[5], worldPoints[4]);
-			//left
-			planes[2] = GetPlaneFrom(worldPoints[3], worldPoints[7], worldPoints[4]);
-			//right
-			planes[3] = GetPlaneFrom(worldPoints[5], worldPoints[6], worldPoints[2]);
-			//top
-			planes[4] = GetPlaneFrom(worldPoints[5], worldPoints[1], worldPoints[0]);
-			//bot
-			planes[5] = GetPlaneFrom(worldPoints[3], worldPoints[2], worldPoints[6]);
-
-			//m_uiManager->CreateVectorItem(glm::vec3(worldPoints[0]), glm::vec3(planes[0]), glm::vec4(0.f, 1.f, 0.f, 1.0f));
-			//m_uiManager->CreateVectorItem(glm::vec3(worldPoints[4]), glm::vec3(planes[1]), glm::vec4(0.f, 1.f, 0.f, 1.0f)); //because of inverse y
-			//m_uiManager->CreateVectorItem(glm::vec3(worldPoints[3]), glm::vec3(planes[2]), glm::vec4(0.f, 1.f, 0.f, 1.0f));
-			//m_uiManager->CreateVectorItem(glm::vec3(worldPoints[5]), glm::vec3(planes[3]), glm::vec4(0.f, 1.f, 0.f, 1.0f));
-			//m_uiManager->CreateVectorItem(glm::vec3(worldPoints[1]), glm::vec3(planes[4]), glm::vec4(0.f, 1.f, 0.f, 1.0f));
-			//m_uiManager->CreateVectorItem(glm::vec3(worldPoints[6]), glm::vec3(planes[5]), glm::vec4(0.f, 1.f, 0.f, 1.0f));
-
-		}
-}
-
 int main(int argc, char* arg[])
 {
-	/*ResourceLoader::CreateInstance();
-	ObjectSerializer serializer;
-	Object* obj = new Object();
-	DefaultMaterial* mat = (DefaultMaterial*)s_TestTemplate->Create();
-	CTexture* texture = new CTexture();
-	Mesh* mesh = new Mesh();
-
-	mesh->SetFilename("obj\\\\monkey.mb");
-	texture->SetFilename("pussy.png");
-	texture->SetIsSRGB(true);
-
-	mat->SetRoughness(20);
-	mat->SetF0(4);
-	mat->SetK(1);
-	mat->SetAlbedoText(texture);
-	obj->SetisShadowCaster(true);
-	obj->SetScale(glm::vec3(1.0));
-
-	obj->SetObjectMaterial(mat);
-	obj->SetObjectMesh(mesh);
-
-	serializer.AddObject(obj);
-	serializer.Save("scene.xml");
-
-	ObjectSerializer loadSerializer;
-	loadSerializer.Load("scene.xml");*/
-
 	CApplication app;
 
     app.Run();

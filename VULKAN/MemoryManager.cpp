@@ -411,6 +411,7 @@ MemoryManager::MemoryManager()
 	m_memoryContexts[(unsigned int)EMemoryContextType::Textures]->AllocateMemory(256 << 20, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	m_memoryContexts[(unsigned int)EMemoryContextType::UniformBuffers]->AllocateMemory(64 << 20, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 	m_memoryContexts[(unsigned int)EMemoryContextType::IndirectDrawCmdBuffer]->AllocateMemory(2 << 20, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	m_memoryContexts[(unsigned int)EMemoryContextType::UI]->AllocateMemory(2 << 20, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 }
 
 MemoryManager::~MemoryManager()

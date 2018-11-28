@@ -33,8 +33,6 @@ struct SUpdateGlobalParams
     glm::vec4 Params;
 };
 class CUIManager;
-class CUIVector;
-class CUIAxisSystem;
 class CUIText;
 class CTexture;
 
@@ -69,8 +67,6 @@ public:
 
     float GetParticleSpeedTreshold() const { return m_particleSpeedTreshold; }
     void SetParticleSpeedTreshold(float val) { m_particleSpeedTreshold = val; }
-
-    void CreateDebugElements(CUIManager* manager);
 protected:
     glm::mat3           m_TBN;
     glm::vec3           m_normal;
@@ -85,9 +81,6 @@ protected:
     float               m_fadeTime;
     float               m_particleSpeed;
     float               m_particleSpeedTreshold;
-
-    //debug
-    CUIAxisSystem*      m_debugAxis; //move debug to spawner
 };
 
 class CConeSpawner : public CParticleSpawner

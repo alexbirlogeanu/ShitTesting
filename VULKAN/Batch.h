@@ -48,6 +48,7 @@ public:
 	virtual ~Batch();
 
 	void AddObject(Object* obj);
+	//TODO CanAddObject should return true if the batch has already an object with the same mesh as obj
 	bool CanAddObject(Object* obj);
 
 	void Construct();

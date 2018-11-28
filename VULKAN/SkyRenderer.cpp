@@ -19,7 +19,7 @@ CSunRenderer::CSunRenderer(VkRenderPass renderPass)
     , m_neareastSampler(VK_NULL_HANDLE)
     , m_sunTexture(nullptr)
     , m_isEditMode(false)
-    , m_editInfo(nullptr)
+    //, m_editInfo(nullptr)
 {
     m_sunScale = 2.0f;
     m_lightShaftDensity = 1.5f;
@@ -176,11 +176,11 @@ void CSunRenderer::UpdateGraphicInterface()
 bool CSunRenderer::OnKeyPressed(const KeyInput& keyInput)
 {
 	WPARAM key = keyInput.GetKeyPressed();
-    TRAP(m_editInfo);
+    //TRAP(m_editInfo);
     if(key == '1')
     {
 		m_isEditMode = !m_isEditMode;
-        m_editInfo->SetVisible(m_isEditMode);
+        //m_editInfo->SetVisible(m_isEditMode);
         UpdateEditInfo();
     }
 
@@ -236,18 +236,18 @@ bool CSunRenderer::OnKeyPressed(const KeyInput& keyInput)
 
 void CSunRenderer::UpdateEditInfo()
 {
-    m_editInfo->SetTextItem(0, "(E/R)Weight: " + std::to_string(m_lightShaftWeight));
+   /* m_editInfo->SetTextItem(0, "(E/R)Weight: " + std::to_string(m_lightShaftWeight));
     m_editInfo->SetTextItem(1, "(T/Y)Decay: " + std::to_string(m_lightShaftDecay));
     m_editInfo->SetTextItem(2, "(U/I)Density: " + std::to_string(m_lightShaftDensity));
     m_editInfo->SetTextItem(3, "(O/P)Exposure: " + std::to_string(m_lightShaftExposure));
-    m_editInfo->SetTextItem(4, "(F/G)Samples: " + std::to_string(m_lightShaftSamples));
+    m_editInfo->SetTextItem(4, "(F/G)Samples: " + std::to_string(m_lightShaftSamples));*/
 }
 
 void CSunRenderer::CreateEditInfo(CUIManager* manager)
 {
     std::vector<std::string> texts;
     texts.resize(5);
-    m_editInfo = manager->CreateTextContainerItem(texts, glm::uvec2(20, 300), 5, 48); 
+    //m_editInfo = manager->CreateTextContainerItem(texts, glm::uvec2(20, 300), 5, 48); 
 }
 
 void CSunRenderer::CreateDescriptorSetLayout()

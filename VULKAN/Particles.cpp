@@ -31,7 +31,6 @@ CParticleSpawner::CParticleSpawner(glm::vec3 pos, glm::vec3 normal, glm::vec3 ta
     , m_fadeTime(2.0f)
     , m_particleSpeed(0.35f)
     , m_particleSpeedTreshold(0.05f)
-    , m_debugAxis(nullptr)
 {
     m_bitangent = glm::cross(m_normal, m_tangent);
     m_TBN = glm::mat3(m_tangent, m_bitangent, m_normal);
@@ -55,7 +54,7 @@ void CParticleSpawner::SpawnParticle(CParticle* p)
 
 void CParticleSpawner::CreateDebugElements(CUIManager* manager)
 {
-    manager->CreateAxisSystemItem(m_worldPosition, m_tangent / 2.0f, m_bitangent / 2.0f, m_normal / 2.0f);
+    //manager->CreateAxisSystemItem(m_worldPosition, m_tangent / 2.0f, m_bitangent / 2.0f, m_normal / 2.0f);
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //CConeSpawner

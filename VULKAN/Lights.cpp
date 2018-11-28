@@ -8,8 +8,6 @@ CDirectionalLight::CDirectionalLight()
     , m_rotStep(10.0f)
     , m_normal(0.0f, -1.0f, 0.0f)
     , m_tangent(1.0f, 0.0f, 0.0f)
-    , m_debugDirVector(nullptr)
-    , m_debugLightAxisSystem(nullptr)
     , m_debugPosition(0.0f, 0.5f, -1.0f)
     , m_lcIndex(0)
     , m_lightIntensity(10.0f)
@@ -86,10 +84,6 @@ void CDirectionalLight::Update()
 
 void CDirectionalLight::CreateDebug(CUIManager* manager)
 {
-    m_debugDirVector = manager->CreateVectorItem(m_debugPosition, m_direction / 2.0f, glm::vec4(0.1f, 0.6f, 0.6f, 1.0f));
-    m_debugLightAxisSystem = manager->CreateAxisSystemItem(m_debugPosition, m_tangent / 2.0f, m_bitangent / 2.0f, m_normal / 2.0f);
-
-    UpdateDebug();
 }
 
 bool CDirectionalLight::OnKeyboardPressed(const KeyInput& keyInput)
@@ -135,15 +129,4 @@ bool CDirectionalLight::OnMouseEvent(const MouseInput& mouseInput)
 		return true;
 	}
 	return false;
-}
-
-
-void CDirectionalLight::UpdateDebug()
-{
-    if (m_debugDirVector && m_debugLightAxisSystem) 
-    {
-        m_debugDirVector->SetVector(m_direction / 2.0f);
-        m_debugDirVector->SetVisible(m_displayDebug);
-        m_debugLightAxisSystem->SetVisible(m_displayDebug);
-    }
 }

@@ -96,7 +96,7 @@ private:
 };
 class CUIManager;
 class CUIText;
-class CUITextContainer;
+//class CUITextContainer;
 class CPickManager : public Singleton<CPickManager>
 {
 	friend class Singleton<CPickManager>;
@@ -141,7 +141,7 @@ private:
         SlotsEnd = 4,
         Count = SlotsEnd + 1
     };
-    CUITextContainer*           m_editModeInfo;
+    //CUITextContainer*           m_editModeInfo;
 };
 
 CPickManager* GetPickManager();
