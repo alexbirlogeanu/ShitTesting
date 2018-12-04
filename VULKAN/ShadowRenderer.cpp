@@ -47,47 +47,61 @@ void ShadowMapRenderer::Init()
     m_pipeline.Init(this, m_renderPass, 0);
 }
 
-void ShadowMapRenderer::ComputeProjMatrix(glm::mat4& proj, const glm::mat4& view)
+void ShadowMapRenderer::ComputeCascadeViewMatrix(glm::mat4& view)
 {
-    //const CFrustrum& frustrum = ms_camera.GetFrustrum();
-    CFrustrum frustrum (ms_camera.GetNear(), 5.0f);
-    frustrum.Update(ms_camera.GetPos(), ms_camera.GetFrontVector(), ms_camera.GetUpVector(), ms_camera.GetRightVector(), ms_camera.GetFOV());
+	glm::vec3 lightDir(directionalLight.GetDirection());
 
-    glm::vec4 maxLimits = glm::vec4(std::numeric_limits<float>::min());
-    glm::vec4 minLimits = glm::vec4(std::numeric_limits<float>::max());
-    for(unsigned int i = 0; i < CFrustrum::FPCount; ++i)
-    {
-        glm::vec4 lightPos = view * glm::vec4(frustrum.GetPoint(i), 1.0f);
-        maxLimits = glm::max(maxLimits, lightPos);
-        minLimits = glm::min(minLimits, lightPos);
-    }
-    BoundingBox sceneBoundingbox = CScene::GetBoundingBox();
+	glm::vec3 sceneMin(-10.0f, -5.0f, -13.0f); //hardcoded for now
+	glm::vec3 sceneMax(10.0f, 2.0f, 7.0f); //need to move this in a scene manager that computes the terrain bounding box based on the terrain mesh
+	glm::vec3 orig = (sceneMax + sceneMin) / 2.0f;
 
-    //float near1;
-    //float far1;
-    //{
-    //    BoundingBox bb = sceneBoundingbox;
-    //    //transform it in light space
-    //    bb.Max = glm::vec3(view * glm::vec4(bb.Max, 1.0f)); //LUL
-    //    bb.Min = glm::vec3(view * glm::vec4(bb.Min, 1.0f));
-    //    near1 = glm::min(bb.Max.z, bb.Min.z);
-    //    far1 = glm::max(bb.Max.z, bb.Min.z);
-    //}
+	float radius = glm::length(sceneMax - orig);
 
-    float near2 = std::numeric_limits<float>::max();
-    float far2 = std::numeric_limits<float>::min();
-    //{
-    BoundingBox bb = sceneBoundingbox;
-    std::vector<glm::vec3> bbPoints;
-    bb.Transform(view, bbPoints);
-    for(unsigned int i = 0; i < bbPoints.size(); ++i)
-    {
-        near2 = glm::min(bbPoints[i].z, near2);
-        far2 = glm::max(bbPoints[i].z, far2);
-    }
-    //}
-    proj = glm::ortho(minLimits.x, maxLimits.x , minLimits.y, maxLimits.y, -far2, -near2);
-    ConvertToProjMatrix(proj);
+	view = glm::lookAt(orig - radius * lightDir, orig, glm::vec3(0.0f, 1.0f, 0.0f));
+}
+
+void ShadowMapRenderer::ComputeCascadeProjMatrix(glm::mat4& proj, const glm::mat4& view)
+{
+	float alpha = 0.25f;
+	float cameraNear = ms_camera.GetNear();
+	float cameraFar = ms_camera.GetFar();
+	float splitIndex = 1.0f;//for split index we have zi as near plane and zi+1 as far plane
+	float splitNumbers = 3.0f;
+
+	float splitFar = alpha * cameraNear * glm::pow(cameraFar / cameraNear, splitIndex / splitNumbers) + (1.0f - alpha) * (cameraNear + (splitIndex / splitNumbers) * (cameraFar - cameraNear));
+
+	CFrustrum frustrum(cameraNear, splitFar);
+	frustrum.Update(ms_camera.GetPos(), ms_camera.GetFrontVector(), ms_camera.GetUpVector(), ms_camera.GetRightVector(), ms_camera.GetFOV()); //in worldspace
+
+	proj = glm::ortho(-25.0f, 25.0f, -15.0f, 15.0f, cameraNear, splitFar);
+	glm::mat4 PV = proj * view;
+	glm::vec3 minLimits = glm::vec3(std::numeric_limits<float>::max());
+	glm::vec3 maxLimits = glm::vec3(std::numeric_limits<float>::min());
+
+	for (unsigned int i = 0; i < CFrustrum::FPCount; ++i)
+	{
+		glm::vec4 lightPos = PV * glm::vec4(frustrum.GetPoint(i), 1.0f);
+		minLimits = glm::min(minLimits, glm::vec3(lightPos));
+		maxLimits = glm::max(maxLimits, glm::vec3(lightPos));
+	}
+	minLimits.z = 0.0f; //to capture all the objects of the scene even if they are out of camera
+
+	float scaleX = 2.0f / (maxLimits.x - minLimits.x);
+	float scaleY = 2.0f / (maxLimits.y - minLimits.y);
+	float offsetX = (-0.5f) * (maxLimits.x + minLimits.x) * scaleX;
+	float offsetY = (-0.5f) * (maxLimits.y + minLimits.y) * scaleY;
+	float scaleZ = 1.0f / (maxLimits.z - minLimits.z);
+	float offsetZ = -minLimits.z * scaleZ;
+
+	glm::mat4 C(glm::vec4(scaleX, 0.0f, 0.0f, 0.0f),
+		glm::vec4(0.0f, scaleY, 0.0f, 0.0f),
+		glm::vec4(0.0f, 0.0f, scaleZ, 0.0f),
+		glm::vec4(offsetX, offsetY, offsetZ, 1.0f)
+		);
+
+	proj = C * proj;
+
+	ConvertToProjMatrix(proj);
 }
 
 void ShadowMapRenderer::UpdateGraphicInterface()
@@ -96,14 +110,11 @@ void ShadowMapRenderer::UpdateGraphicInterface()
 
 void ShadowMapRenderer::PreRender()
 {
-	glm::vec3 lightDir(directionalLight.GetDirection());
-	glm::vec3 eye = ms_camera.GetPos() - 1.0f * lightDir;
+	glm::mat4 view;
+	glm::mat4 proj;
 
-	glm::vec3 right = glm::cross(lightDir, glm::vec3(0.0f, 1.0f, 0.0f));
-	glm::mat4 view = glm::lookAt(eye, ms_camera.GetPos(), glm::cross(lightDir, right));
-	glm::mat4 proj;// = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.1f, 25.0f);
-	ComputeProjMatrix(proj, view);
-
+	ComputeCascadeViewMatrix(view);
+	ComputeCascadeProjMatrix(proj, view);
 	
 	m_shadowViewProj = proj * view;
 }

@@ -261,7 +261,7 @@ public:
     void AddDynamicState(VkDynamicState state);
 	void SetTesselationPatchSize(uint32_t size);
 	void SetWireframeSupport(bool allowWireframe);
-
+	void SetFrontFace(VkFrontFace face);
 	void SwitchWireframe(bool isWireframe);
 
     static VkPipelineColorBlendAttachmentState CreateDefaultBlendState()

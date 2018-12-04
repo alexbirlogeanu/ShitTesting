@@ -26,9 +26,9 @@ protected:
     void UpdateResourceTable() override;
     void CreateDescriptorSetLayout() override;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override;
-
-    void ComputeProjMatrix(glm::mat4& proj, const glm::mat4& view);
-    //these 2 methods are duplicate code. See ObjectRenderer
+	
+	void ComputeCascadeViewMatrix(glm::mat4& view);
+	void ComputeCascadeProjMatrix(glm::mat4& proj, const glm::mat4& view);
 
     void UpdateGraphicInterface() override;
 private:

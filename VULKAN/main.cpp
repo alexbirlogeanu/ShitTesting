@@ -1238,8 +1238,6 @@ void CApplication::Run()
 	RegisterSpecialInputListeners();
 	//RenderCameraFrustrum();
 
-	m_uiManager->CreateTextItem("Sa ma sugi de penis", glm::uvec2(50, 50));    
-
     DWORD start;
     DWORD stop;
     DWORD dtMs;

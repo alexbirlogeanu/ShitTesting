@@ -147,7 +147,7 @@ void TerrainRenderer::CreatePipeline()
 	m_shadowPipeline.SetVertexInputState(Mesh::GetVertexDesc());
 	m_shadowPipeline.SetViewport(SHADOWW, SHADOWH);
 	m_shadowPipeline.SetScissor(SHADOWW, SHADOWH);
-	m_shadowPipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
+	//m_shadowPipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
 	m_shadowPipeline.SetVertexShaderFile("shadow_terrain.vert");
 	m_shadowPipeline.AddPushConstant({VK_SHADER_STAGE_VERTEX_BIT, 0, 256});
 

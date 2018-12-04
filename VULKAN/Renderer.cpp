@@ -608,6 +608,11 @@ void CGraphicPipeline::SetWireframeSupport(bool allowWireframe)
 	m_allowWireframe = allowWireframe;
 }
 
+void CGraphicPipeline::SetFrontFace(VkFrontFace face)
+{
+	m_pipelineRasterizationInfo.frontFace = face;
+}
+
 void CGraphicPipeline::SwitchWireframe(bool isWireframe)
 {
 	m_isWireframe = isWireframe;
