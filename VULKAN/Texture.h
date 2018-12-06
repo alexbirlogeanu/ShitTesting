@@ -99,7 +99,7 @@ class CTexture : public SeriableImpl<CTexture>
 	friend class TextureCreator;
 public:
     CTexture(const SImageData& image, bool ownData = false); //for compatibility TODO delete
-	CTexture(const std::string& filename); //for compatibility TODO delete
+	CTexture(const std::string& filename, bool issRGB = true); //for compatibility TODO delete
 	CTexture();
     ~CTexture();
 

@@ -38,6 +38,7 @@
 #include "PointLightRenderer2.h"
 #include "ScreenSpaceReflectionRenderer.h"
 #include "TerrainRenderer.h"
+#include "VegetationRenderer.h"
 
 #include "MemoryManager.h"
 #include "Input.h"
@@ -924,6 +925,7 @@ private:
     void SetupVolumetricRendering();
 	void SetupScreenSpaceReflectionsRendering();
 	void SetupTerrainRendering();
+	void SetupVegetationRendering();
 
     void CreateDeferredRenderPass(const FramebufferDescription& fbDesc);
     void CreateAORenderPass(const FramebufferDescription& fbDesc);
@@ -942,6 +944,7 @@ private:
     void CreateVolumetricRenderPass(const FramebufferDescription& fbDesc);
 	void CreateSSRRenderPass(const FramebufferDescription& fbDesc);
 	void CreateTerrainRenderPass(const FramebufferDescription& fbDesc);
+	void CreateVegetationRenderPass(const FramebufferDescription& fbDesc);
 
     void CreateCommandBuffer();
   
@@ -1001,6 +1004,7 @@ private:
     VkRenderPass                m_volumetricRenderPass;
 	VkRenderPass				m_ssrRenderPass;
 	VkRenderPass				m_terrainRenderPass;
+	VkRenderPass				m_vegetationRenderPass;
 
     VkQueue                     m_queue;
 
@@ -1044,6 +1048,7 @@ private:
     CUIRenderer*                m_uiRenderer;
 	ScreenSpaceReflectionsRenderer*	m_ssrRenderer;
 	TerrainRenderer*			m_terrainRenderer;
+	VegetationRenderer*			m_vegetationRenderer;
 
     CUIManager*                 m_uiManager;
 
@@ -1063,51 +1068,55 @@ private:
 };
 
 CApplication::CApplication()
-    : m_windowClass(WNDCLASSNAME)
-    , m_windowName(WNDNAME)
-    , m_deferredRenderPass(VK_NULL_HANDLE)
-    , m_aoRenderPass(VK_NULL_HANDLE)
-    , m_dirLightRenderPass(VK_NULL_HANDLE)
-    , m_pointLightRenderPass(VK_NULL_HANDLE)
+	: m_windowClass(WNDCLASSNAME)
+	, m_windowName(WNDNAME)
+	, m_deferredRenderPass(VK_NULL_HANDLE)
+	, m_aoRenderPass(VK_NULL_HANDLE)
+	, m_dirLightRenderPass(VK_NULL_HANDLE)
+	, m_pointLightRenderPass(VK_NULL_HANDLE)
 	, m_deferredTileShadingRenderPass(VK_NULL_HANDLE)
-    , m_shadowRenderPass(VK_NULL_HANDLE)
-    , m_shadowResolveRenderPass(VK_NULL_HANDLE)
-    , m_postProcessPass(VK_NULL_HANDLE)
-    , m_sunRenderPass(VK_NULL_HANDLE)
-    , m_uiRenderPass(VK_NULL_HANDLE)
-    , m_fogRenderPass(VK_NULL_HANDLE)
-    , m_3DtextureRenderPass(VK_NULL_HANDLE)
-    , m_volumetricRenderPass(VK_NULL_HANDLE)
+	, m_shadowRenderPass(VK_NULL_HANDLE)
+	, m_shadowResolveRenderPass(VK_NULL_HANDLE)
+	, m_postProcessPass(VK_NULL_HANDLE)
+	, m_sunRenderPass(VK_NULL_HANDLE)
+	, m_uiRenderPass(VK_NULL_HANDLE)
+	, m_fogRenderPass(VK_NULL_HANDLE)
+	, m_3DtextureRenderPass(VK_NULL_HANDLE)
+	, m_volumetricRenderPass(VK_NULL_HANDLE)
 	, m_ssrRenderPass(VK_NULL_HANDLE)
-    , m_swapChain(VK_NULL_HANDLE)
-    , m_surface(VK_NULL_HANDLE)
-    , m_queue(VK_NULL_HANDLE)
-    , m_mainCommandBuffer(VK_NULL_HANDLE)
-    , m_commandPool(VK_NULL_HANDLE)
-    , m_aquireImageFence(VK_NULL_HANDLE)
-    , m_renderSemaphore(VK_NULL_HANDLE)
-    , m_renderFence(VK_NULL_HANDLE)
-    , m_currentBuffer(-1)
-    , m_skyTextureCube(nullptr)
-    , m_skyTexture2D(nullptr)
-    , m_sunTexture(nullptr)
-    , m_smokeTexture(nullptr)
-    , m_lightRenderer(nullptr)
+	, m_terrainRenderPass(VK_NULL_HANDLE)
+	, m_vegetationRenderPass(VK_NULL_HANDLE)
+	, m_swapChain(VK_NULL_HANDLE)
+	, m_surface(VK_NULL_HANDLE)
+	, m_queue(VK_NULL_HANDLE)
+	, m_mainCommandBuffer(VK_NULL_HANDLE)
+	, m_commandPool(VK_NULL_HANDLE)
+	, m_aquireImageFence(VK_NULL_HANDLE)
+	, m_renderSemaphore(VK_NULL_HANDLE)
+	, m_renderFence(VK_NULL_HANDLE)
+	, m_currentBuffer(-1)
+	, m_skyTextureCube(nullptr)
+	, m_skyTexture2D(nullptr)
+	, m_sunTexture(nullptr)
+	, m_smokeTexture(nullptr)
+	, m_lightRenderer(nullptr)
 	, m_pointLightRenderer2(nullptr)
-    , m_particlesRenderer(nullptr)
-    , m_objectRenderer(nullptr)
-    , m_aoRenderer(nullptr)
-    , m_shadowRenderer(nullptr)
-    , m_shadowResolveRenderer(nullptr)
-    , m_skyRenderer(nullptr)
-    , m_fogRenderer(nullptr)
-    , m_3dTextureRenderer(nullptr)
-    , m_volumetricRenderer(nullptr)
-    , m_postProcessRenderer(nullptr)
-    , m_sunRenderer(nullptr)
-    , m_uiRenderer(nullptr)
+	, m_particlesRenderer(nullptr)
+	, m_objectRenderer(nullptr)
+	, m_aoRenderer(nullptr)
+	, m_shadowRenderer(nullptr)
+	, m_shadowResolveRenderer(nullptr)
+	, m_skyRenderer(nullptr)
+	, m_fogRenderer(nullptr)
+	, m_3dTextureRenderer(nullptr)
+	, m_volumetricRenderer(nullptr)
+	, m_postProcessRenderer(nullptr)
+	, m_sunRenderer(nullptr)
+	, m_uiRenderer(nullptr)
 	, m_ssrRenderer(nullptr)
-    , m_uiManager(nullptr)
+	, m_uiManager(nullptr)
+	, m_vegetationRenderer(nullptr)
+	, m_terrainRenderer(nullptr)
     , m_screenshotRequested(false)
     , m_centerCursor(true)
     , m_mouseMoved(true)
@@ -1153,6 +1162,7 @@ CApplication::CApplication()
     SetupVolumetricRendering();
 	SetupScreenSpaceReflectionsRendering();
 	SetupTerrainRendering();
+	SetupVegetationRendering();
 
     GetPickManager()->Setup();
 
@@ -2041,6 +2051,24 @@ void CApplication::SetupParticleRendering()
 	 m_terrainRenderer->Init();
  }
 
+void CApplication::SetupVegetationRendering()
+{
+	FramebufferDescription fbDesc;
+	fbDesc.Begin(4);
+	fbDesc.AddColorAttachmentDesc(0, g_commonResources.GetAs<ImageHandle*>(EResourceType_AlbedoImage));
+	fbDesc.AddColorAttachmentDesc(1, g_commonResources.GetAs<ImageHandle*>(EResourceType_SpecularImage));
+	fbDesc.AddColorAttachmentDesc(2, g_commonResources.GetAs<ImageHandle*>(EResourceType_NormalsImage));
+	fbDesc.AddColorAttachmentDesc(3, g_commonResources.GetAs<ImageHandle*>(EResourceType_PositionsImage));
+	fbDesc.AddDepthAttachmentDesc(g_commonResources.GetAs<ImageHandle*>(EResourceType_DepthBufferImage));
+	fbDesc.End();
+
+	CreateVegetationRenderPass(fbDesc);
+
+	m_vegetationRenderer = new VegetationRenderer(m_vegetationRenderPass);
+	m_vegetationRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
+	m_vegetationRenderer->Init();
+}
+
 void CApplication::CreateShadowRenderPass(const FramebufferDescription& fbDesc)
 {
     TRAP(fbDesc.m_depthAttachments.IsValid());
@@ -2426,6 +2454,31 @@ void CApplication::CreateTerrainRenderPass(const FramebufferDescription& fbDesc)
 	NewRenderPass(&m_terrainRenderPass, ad, subpasses, dependencies);
 }
 
+void CApplication::CreateVegetationRenderPass(const FramebufferDescription& fbDesc)
+{
+	std::vector<VkAttachmentDescription> ad;
+	ad.resize(fbDesc.m_colorAttachments.size() + 1);
+
+	for (uint32_t i = 0; i < fbDesc.m_colorAttachments.size(); ++i)
+		AddAttachementDesc(ad[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[i].format, VK_ATTACHMENT_LOAD_OP_LOAD);
+
+	AddAttachementDesc(ad[fbDesc.m_colorAttachments.size()], VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format, VK_ATTACHMENT_LOAD_OP_LOAD);
+
+	std::vector<VkAttachmentReference> atRef;
+	for (unsigned int i = 0; i < fbDesc.m_colorAttachments.size(); ++i)
+		atRef.push_back(CreateAttachmentReference(i, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
+
+	atRef.push_back(CreateAttachmentReference(fbDesc.m_colorAttachments.size(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL));
+
+	std::vector<VkSubpassDescription> subpasses;
+	subpasses.push_back(CreateSubpassDesc(atRef.data(), (uint32_t)fbDesc.m_colorAttachments.size(), &atRef[fbDesc.m_colorAttachments.size()]));
+
+	std::vector<VkSubpassDependency> dependencies;
+	dependencies.push_back(CreateSubpassDependency(VK_SUBPASS_EXTERNAL, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_DEPENDENCY_BY_REGION_BIT));
+
+	NewRenderPass(&m_vegetationRenderPass, ad, subpasses, dependencies);
+}
+
 void CApplication::CreateCommandBuffer()
 {
     VkCommandPoolCreateInfo cmdPoolCi;
@@ -2660,6 +2713,7 @@ void CApplication::Render()
 
     m_objectRenderer->Render();
 	m_terrainRenderer->Render();//TODO object renderer clear the GBuffer. I have to move it at the start of frame
+	m_vegetationRenderer->Render();
 
     vk::CmdPipelineBarrier(vk::g_vulkanContext.m_mainCommandBuffer, 
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 

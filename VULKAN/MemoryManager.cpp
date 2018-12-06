@@ -405,7 +405,7 @@ MemoryManager::MemoryManager()
 	{
 		m_memoryContexts[i] = new MemoryContext((EMemoryContextType)i);
 	}
-
+	m_memoryContexts[(unsigned int)EMemoryContextType::StagginBuffer]->AllocateMemory(4 << 20, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 	m_memoryContexts[(unsigned int)EMemoryContextType::DeviceLocalBuffer]->AllocateMemory(64 << 20, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	m_memoryContexts[(unsigned int)EMemoryContextType::Framebuffers]->AllocateMemory(256 << 20, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	m_memoryContexts[(unsigned int)EMemoryContextType::Textures]->AllocateMemory(256 << 20, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
@@ -486,5 +486,10 @@ bool MemoryManager::MapMemoryContext(EMemoryContextType context)
 void MemoryManager::UnmapMemoryContext(EMemoryContextType context)
 {
 	m_memoryContexts[(unsigned int)context]->UnmapMemory();
+}
+
+bool MemoryManager::IsMemoryMapped(EMemoryContextType context) const
+{
+	return m_memoryContexts[(unsigned int)context]->IsMapped();
 }
 

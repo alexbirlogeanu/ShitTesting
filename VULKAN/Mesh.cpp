@@ -23,7 +23,7 @@ MeshManager::TransferMeshInfo::TransferMeshInfo(Mesh* mesh)
 {
 
 	m_meshBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::DeviceLocalBuffer, m_mesh->MemorySizeNeeded(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-	m_staggingBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::StaggingBuffer, m_mesh->MemorySizeNeeded(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+	m_staggingBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::MeshStaggingBuffer, m_mesh->MemorySizeNeeded(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
 	m_toVertexBuffer = m_meshBuffer->CreateSubbuffer(m_mesh->GetVerticesMemorySize());
 	m_toIndexBuffer = m_meshBuffer->CreateSubbuffer(m_mesh->GetIndicesMemorySize());
@@ -82,13 +82,13 @@ void MeshManager::Update()
 			m_transferInProgress[i].EndTransfer();
 
 		m_transferInProgress.clear();
-		MemoryManager::GetInstance()->FreeMemory(EMemoryContextType::StaggingBuffer);
+		MemoryManager::GetInstance()->FreeMemory(EMemoryContextType::MeshStaggingBuffer);
 	}
 
 	if (!m_pendingMeshes.empty())
 	{
 		unsigned int staggingMemoryTotalSize = CalculateStagginMemorySize();
-		MemoryManager::GetInstance()->AllocMemory(EMemoryContextType::StaggingBuffer, staggingMemoryTotalSize);
+		MemoryManager::GetInstance()->AllocMemory(EMemoryContextType::MeshStaggingBuffer, staggingMemoryTotalSize);
 		//
 		
 		TRAP(m_transferInProgress.empty() && "All transfer should be processed"); 
@@ -99,11 +99,11 @@ void MeshManager::Update()
 			m_transferInProgress.push_back(TransferMeshInfo(m));
 		}
 
-		MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::StaggingBuffer);
+		MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::MeshStaggingBuffer);
 		for (auto info : m_transferInProgress)
 			info.m_mesh->CopyLocalData(info.m_stagginVertexBuffer, info.m_staggingIndexBuffer);
 
-		MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::StaggingBuffer);
+		MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::MeshStaggingBuffer);
 		std::vector<VkBufferMemoryBarrier> copyBarriers;
 		copyBarriers.reserve(m_transferInProgress.size());
 

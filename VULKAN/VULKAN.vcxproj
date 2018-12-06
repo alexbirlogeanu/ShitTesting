@@ -132,6 +132,7 @@
     <ClInclude Include="DebugMarkers.h" />
     <ClInclude Include="DefaultMaterial.h" />
     <ClInclude Include="DescriptorsUtils.h" />
+    <ClInclude Include="Font.h" />
     <ClInclude Include="Input.h" />
     <ClInclude Include="Material.h" />
     <ClInclude Include="MemoryManager.h" />
@@ -159,7 +160,9 @@
     <ClInclude Include="TerrainRenderer.h" />
     <ClInclude Include="Texture.h" />
     <ClInclude Include="UI.h" />
+    <ClInclude Include="UiUtils.h" />
     <ClInclude Include="Utils.h" />
+    <ClInclude Include="VegetationRenderer.h" />
     <ClInclude Include="VulkanLoader.h" />
   </ItemGroup>
   <ItemGroup>
@@ -170,6 +173,7 @@
     <ClCompile Include="DebugMarkers.cpp" />
     <ClCompile Include="DefaultMaterial.cpp" />
     <ClCompile Include="DescriptorsUtils.cpp" />
+    <ClCompile Include="Font.cpp" />
     <ClCompile Include="Input.cpp" />
     <ClCompile Include="Material.cpp" />
     <ClCompile Include="MemoryManager.cpp" />
@@ -193,6 +197,7 @@
     <ClCompile Include="Texture.cpp" />
     <ClCompile Include="UI.cpp" />
     <ClCompile Include="Utils.cpp" />
+    <ClCompile Include="VegetationRenderer.cpp" />
     <ClCompile Include="VulkanLoader.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

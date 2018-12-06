@@ -406,7 +406,7 @@ void Batch::UpdateGraphicsInterface()
 
 	//fill with default textures
 	std::vector<VkDescriptorImageInfo> defaultTextures;
-	for (uint32_t i = (uint32_t)m_batchTextures.size(); i < ms_texturesLimit; ++i) //magic MIKE
+	for (uint32_t i = (uint32_t)m_batchTextures.size(); i < ms_texturesLimit; ++i)
 		defaultTextures.push_back(m_batchTextures[0]->GetTextureDescriptor());
 
 	if (!defaultTextures.empty())

@@ -14,8 +14,9 @@
 
 enum class EMemoryContextType
 {
+	StagginBuffer, //used for stagging. After a copy from stage -> device is complete the memory should be freed by application
 	DeviceLocalBuffer,
-	StaggingBuffer,
+	MeshStaggingBuffer,
 	Framebuffers, //device local memory
 	Textures, //device local memory
 	StaggingTextures, //device local for stagging textures
@@ -279,6 +280,7 @@ public:
 
 	bool MapMemoryContext(EMemoryContextType context); //TODO change to return the new mapped memory
 	void UnmapMemoryContext(EMemoryContextType context);
+	bool IsMemoryMapped(EMemoryContextType context) const;
 
 	static VkDeviceSize ComputeTotalSize(const std::vector<VkDeviceSize>& sizes);
 protected:

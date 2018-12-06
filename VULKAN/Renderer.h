@@ -268,7 +268,7 @@ public:
     {
         VkPipelineColorBlendAttachmentState blendAttachs;
         cleanStructure(blendAttachs);
-        blendAttachs.blendEnable = VK_FALSE; //TODO
+        blendAttachs.blendEnable = VK_FALSE;
         blendAttachs.srcColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
         blendAttachs.dstColorBlendFactor = VK_BLEND_FACTOR_CONSTANT_ALPHA;
         blendAttachs.colorBlendOp = VK_BLEND_OP_ADD;

@@ -240,12 +240,13 @@ CTexture::CTexture()
 
 }
 
-CTexture::CTexture(const std::string& filename)
+CTexture::CTexture(const std::string& filename, bool issRGB)
 	: m_image(nullptr)
 	, SeriableImpl<CTexture>("texture")
 	, m_filter(VK_FILTER_LINEAR)
 {
 	SetFilename(filename);
+	SetIsSRGB(issRGB);
 }
 const VkDescriptorImageInfo& CTexture::GetTextureDescriptor() const  
 {
