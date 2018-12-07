@@ -173,8 +173,12 @@ public:
 		BASE* cobj = dynamic_cast<BASE*>(obj);
 		TRAP(cobj);
 
-		MaterialTemplateBase* tmplMaterial = MaterialLibrary::GetInstance()->GetMaterialByName(prop->value());
-		cobj->*m_ptm = tmplMaterial->Create(serializer);
+		cobj->*m_ptm = nullptr;
+		if (prop)
+		{
+			MaterialTemplateBase* tmplMaterial = MaterialLibrary::GetInstance()->GetMaterialByName(prop->value());
+			cobj->*m_ptm = tmplMaterial->Create(serializer);
+		}
 	};
 
 private:

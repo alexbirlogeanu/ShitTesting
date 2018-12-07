@@ -106,8 +106,8 @@ public:
 	ObjectSerializer();
 	virtual ~ObjectSerializer();
 
-	virtual void Save(const std::string& filename) override;
-	virtual void Load(const std::string& filename) override;
+	virtual void LoadContent() override;
+	virtual void SaveContent() override;
 
 	const std::vector<Object*>& GetObjects() const { return m_objects; }
 	void AddObject(Object* obj);
@@ -146,17 +146,4 @@ protected:
 private:
     glm::mat4                           m_projMatrix;
 
-};
-
-class CScene
-{
-public:
-    static void AddObject(Object* obj);
-
-    static BoundingBox GetBoundingBox() { return ms_sceneBoundingBox; };
-private:
-    static void UpdateBoundingBox();
-private:
-    static std::unordered_set<Object*>      ms_sceneObjects;
-    static BoundingBox                      ms_sceneBoundingBox;
 };

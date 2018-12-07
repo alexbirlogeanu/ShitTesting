@@ -619,6 +619,11 @@ void CGraphicPipeline::SwitchWireframe(bool isWireframe)
 	m_pipeline = (m_isWireframe && m_allowWireframe) ? m_wireframePipeline : m_solidPipeline;
 }
 
+void CGraphicPipeline::SetRasterizerDiscard(bool value)
+{
+	m_pipelineRasterizationInfo.rasterizerDiscardEnable = value;
+}
+
 void CGraphicPipeline::CompileShaders()
 {
     TRAP(!m_vertexFilename.empty());

@@ -5,11 +5,10 @@
 #include "rapidxml/rapidxml.hpp"
 #include "defines.h"
 #include "Utils.h"
-#include "rapidxml/rapidxml_print.hpp"
+
+#include "Scene.h"
 
 #include <cstdlib>
-#include <iostream>
-#include <fstream>
 
 
 //////////////////////////////////////////////////////////////////////
@@ -27,38 +26,20 @@ ObjectSerializer::~ObjectSerializer()
 		delete m_objects[i];
 }
 
-void ObjectSerializer::Save(const std::string& filename)
+void ObjectSerializer::SaveContent()
 {
-	m_isSaving = true;
-	auto root = GetNewNode(GetNewString("scene"));
-	m_document.append_node(root);
-
 	for (unsigned int i = 0; i < m_objects.size(); ++i)
 		m_objects[i]->Serialize(this);
-
-	std::fstream f(filename, std::ios_base::out);
-	f << *m_document.first_node() << std::endl;
-	f.close();
-	m_document.clear();
 }
 
-void ObjectSerializer::Load(const std::string& filename)
+void ObjectSerializer::LoadContent()
 {
-	m_isSaving = false;
-	char* xmlContent;
-	ReadXmlFile(filename, &xmlContent);
-
-	m_document.parse<rapidxml::parse_default>(xmlContent);
-
 	while (!HasReachedEof()) //HAS reached eof is not working properly
 	{
 		Object* obj = new Object();
 		if (obj->Serialize(this))
 			m_objects.push_back(obj);
 	}
-
-	delete xmlContent;
-	m_document.clear();
 
 	for (Object* obj : m_objects)
 	{
@@ -473,43 +454,4 @@ void ObjectRenderer::UpdateResourceTable()
 
 void ObjectRenderer::UpdateGraphicInterface()
 {
-}
-
-//////////////////////////////////////////////////////////////////////////
-//CScene
-//////////////////////////////////////////////////////////////////////////
-std::unordered_set<Object*> CScene::ms_sceneObjects; //i got the objects in 2 places: here and in ObjectFactory. BUt fuck it. not important
-BoundingBox CScene::ms_sceneBoundingBox;
-
-void CScene::AddObject(Object* obj)
-{
-    auto result = ms_sceneObjects.insert(obj);
-    TRAP(result.second == true);
-
-    CScene::UpdateBoundingBox();
-}
-
-void CScene::UpdateBoundingBox()
-{
-    ms_sceneBoundingBox.Max = ms_sceneBoundingBox.Min = glm::vec3();
-    if (ms_sceneObjects.empty())
-        return;
-
-    glm::vec3 maxLimits (std::numeric_limits<float>::min());
-    glm::vec3 minLimits (std::numeric_limits<float>::max());
-
-    for(auto o = ms_sceneObjects.begin(); o != ms_sceneObjects.end(); ++o)
-    {
-        BoundingBox bb = (*o)->GetBoundingBox();
-        std::vector<glm::vec3> bbPoints;
-        bb.Transform((*o)->GetModelMatrix(), bbPoints);
-        for(unsigned int i = 0; i < bbPoints.size(); ++i)
-        {
-            maxLimits = glm::max(maxLimits, bbPoints[i]);
-            minLimits = glm::min(minLimits, bbPoints[i]);
-        }
-    }
-
-    ms_sceneBoundingBox.Max = maxLimits;
-    ms_sceneBoundingBox.Min = minLimits;
 }

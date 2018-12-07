@@ -41,7 +41,8 @@ void main()
 	
 	const uint index = Properties.AlbedoTexture;
 	
-	albedo = texture(BatchTextures[index], uv);
+	vec2 lod = textureQueryLod(BatchTextures[index], uv);
+	albedo = texture(BatchTextures[index], uv, lod.x);
 	out_specular = vec4(Properties.Roughness, Properties.K, Properties.F0, 0.0f);
 	out_normal = normal;
 	out_position = worldPos;

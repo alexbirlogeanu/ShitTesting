@@ -43,7 +43,8 @@ void main()
 	uint albedoIndex = properties.AlbedoTexture;
 	uint normalMapIndex = properties.NormalMapTexture;
 	
-	albedo = texture(BatchTextures[albedoIndex], uv);
+	vec2 lod = textureQueryLod(BatchTextures[albedoIndex], uv);
+	albedo = texture(BatchTextures[albedoIndex], uv, lod.x);
 	vec3 sNormal = texture(BatchTextures[normalMapIndex], uv).rgb;
 	sNormal = normalize(sNormal * 2.0f - 1.0f); 
 	out_normal = vec4(normalize(TBN * sNormal), 0.0f);

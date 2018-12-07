@@ -40,6 +40,26 @@ struct SImageData
         return width * height * depth * GetBytesFromFormat(format); 
     }
 
+	inline float GetRed(uint32_t x, uint32_t y)
+	{
+		return GetColorComponent(x, y, 2);
+	}
+	
+	inline float GetGreen(uint32_t x, uint32_t y)
+	{
+		return GetColorComponent(x, y, 1);
+	}
+
+	inline float GetBlue(uint32_t x, uint32_t y)
+	{
+		return GetColorComponent(x, y, 0);
+	}
+
+	inline float GetAlpha(uint32_t x, uint32_t y)
+	{
+		return GetColorComponent(x, y, 3);
+	}
+
     unsigned int width;
     unsigned int height;
     unsigned int depth;
@@ -47,6 +67,12 @@ struct SImageData
 
     unsigned char* data;
     std::string     fileName;
+private:
+	float GetColorComponent(uint32_t x, uint32_t y, uint32_t componentOffset)
+	{
+		TRAP(x < width && y < height && componentOffset < 4);
+		return float(data[(y * width + x) * GetBytesFromFormat(format) + componentOffset]) / 256.0f;
+	}
 };
 
 void Read2DTextureData(SImageData& img, const std::string& filename, bool isSRGB = true);
@@ -66,6 +92,8 @@ private:
 	virtual ~CTextureManager();
 
 	VkDeviceSize EstimateMemory();
+	void CopyFirstMip();
+	void GenerateMips();
 private:
 	std::vector<TextureCreator*>  m_updateTextureCreators;
 	std::vector<TextureCreator*>  m_freeTextureCreators;
@@ -84,6 +112,7 @@ public:
 	void				Prepare(); //kinda shitty
     void				AddCopyCommand();
 	void				CopyLocalData();
+	void				GenerateMips();
 private:
 	TextureCreator(CTexture* text, const SImageData& imgData, bool ownData);
 private:
@@ -122,35 +151,35 @@ protected:
 };
 
 
-class CCubeMapTexture
-{
-public:
-    CCubeMapTexture(std::vector<SImageData>& cubeFaces, bool ownData = false);
-    virtual ~CCubeMapTexture();
+//class CCubeMapTexture
+//{
+//public:
+//    CCubeMapTexture(std::vector<SImageData>& cubeFaces, bool ownData = false);
+//    virtual ~CCubeMapTexture();
+//
+//    const VkDescriptorImageInfo& GetCubeMapDescriptor() const;
+//    void FinalizeCubeMap();
+//
+//private:
+//    void Validate();
+//
+//    void CreateCubeMap();
+//    VkImage                 m_cubeMapImage;
+//    VkImageView             m_cubeMapView;
+//    VkDeviceMemory          m_cubeMapMemory;
+//    VkSampler               m_cubeMapSampler;
+//
+//    VkDeviceMemory          m_bufferMemory;
+//    VkBuffer                m_buffer;
+//
+//    bool                                m_ownData;
+//    std::vector<SImageData>           m_cubeMapData;
+//
+//    VkDescriptorImageInfo   m_cubeMapInfo;
+//    unsigned int            m_width, m_height;
+//};
 
-    const VkDescriptorImageInfo& GetCubeMapDescriptor() const;
-    void FinalizeCubeMap();
-
-private:
-    void Validate();
-
-    void CreateCubeMap();
-    VkImage                 m_cubeMapImage;
-    VkImageView             m_cubeMapView;
-    VkDeviceMemory          m_cubeMapMemory;
-    VkSampler               m_cubeMapSampler;
-
-    VkDeviceMemory          m_bufferMemory;
-    VkBuffer                m_buffer;
-
-    bool                                m_ownData;
-    std::vector<SImageData>           m_cubeMapData;
-
-    VkDescriptorImageInfo   m_cubeMapInfo;
-    unsigned int            m_width, m_height;
-};
-
-CCubeMapTexture* CreateCubeMapTexture(std::vector<std::string>& facesFileNames);
+//CCubeMapTexture* CreateCubeMapTexture(std::vector<std::string>& facesFileNames);
 
 
 template<typename BASE>
@@ -176,7 +205,6 @@ public:
 
 	virtual void Load(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
 	{
-		auto prop = objNode->first_attribute(m_label.c_str(), 0, false);
 		BASE* cobj = dynamic_cast<BASE*>(obj);
 		TRAP(cobj);
 

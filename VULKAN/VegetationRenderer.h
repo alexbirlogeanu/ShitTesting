@@ -27,7 +27,6 @@ private:
 
 	void GenerateVegetation(); //TODO! use terrain as input
 	void CreateBuffers();
-	void LoadTextures();
 
 	void UpdateTextures();
 	void CopyBuffers();
@@ -43,6 +42,7 @@ private:
 	{
 		glm::mat4 ProjViewMatrix;
 		glm::vec4 CameraPosition;
+		glm::vec4 LightDirection;
 	} m_globals;
 
 	CGraphicPipeline				m_renderPipeline;

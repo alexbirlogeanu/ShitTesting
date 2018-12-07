@@ -138,6 +138,9 @@
     <ClCompile Include="VegetationRenderer.cpp">
       <Filter>Source Files\Renderer</Filter>
     </ClCompile>
+    <ClCompile Include="Scene.cpp">
+      <Filter>Source Files\GraphicsUtils</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="VulkanLoader.h">
@@ -256,6 +259,9 @@
     </ClInclude>
     <ClInclude Include="VegetationRenderer.h">
       <Filter>Header Files\Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene.h">
+      <Filter>Header Files\GraphicsUtils</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

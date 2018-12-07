@@ -142,6 +142,7 @@
     <ClInclude Include="PointLightRenderer2.h" />
     <ClInclude Include="ResourceLoader.h" />
     <ClInclude Include="ResourceTable.h" />
+    <ClInclude Include="Scene.h" />
     <ClInclude Include="ScreenSpaceReflectionRenderer.h" />
     <ClInclude Include="Serializer.h" />
     <ClInclude Include="Singleton.h" />
@@ -182,6 +183,7 @@
     <ClCompile Include="Object.cpp" />
     <ClCompile Include="PointLightRenderer2.cpp" />
     <ClCompile Include="ResourceLoader.cpp" />
+    <ClCompile Include="Scene.cpp" />
     <ClCompile Include="ScreenSpaceReflectionRenderer.cpp" />
     <ClCompile Include="Serializer.cpp" />
     <ClCompile Include="SkyRenderer.cpp" />

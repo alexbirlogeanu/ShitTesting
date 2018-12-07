@@ -48,8 +48,12 @@ vec2 GetPatchCoordinates()
 vec4 SplatTextures()
 {
 	vec2 patchUV = GetPatchCoordinates();
+	vec2 lod[3];
+	for (int i = 0; i < 3; ++i)
+		lod[i] = vec2(0.0f);//textureQueryLod(Textures[0], patchUV); //keep it at lod 0
+		
 	vec3 coef = texture(SplatterTexture, uv).rgb;
-	vec3 finalColor = coef.r * texture(Textures[0], patchUV).rgb + coef.g * texture(Textures[1], patchUV).rgb + coef.b * texture(Textures[2], patchUV).rgb;
+	vec3 finalColor = coef.r * textureLod(Textures[0], patchUV, lod[0].x).rgb + coef.g * texture(Textures[1], patchUV, lod[0].x).rgb + coef.b * texture(Textures[2], patchUV, lod[0].x).rgb;
 	
 	return vec4(finalColor, 1.0f);
 }

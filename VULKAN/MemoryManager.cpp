@@ -98,6 +98,29 @@ VkImageMemoryBarrier ImageHandle::CreateMemoryBarrier(VkImageLayout oldLayout, V
 
 	return outBarrier;
 }
+
+VkImageMemoryBarrier ImageHandle::CreateMemoryBarrierForMips(uint32_t mipLevel, VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcMask, VkAccessFlags dstMask, VkImageAspectFlags aspectFlags, uint32_t mipCount)
+{
+	VkImageMemoryBarrier outBarrier;
+	cleanStructure(outBarrier);
+	outBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	outBarrier.pNext = NULL;
+	outBarrier.srcAccessMask = srcMask;
+	outBarrier.dstAccessMask = dstMask;
+	outBarrier.oldLayout = oldLayout;
+	outBarrier.newLayout = newLayout;
+	outBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	outBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	outBarrier.image = Get();
+	outBarrier.subresourceRange.aspectMask = aspectFlags;
+	outBarrier.subresourceRange.baseMipLevel = mipLevel;
+	outBarrier.subresourceRange.levelCount = mipCount;
+	outBarrier.subresourceRange.baseArrayLayer = 0;
+	outBarrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+
+	return outBarrier;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////
 //MemoryContext::MappedMemory
 ///////////////////////////////////////////////////////////////////////////////////

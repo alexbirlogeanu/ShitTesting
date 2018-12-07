@@ -19,7 +19,8 @@ float Depth()
 
 void main()
 {
-	vec4 color = texture(Texture, UV.st);
+	vec2 lod = textureQueryLod(Texture, UV.st);
+	vec4 color = textureLod(Texture, UV.st, lod.x);
 
 	float ct = max(LifeSpawnInfo.y, 0.0f);
 	float fade = LifeSpawnInfo.z;

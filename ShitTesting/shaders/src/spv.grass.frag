@@ -2,17 +2,19 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 
+#define TEXTURE_LIMIT 4
+
 layout(location=0) out vec4 out_albedo;
 layout(location=1) out vec4 out_specular;
 layout(location=2) out vec4 out_normal;
 layout(location=3) out vec4 out_position;
 
 layout(location = 0) in vec2 uv;
-layout(location = 1) in vec4 materialProps;
+layout(location = 1) flat in vec4 materialProps;
 layout(location = 2) in vec4 worldPos;
 layout(location = 3) in vec4 normal;
 
-layout (set = 0, binding = 1) uniform sampler2D Albedo[4]; 
+layout (set = 0, binding = 1) uniform sampler2D Albedo[TEXTURE_LIMIT]; 
 
 float Depth()
 {
@@ -24,9 +26,10 @@ float Depth()
 
 void main()
 {
-	uint index = clamp(uint(materialProps.w), 0, 4);
+	uint index = clamp(uint(materialProps.w), 0, TEXTURE_LIMIT - 1);
 	
-	vec4 color = texture(Albedo[index], uv);
+	vec2 lod = textureQueryLod(Albedo[index], uv);
+	vec4 color = textureLod(Albedo[index], uv, lod.x);
 	
 	if (color.a < 0.1f)
 		discard;

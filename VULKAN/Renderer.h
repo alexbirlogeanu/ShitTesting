@@ -263,6 +263,7 @@ public:
 	void SetWireframeSupport(bool allowWireframe);
 	void SetFrontFace(VkFrontFace face);
 	void SwitchWireframe(bool isWireframe);
+	void SetRasterizerDiscard(bool value); //if set true, pipeline creation crashes in render doc.dll. Maybe it's because of the driver. 
 
     static VkPipelineColorBlendAttachmentState CreateDefaultBlendState()
     {

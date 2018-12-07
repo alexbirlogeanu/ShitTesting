@@ -5,6 +5,62 @@
 #include "MemoryManager.h"
 #include "Texture.h"
 #include "Mesh.h"
+#include "Scene.h"
+#include "Serializer.h"
+
+#include <random>
+
+class VegetationTemplate : public SeriableImpl<VegetationTemplate>
+{
+	DECLARE_PROPERTY(CTexture*, Albedo, VegetationTemplate);
+	DECLARE_PROPERTY(glm::vec2, Size, VegetationTemplate);
+
+	VegetationTemplate()
+		: SeriableImpl<VegetationTemplate>("VegetationTamplate")
+	{}
+};
+
+BEGIN_PROPERTY_MAP(VegetationTemplate)
+	IMPLEMENT_PROPERTY(CTexture*, Albedo, "Albedo", VegetationTemplate),
+	IMPLEMENT_PROPERTY(glm::vec2, Size, "Size", VegetationTemplate)
+END_PROPERTY_MAP(VegetationTemplate)
+
+class VegetationTemplateLoader : public Serializer
+{
+public:
+	VegetationTemplateLoader()
+	{
+	}
+
+	virtual ~VegetationTemplateLoader()
+	{
+		for (auto t : m_templates)
+			delete t;
+		m_templates.clear();
+	}
+
+	const std::vector<VegetationTemplate*>& GetTemplates() const { return m_templates; }
+protected:
+	virtual void SaveContent()
+	{
+		for (auto t : m_templates)
+			t->Serialize(this);
+	}
+
+	virtual void LoadContent()
+	{
+		while (!HasReachedEof()) //HAS reached eof is not working properly
+		{
+			VegetationTemplate* temp = new VegetationTemplate();
+			if (temp->Serialize(this))
+				m_templates.push_back(temp);
+		}
+	}
+private:
+	std::vector<VegetationTemplate*>		m_templates;
+};
+
+
 
 VegetationRenderer::VegetationRenderer(VkRenderPass renderPass)
 	: CRenderer(renderPass, "VegetationPass")
@@ -26,11 +82,11 @@ VegetationRenderer::~VegetationRenderer()
 void VegetationRenderer::Init()
 {
 	CRenderer::Init();
+	
 	GenerateVegetation();
 	AllocDescriptorSets(m_descriptorPool, m_renderDescSetLayout.Get(), &m_renderDescSet);
 	CreateBuffers();
-	LoadTextures();
-
+	
 	m_quad = CreateFullscreenQuad();
 	TRAP(sizeof(GlobalParams) <= 256);
 	VkPushConstantRange pushRange{ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GlobalParams) };
@@ -83,6 +139,7 @@ void VegetationRenderer::PreRender()
 
 	m_globals.ProjViewMatrix = proj * ms_camera.GetViewMatrix();
 	m_globals.CameraPosition = glm::vec4(ms_camera.GetPos(), 1.0f);
+	m_globals.LightDirection = glm::vec4(directionalLight.GetDirection());
 }
 
 void VegetationRenderer::UpdateTextures()
@@ -141,28 +198,63 @@ void VegetationRenderer::UpdateGraphicInterface()
 void VegetationRenderer::GenerateVegetation()
 {
 	//TODO This is a hardcoded generation of vegetation
-	glm::vec4 startPos(-1.43f, -1.55f, 1.14f, 1.0f);
+	/*glm::vec4 startPos(-1.43f, -1.55f, 1.14f, 1.0f);
 
 	for (uint32_t i = 0; i < 4; ++i)
 		for (uint32_t j = 0; j < 4; ++j)
-			m_plants.push_back({ startPos + glm::vec4(float(i), 0.0f, float(j), 0.0f), glm::vec4(0.25f, 0.5f, 0.0f, i / 3.0f) });
+			m_plants.push_back({ startPos + glm::vec4(float(i) * 0.2f, 0.0f, float(j) * 0.2f, 0.0f), glm::vec4(0.25f, 0.5f, 0.0f, 0.0f) });
 
+	return;*/
+	SImageData vegetationDistribution;
+	Read2DTextureData(vegetationDistribution, std::string(TEXTDIR) + "veg_distr.png", false);
 
-}
+	uint32_t width = vegetationDistribution.width;
+	uint32_t height = vegetationDistribution.height;
 
-void VegetationRenderer::LoadTextures()
-{
-	m_albedoTextures.push_back(new CTexture("plant_low.png"));
-	m_albedoTextures.push_back(new CTexture("plant.png"));
+	const float plantsPerCell = 3.0f;//TODO parameterize this renderer with a serializer
+	const float redDistr = 1.0f;
+	const float greenDistr = 0.25f;
+	const float blueDistr = 0.0f;
 
-	//m_normalsTextures.push_back(new CTexture("plant_normal_low.png", false));
-	//m_normalsTextures.push_back(new CTexture("plant_normal.png", false));
+	std::vector<uint32_t> numberOfPlantsPerCell;
+	uint32_t totalPlants = 0;
+	for (uint32_t x = 0; x < width; ++x)
+		for (uint32_t y = 0; y < height; ++y)
+		{
+			uint32_t plants = uint32_t((redDistr * vegetationDistribution.GetRed(x, y) + greenDistr * vegetationDistribution.GetGreen(x, y) + blueDistr * vegetationDistribution.GetBlue(x, y)) * plantsPerCell);
 
-	for (auto t : m_albedoTextures)
-		ResourceLoader::GetInstance()->LoadTexture(&t);
+			numberOfPlantsPerCell.push_back(plants);
+			totalPlants += plants;
+		}
 
-	/*for (auto t : m_normalsTextures)
-		ResourceLoader::GetInstance()->LoadTexture(&t);*/
+	std::vector<glm::vec3> plantsPosition;
+	plantsPosition.reserve(totalPlants);
+
+	CScene::CalculatePlantsPositions(glm::uvec2(width, height), numberOfPlantsPerCell, plantsPosition);
+
+	delete[] vegetationDistribution.data;
+
+	VegetationTemplateLoader loader;
+	loader.Load("vegetation.xml");
+
+	auto templates = loader.GetTemplates();
+
+	for (auto temp : templates)
+		m_albedoTextures.push_back(temp->GetAlbedo());
+
+	TRAP(m_albedoTextures.size() < m_maxTextures && "Need to increase the limit. Also increase in the grass.frag too");
+
+	unsigned int seed = 67834;
+	std::mt19937 generator(seed);
+	std::uniform_int_distribution<uint32_t> distribution(0, m_albedoTextures.size() - 1);
+
+	for (auto p : plantsPosition)
+	{
+		uint32_t index = distribution(generator);
+		VegetationTemplate* vegTemplate = templates[index];
+
+		m_plants.push_back({ glm::vec4(p, 1.0f), glm::vec4(glm::vec2(vegTemplate->GetSize()), 0.0f, float(index)) });
+	}
 }
 
 void VegetationRenderer::CopyBuffers()

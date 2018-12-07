@@ -54,8 +54,12 @@ public:
 
 	bool HasReachedEof() const { return m_HasReachedEoF; }
 
-	virtual void Save(const std::string& filename) = 0;
-	virtual void Load(const std::string& filename) = 0;
+	void Save(const std::string& filename);
+	void Load(const std::string& filename);
+
+protected:
+	virtual void LoadContent() = 0;
+	virtual void SaveContent() = 0;
 protected:
 	rapidxml::xml_node<char>*				m_currentNode;
 	std::vector<rapidxml::xml_node<char>*>	m_nodeStack;
@@ -169,7 +173,9 @@ public:
 		BASE* cobj = dynamic_cast<BASE*>(obj);
 		TRAP(cobj);
 
-		cobj->*m_ptm = std::string(prop->value()) == std::string("true");
+		cobj->*m_ptm = false;
+		if (prop)
+			cobj->*m_ptm = std::string(prop->value()) == std::string("true");
 
 	};
 private:
@@ -203,8 +209,63 @@ public:
 		auto prop = objNode->first_attribute(m_label.c_str(), 0, false);
 		BASE* cobj = dynamic_cast<BASE*>(obj);
 		TRAP(cobj);
-		cobj->*m_ptm = std::stof(prop->value());
 
+		if (prop)
+			cobj->*m_ptm = std::stof(prop->value());
+		else
+			cobj->*m_ptm = 0.0f;
+
+	};
+private:
+	PtmType						m_ptm;
+	std::string					m_label;
+};
+
+template<typename BASE>
+class Property<glm::vec2, BASE> : public PropertyGeneric
+{
+public:
+	typedef glm::vec2 BASE::* PtmType;
+	Property()
+	{}
+	Property(PtmType offset, const std::string& label)
+		: m_ptm(offset)
+		, m_label(label)
+	{}
+
+	virtual void Save(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		TRAP(cobj);
+
+		auto node = serializer->GetNewNode(m_label.c_str());
+
+		node->append_attribute(serializer->GetNewAttribute("x", serializer->GetNewString(std::to_string((cobj->*m_ptm)[0]))));
+		node->append_attribute(serializer->GetNewAttribute("y", serializer->GetNewString(std::to_string((cobj->*m_ptm)[1]))));
+
+		objNode->append_node(node);
+	};
+
+	virtual void Load(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
+	{
+		BASE* cobj = dynamic_cast<BASE*>(obj);
+		TRAP(cobj);
+		auto node = objNode->first_node(m_label.c_str(), 0, false);
+
+		auto getValue = [&node](const std::string& attr)
+		{
+			auto att = node->first_attribute(attr.c_str());
+
+			return (att) ? std::stof(att->value()) : 0.0f;
+		};
+
+		if (!node)
+			cobj->*m_ptm = glm::vec2();
+		else
+		{
+			(cobj->*m_ptm)[0] = getValue("x"); //need some checks for null
+			(cobj->*m_ptm)[1] = getValue("y");
+		}
 	};
 private:
 	PtmType						m_ptm;
@@ -240,13 +301,26 @@ public:
 	virtual void Load(rapidxml::xml_node<char>* objNode, Serializer* serializer, ISeriable* obj)
 	{
 		auto node = objNode->first_node(m_label.c_str(), 0, false);
-		TRAP(node);
 		BASE* cobj = dynamic_cast<BASE*>(obj);
 		TRAP(cobj);
 
-		(cobj->*m_ptm)[0] = std::stof(node->first_attribute("x")->value()); //need some checks for null
-		(cobj->*m_ptm)[1] = std::stof(node->first_attribute("y")->value());
-		(cobj->*m_ptm)[2] = std::stof(node->first_attribute("z")->value());
+		auto getValue = [&node](const std::string& attr)
+		{
+			auto att = node->first_attribute(attr.c_str());
+			
+			return (att) ? std::stof(att->value()) : 0.0f;
+		};
+
+		if (node)
+		{
+			(cobj->*m_ptm)[0] = getValue("x");
+			(cobj->*m_ptm)[1] = getValue("y");
+			(cobj->*m_ptm)[2] = getValue("z");
+		}
+		else
+		{
+			cobj->*m_ptm = glm::vec3(0.0f);
+		}
 	};
 private:
 	PtmType						m_ptm;
@@ -279,7 +353,7 @@ public:
 		auto prop = objNode->first_attribute(m_label.c_str(), 0, false);
 		BASE* cobj = dynamic_cast<BASE*>(obj);
 		TRAP(cobj);
-		cobj->*m_ptm = std::string(prop->value());
+		cobj->*m_ptm = (prop)? std::string(prop->value()) : "";
 	};
 private:
 	PtmType						m_ptm;

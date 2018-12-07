@@ -1020,7 +1020,7 @@ private:
     VkFence                     m_renderFence;
     VkSemaphore                 m_renderSemaphore;
 
-    CCubeMapTexture*            m_skyTextureCube;
+    //CCubeMapTexture*            m_skyTextureCube;
     CTexture*                   m_skyTexture2D;
     CTexture*                   m_sunTexture;
 
@@ -1095,7 +1095,7 @@ CApplication::CApplication()
 	, m_renderSemaphore(VK_NULL_HANDLE)
 	, m_renderFence(VK_NULL_HANDLE)
 	, m_currentBuffer(-1)
-	, m_skyTextureCube(nullptr)
+	//, m_skyTextureCube(nullptr)
 	, m_skyTexture2D(nullptr)
 	, m_sunTexture(nullptr)
 	, m_smokeTexture(nullptr)
@@ -2443,7 +2443,7 @@ void CApplication::CreateTerrainRenderPass(const FramebufferDescription& fbDesc)
 	for (unsigned int i = 0; i < fbDesc.m_colorAttachments.size(); ++i)
 		atRef.push_back(CreateAttachmentReference(i, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
 
-	atRef.push_back(CreateAttachmentReference(fbDesc.m_colorAttachments.size(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL));
+	atRef.push_back(CreateAttachmentReference((uint32_t)fbDesc.m_colorAttachments.size(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL));
 
 	std::vector<VkSubpassDescription> subpasses;
 	subpasses.push_back(CreateSubpassDesc(atRef.data(), (uint32_t)fbDesc.m_colorAttachments.size(), &atRef[fbDesc.m_colorAttachments.size()]));
@@ -2468,7 +2468,7 @@ void CApplication::CreateVegetationRenderPass(const FramebufferDescription& fbDe
 	for (unsigned int i = 0; i < fbDesc.m_colorAttachments.size(); ++i)
 		atRef.push_back(CreateAttachmentReference(i, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
 
-	atRef.push_back(CreateAttachmentReference(fbDesc.m_colorAttachments.size(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL));
+	atRef.push_back(CreateAttachmentReference((uint32_t)fbDesc.m_colorAttachments.size(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL));
 
 	std::vector<VkSubpassDescription> subpasses;
 	subpasses.push_back(CreateSubpassDesc(atRef.data(), (uint32_t)fbDesc.m_colorAttachments.size(), &atRef[fbDesc.m_colorAttachments.size()]));
@@ -2549,18 +2549,18 @@ void CApplication::CreateQueryPools()
     //VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, g_queryMemory, 0, VK_WHOLE_SIZE, 0, &g_queryBufferPtr)); 
 }
 
-CCubeMapTexture* CreateSkyTexture()
-{
-    std::vector<std::string> facesFilename;
-    facesFilename.push_back("text/side.png");
-    facesFilename.push_back("text/side.png");
-    facesFilename.push_back("text/side.png");
-    facesFilename.push_back("text/side.png");
-    facesFilename.push_back("text/side.png");
-    facesFilename.push_back("text/side.png");
-
-    return CreateCubeMapTexture(facesFilename);
-}
+//CCubeMapTexture* CreateSkyTexture()
+//{
+//    std::vector<std::string> facesFilename;
+//    facesFilename.push_back("text/side.png");
+//    facesFilename.push_back("text/side.png");
+//    facesFilename.push_back("text/side.png");
+//    facesFilename.push_back("text/side.png");
+//    facesFilename.push_back("text/side.png");
+//    facesFilename.push_back("text/side.png");
+//
+//    return CreateCubeMapTexture(facesFilename);
+//}
 
 CTexture* Create2DSkyTexture()
 {

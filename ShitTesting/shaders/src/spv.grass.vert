@@ -21,10 +21,11 @@ layout(push_constant) uniform Globals
 {
 	mat4 ProjViewMatrix;
 	vec4 CameraPosition;
+	vec4 LightDirection;
 };
 
 layout(location = 0) out vec2 uv;
-layout(location = 1) out vec4 materialProps;
+layout(location = 1) flat out vec4 materialProps;
 layout(location = 2) out vec4 worldPos;
 layout(location = 3) out vec4 normal;
 
@@ -63,14 +64,14 @@ void main()
 					vec4(0.0f, 0.0f, 0.0f, 1.0f));
 	
 	
-	vec3 front = center.xyz - CameraPosition.xyz;
+	vec3 front = CameraPosition.xyz - center.xyz;
 	front.y = 0.0f; //in XoZ plane
 	front = normalize(front);
-	normal = vec4(-front, 0.0f);
 	
 	float angle = atan(front.x, front.z);
 	
 	mat4 rotate = GetRotationMatrix(vec3(0.0f, 1.0f, 0.0f), -angle);
+	normal = vec4(normalize(-LightDirection.xyz + front), 0.0f);
 	
 	worldPos = translate * rotate * scale * vec4(in_position, 1.0f);
 	

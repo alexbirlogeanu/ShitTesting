@@ -1,5 +1,10 @@
 #include "Serializer.h"
 
+#include <fstream>
+#include <iostream>
+#include "rapidxml/rapidxml_print.hpp"
+#include "Utils.h"
+
 Serializer::Serializer()
 	: m_isSaving(true)
 	, m_HasReachedEoF(false)
@@ -34,7 +39,7 @@ bool Serializer::BeginSerializing(ISeriable* obj)
 		if (!m_currentNode)
 		{
 			auto root = m_document.first_node();
-			m_currentNode = root->first_node();
+			m_currentNode = root->first_node(obj->GetName().c_str());
 		}
 		else
 		{
@@ -84,6 +89,34 @@ void Serializer::EndSerializing(ISeriable* obj)
 	}
 	m_currentNode = newCurrentNode;
 
+}
+
+void Serializer::Save(const std::string& filename)
+{
+	m_isSaving = true;
+	auto root = GetNewNode(GetNewString("root"));
+	m_document.append_node(root);
+
+	SaveContent();
+
+	std::fstream f(filename, std::ios_base::out);
+	f << *m_document.first_node() << std::endl;
+	f.close();
+	m_document.clear();
+}
+
+void Serializer::Load(const std::string& filename)
+{
+	m_isSaving = false;
+	char* xmlContent;
+	ReadXmlFile(filename, &xmlContent);
+
+	m_document.parse<rapidxml::parse_default>(xmlContent);
+
+	LoadContent();
+
+	delete xmlContent;
+	m_document.clear();
 }
 
 

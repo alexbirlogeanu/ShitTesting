@@ -143,7 +143,7 @@ void CreateSamplerInternal(VkSampler& sampler, VkFilter filer, bool clampToEdge)
     samplerCreateInfo.maxAnisotropy = 0;
     samplerCreateInfo.compareOp = VK_COMPARE_OP_NEVER;
     samplerCreateInfo.minLod = 0.0;
-    samplerCreateInfo.maxLod = 0.0;
+	samplerCreateInfo.maxLod = DEFAULT_MIPLEVELS;
     samplerCreateInfo.compareEnable = VK_FALSE;
     samplerCreateInfo.borderColor = VK_BORDER_COLOR_INT_TRANSPARENT_BLACK;
 

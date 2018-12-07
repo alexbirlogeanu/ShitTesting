@@ -79,7 +79,8 @@ vec2 GetTextCoords()
 void main()
 {  
 	vec2 textCoords = GetTextCoords();
-	albedo = texture(text, textCoords);
+	vec2 lod = textureQueryLod(text, textCoords);
+	albedo = texture(text, textCoords, lod.x);
 	vec3 sNormal = texture(normalMap, textCoords).rgb;
 	sNormal = normalize(sNormal * 2.0f - 1.0f); 
 	out_normal = vec4(normalize(TBN * sNormal), 0.0f);

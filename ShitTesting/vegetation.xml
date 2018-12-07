@@ -1,0 +1,14 @@
+<root>
+	<VegetationTamplate>
+		<Albedo file="plant_low.png" isSRGB="true"/>
+		<Size x="0.250000" y="0.50000"/>
+	</VegetationTamplate>
+	<VegetationTamplate>
+		<Albedo file="plant2.png" isSRGB="true"/>
+		<Size x="0.50000" y="1.0500000"/>
+	</VegetationTamplate>
+	<!--VegetationTamplate>
+		<Albedo file="plant3.png" isSRGB="true"/>
+		<Size x="0.350000" y="0.250000"/>
+	</VegetationTamplate-->
+</root>

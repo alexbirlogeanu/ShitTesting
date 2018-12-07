@@ -4,6 +4,7 @@
 #include "defines.h"
 #include "glm/glm.hpp"
 #include "Texture.h"
+#include "Scene.h"
 
 #include "Input.h"
 
@@ -84,7 +85,7 @@ void TerrainRenderer::PreRender()
 {
 	TerrainParams* params = m_terrainParamsBuffer->GetPtr<TerrainParams*>();
 
-	glm::mat4 modelMatrix = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -5.0f, -3.0f)), glm::vec3(1.0f));
+	glm::mat4 modelMatrix = glm::scale(glm::translate(glm::mat4(1.0f), CScene::TerrainTranslate), glm::vec3(1.0f));
 	m_pushConstants.ModelMatrix = modelMatrix;
 
 	glm::mat4 projMatrix;
@@ -167,10 +168,10 @@ void TerrainRenderer::CreateGrid()
 	std::vector<SVertex> vertices;
 	std::vector<uint32_t> indices;
 
-	const uint32_t xDivision = 64;
-	const uint32_t yDivision = 64;
-	const float xLength = 20.0f;
-	const float yLength = 20.0f;
+	const uint32_t xDivision = CScene::TerrainGridSize.x;
+	const uint32_t yDivision = CScene::TerrainGridSize.y;
+	const float xLength = CScene::TerrainSize.x;
+	const float yLength = CScene::TerrainSize.y;
 
 	const float xStride = xLength / xDivision;
 	const float yStride = yLength / yDivision;
@@ -190,7 +191,7 @@ void TerrainRenderer::CreateGrid()
 			{
 				glm::vec2 heightMapUV = uv * glm::vec2(heightMap.width, heightMap.height);
 				height = heightMap.data[imageDataStride * (uint32_t(heightMapUV.y) * heightMap.width + uint32_t(heightMapUV.x))];
-				height = height / 265.0f * heightMax;
+				height = height / 256.0f * heightMax;
 			}
 
 			glm::vec3 pos(float(x) * xStride, height, float(y) * yStride);
@@ -244,7 +245,7 @@ void TerrainRenderer::CreateGrid()
 		}
 
 		//now we compute the exceptions: Y = 0 (top row we dont have P0 vertex)
-		for (int x = 1; x < xDivision; ++x)
+		for (uint32_t x = 1; x < xDivision; ++x)
 		{
 			SVertex& P = vertices[x];
 			const SVertex& P1 = vertices[x + 1];
@@ -258,7 +259,7 @@ void TerrainRenderer::CreateGrid()
 		}
 
 		//now we compute the exceptions: Y = yDivision (buttom  row we dont have P2 vertex)
-		for (int x = 1; x < xDivision; ++x)
+		for (uint32_t x = 1; x < xDivision; ++x)
 		{
 			SVertex& P = vertices[yDivision * xVerts + x];
 			const SVertex& P0 = vertices[(yDivision - 1) * xVerts + x];
@@ -271,7 +272,7 @@ void TerrainRenderer::CreateGrid()
 			P.normal = glm::normalize(P.normal / 2.0f);
 		}
 		//now we compute the exceptions: X = 0 (left column we dont have P3 vertex)
-		for (int y = 1; y < yDivision; ++y)
+		for (uint32_t y = 1; y < yDivision; ++y)
 		{
 			SVertex& P = vertices[y * xVerts];
 			const SVertex& P0 = vertices[(y - 1) * xVerts];
@@ -285,7 +286,7 @@ void TerrainRenderer::CreateGrid()
 		}
 
 		//now we compute the exceptions: X = xDivision (right column we dont have P1 vertex)
-		for (int y = 1; y < yDivision; ++y)
+		for (uint32_t y = 1; y < yDivision; ++y)
 		{
 			SVertex& P = vertices[y * xVerts + xDivision];
 			const SVertex& P0 = vertices[(y - 1) * xVerts + xDivision];

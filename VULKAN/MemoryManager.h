@@ -142,13 +142,14 @@ private:
 	BufferHandle& operator=(const BufferHandle&);
 };
 
-class ImageHandle : public HandleImpl<VkImage> //when implementing mips, i think i need a VkImageView object 
+class ImageHandle : public HandleImpl<VkImage> //when implementing mips, i think i need a VkImageView object ?? why 
 {
 	friend class MemoryContext;
 	friend class HandleImpl<VkImage>;
 public:
 	//a method to suballocate ?? 
 	VkImageMemoryBarrier CreateMemoryBarrier(VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcMask, VkAccessFlags dstMask, VkImageAspectFlags aspectFlags, unsigned int layersCount = VK_REMAINING_ARRAY_LAYERS);
+	VkImageMemoryBarrier CreateMemoryBarrierForMips(uint32_t mipLevel, VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcMask, VkAccessFlags dstMask, VkImageAspectFlags aspectFlags, uint32_t mipCount = 1);
 
 	VkImageView& GetView() { return m_view; }
 	VkFormat GetFormat() const { return m_format; }
