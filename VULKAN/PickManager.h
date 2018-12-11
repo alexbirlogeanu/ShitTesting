@@ -109,7 +109,7 @@ public:
     void Update();
 
     void Setup();
-    void CreateDebug(CUIManager* manager);
+    void CreateDebug();
 
     void ToggleEditMode();
 private:

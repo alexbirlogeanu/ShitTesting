@@ -9,6 +9,7 @@
 #include "Mesh.h"
 #include "UiUtils.h"
 #include "DescriptorsUtils.h"
+#include "Singleton.h"
 
 #include <unordered_map>
 #include <string>
@@ -129,13 +130,12 @@ private:
 	std::vector<CUIText*>			m_uiTexts;
 };
 
-class CUIManager
+class CUIManager : public Singleton<CUIManager>
 {
+	friend class Singleton<CUIManager>;
 public:
-    CUIManager();
-    virtual ~CUIManager();
-
     CUIText* CreateTextItem(const std::string& text, glm::uvec2 screenPos);
+	void DestroyTextItem(CUIText* item);
 
     void SetupRenderer(CUIRenderer* uiRenderer);
 
@@ -143,6 +143,9 @@ public:
 
     void ToggleDisplayInfo();
 private:
+	CUIManager();
+	virtual ~CUIManager();
+
     void ShowUIItems();
     void AddDisplayInfo();
 private:

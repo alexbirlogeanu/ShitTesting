@@ -79,7 +79,7 @@ void CDirectionalLight::Update()
     m_direction = glm::normalize(m_direction);
 }
 
-void CDirectionalLight::CreateDebug(CUIManager* manager)
+void CDirectionalLight::CreateDebug()
 {
 }
 

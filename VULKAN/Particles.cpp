@@ -422,15 +422,11 @@ void CParticlesRenderer::Register(CParticleSystem* system)
     system->SetDescriptorSets(graphicDescriptorSet, computeDescriptorSet);
     system->UpdateDescriptorSets();
 
-    if (m_uiManager)
-        system->CreateDebugElements(m_uiManager);
-
     m_particleSystems.push_back(system);
 }
 
-void CParticlesRenderer::RegisterDebugManager(CUIManager* manager)
+void CParticlesRenderer::RegisterDebugManager()
 {
-    m_uiManager = manager;
 }
 
 bool CParticlesRenderer::OnMouseEvent(const MouseInput& mouseInput)

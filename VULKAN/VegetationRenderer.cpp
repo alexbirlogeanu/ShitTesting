@@ -7,6 +7,8 @@
 #include "Mesh.h"
 #include "Scene.h"
 #include "Serializer.h"
+#include "Input.h"
+#include "UI.h"
 
 #include <random>
 
@@ -70,8 +72,15 @@ VegetationRenderer::VegetationRenderer(VkRenderPass renderPass)
 	, m_maxTextures(4)
 	, m_isReady(false)
 	, m_quad(nullptr)
+	, m_elapsedTime(0.f)
+	, m_isDebugMode(false)
+	, m_windStrength(0.4f)
+	, m_angularSpeed(3.0f)
+	, m_windAngleLimits(75.0f, 135.0f)
+	, m_debugText(nullptr)
 {
-
+	InputManager::GetInstance()->MapKeyPressed('3', InputManager::KeyPressedCallback(this, &VegetationRenderer::OnDebugKey));
+	InputManager::GetInstance()->MapMouseButton(InputManager::MouseButtonsCallback(this, &VegetationRenderer::OnDebugWindVelocityChange));
 }
 
 VegetationRenderer::~VegetationRenderer()
@@ -86,8 +95,10 @@ void VegetationRenderer::Init()
 	GenerateVegetation();
 	AllocDescriptorSets(m_descriptorPool, m_renderDescSetLayout.Get(), &m_renderDescSet);
 	CreateBuffers();
-	
+
+	//m_quad = new Mesh("obj\\veg_plane.mb");
 	m_quad = CreateFullscreenQuad();
+
 	TRAP(sizeof(GlobalParams) <= 256);
 	VkPushConstantRange pushRange{ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GlobalParams) };
 
@@ -101,6 +112,9 @@ void VegetationRenderer::Init()
 	m_renderPipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 4);
 	m_renderPipeline.CreatePipelineLayout(m_renderDescSetLayout.Get());
 	m_renderPipeline.Init(this, m_renderPass, 0);
+
+	//init wind velocity
+	m_globals.WindVelocity = glm::vec4(-1.0f, 0.0f, 1.0f, 0.0f);
 }
 
 void VegetationRenderer::Render()
@@ -133,9 +147,12 @@ void VegetationRenderer::Render()
 
 void VegetationRenderer::PreRender()
 {
+	m_elapsedTime += GetDeltaTime();
+
 	glm::mat4 proj;
 	PerspectiveMatrix(proj);
 	ConvertToProjMatrix(proj);
+	WindVariation();
 
 	m_globals.ProjViewMatrix = proj * ms_camera.GetViewMatrix();
 	m_globals.CameraPosition = glm::vec4(ms_camera.GetPos(), 1.0f);
@@ -163,7 +180,6 @@ void VegetationRenderer::UpdateTextures()
 	};
 
 	fillTextures(m_albedoTextures, 1, colorInfos);
-	//fillTextures(m_normalsTextures, 2, normalInfos);
 
 	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
 }
@@ -172,7 +188,6 @@ void VegetationRenderer::CreateDescriptorSetLayout()
 {
 	m_renderDescSetLayout.AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
 	m_renderDescSetLayout.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, m_maxTextures);
-	//m_renderDescSetLayout.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, m_maxTextures);
 
 	m_renderDescSetLayout.Construct();
 }
@@ -180,9 +195,9 @@ void VegetationRenderer::CreateDescriptorSetLayout()
 void VegetationRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)
 {
 	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, m_maxTextures);
-	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1);
+	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2);
 
-	maxSets = 1;
+	maxSets = 2;
 }
 
 void VegetationRenderer::UpdateGraphicInterface()
@@ -197,14 +212,6 @@ void VegetationRenderer::UpdateGraphicInterface()
 
 void VegetationRenderer::GenerateVegetation()
 {
-	//TODO This is a hardcoded generation of vegetation
-	/*glm::vec4 startPos(-1.43f, -1.55f, 1.14f, 1.0f);
-
-	for (uint32_t i = 0; i < 4; ++i)
-		for (uint32_t j = 0; j < 4; ++j)
-			m_plants.push_back({ startPos + glm::vec4(float(i) * 0.2f, 0.0f, float(j) * 0.2f, 0.0f), glm::vec4(0.25f, 0.5f, 0.0f, 0.0f) });
-
-	return;*/
 	SImageData vegetationDistribution;
 	Read2DTextureData(vegetationDistribution, std::string(TEXTDIR) + "veg_distr.png", false);
 
@@ -246,14 +253,16 @@ void VegetationRenderer::GenerateVegetation()
 
 	unsigned int seed = 67834;
 	std::mt19937 generator(seed);
-	std::uniform_int_distribution<uint32_t> distribution(0, m_albedoTextures.size() - 1);
-
+	std::uniform_int_distribution<uint32_t> texturIndexDistr(0, m_albedoTextures.size() - 1);
+	std::uniform_real_distribution<float> bendFactorDistr(0.05f, 0.15f);
+	
 	for (auto p : plantsPosition)
 	{
-		uint32_t index = distribution(generator);
+		uint32_t index = texturIndexDistr(generator);
+		float bendFactor = bendFactorDistr(generator);
 		VegetationTemplate* vegTemplate = templates[index];
 
-		m_plants.push_back({ glm::vec4(p, 1.0f), glm::vec4(glm::vec2(vegTemplate->GetSize()), 0.0f, float(index)) });
+		m_plants.push_back({ glm::vec4(p, 1.0f), glm::vec4(glm::vec2(vegTemplate->GetSize()), bendFactor, float(index)) });
 	}
 }
 
@@ -293,4 +302,70 @@ void VegetationRenderer::CreateBuffers()
 	if (!wasMemMapped)
 		MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::StagginBuffer);
 
+}
+
+void VegetationRenderer::WindVariation()
+{
+	float as = glm::sin(m_elapsedTime * m_angularSpeed) + glm::sin(2.1f + m_elapsedTime * m_angularSpeed / 2.0f) + glm::sin(0.5f + m_elapsedTime * 2.0f * m_angularSpeed); //[-3, 3]
+	glm::vec2 limits(glm::radians(m_windAngleLimits.x), glm::radians(m_windAngleLimits.y));
+
+	float angle = (as + 3.0f) / 6.0f * (limits.y - limits.x) + limits.x; // [-3, 3] -> [limits.x, limits.y]
+
+	m_globals.WindVelocity = glm::vec4(glm::cos(angle), 0.0f, -glm::sin(angle), 0.0f) * m_windStrength;
+}
+
+bool VegetationRenderer::OnDebugKey(const KeyInput& key)
+{
+	if (key.GetKeyPressed() == '3')
+	{
+		m_isDebugMode = !m_isDebugMode;
+
+		if (m_isDebugMode)
+		{
+			TRAP(!m_debugText);
+			m_debugText = CUIManager::GetInstance()->CreateTextItem("Vegetation: Wheel (WindStrength) + Shift (Speed) / Ctr(AngleLimits). Press 3 to close", glm::uvec2(10, 50));
+		}
+		else
+		{
+			TRAP(m_debugText);
+			CUIManager::GetInstance()->DestroyTextItem(m_debugText);
+			m_debugText = nullptr;
+
+		}
+		return true;
+	}
+
+	return false;
+}
+
+bool VegetationRenderer::OnDebugWindVelocityChange(const MouseInput& mouse)
+{
+	if (!m_isDebugMode)
+		return false;
+
+	if (mouse.GetWheelDelta() != 0)
+	{
+		float modifier = (mouse.GetWheelDelta() > 0) ? 0.2f : -0.2f;
+		if (mouse.IsSpecialKeyPressed(SpecialKey::Shift))
+		{
+			m_angularSpeed += modifier;
+			m_angularSpeed = glm::clamp(m_angularSpeed, 0.1f, 4.0f);
+
+		}
+		else if (mouse.IsSpecialKeyPressed(SpecialKey::Ctrl))
+		{
+			float angleDelta = (mouse.GetWheelDelta() > 0.0f) ? 5.0f : -5.0f;
+			m_windAngleLimits.y += angleDelta;
+			m_windAngleLimits.y = glm::clamp(m_windAngleLimits.y, m_windAngleLimits.x + 5.0f, 180.0f);
+		}
+		else
+		{
+			m_windStrength += modifier;
+			m_windStrength = glm::clamp(m_windStrength, 0.2f, 10.0f);
+		}
+
+		return true;
+	}
+
+	return false;
 }

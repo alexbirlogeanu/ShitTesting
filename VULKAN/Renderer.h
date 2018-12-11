@@ -373,6 +373,7 @@ public:
 
     virtual void Init(); //this is an anti pattern. Fix it
     virtual void Render() = 0;
+	virtual void Compute() {} //misleading name
 	virtual void PreRender(){};
 	virtual void RenderShadows() {} //need to refactor this thing
 
@@ -388,6 +389,7 @@ public:
     static void ReloadAll();
     static void UpdateAll();
 	static void PrepareAll();
+	static void ComputeAll();
 
 	VkRenderPass GetRenderPass() const { return m_renderPass; }
 protected:

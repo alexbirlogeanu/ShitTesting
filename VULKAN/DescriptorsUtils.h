@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <array>
+#include <unordered_map>
 
 class DescriptorSetLayout
 {
@@ -46,12 +47,16 @@ public:
 	bool CanAllocate(const std::vector<DescriptorSetLayout*>& layoutsType);
 	VkDescriptorSet AllocateDescriptorSet(const DescriptorSetLayout& layoutType);
 	std::vector<VkDescriptorSet> AllocateDescriptorSet(const std::vector<DescriptorSetLayout>& layoutsTypes);
+
+	bool FreeDescriptorSet(VkDescriptorSet descSet);
 private:
 	DescriptorPool(const DescriptorPool&) = delete;
 	DescriptorPool& operator=(const DescriptorPool&) = delete;
 
 private:
 	VkDescriptorPool																	m_descPoolHandle;
-	std::array<VkDescriptorPoolSize, VkDescriptorType::VK_DESCRIPTOR_TYPE_RANGE_SIZE>	m_descriptorPoolSizeRemaining;
-	uint32_t																			m_remainingSets;
+	std::array<int32_t, VkDescriptorType::VK_DESCRIPTOR_TYPE_RANGE_SIZE>				m_descriptorPoolSizeRemaining;
+	//std::vector<VkDescriptorSet>														m_allocatedDescriptorSets;
+	std::unordered_map<VkDescriptorSet, std::vector<VkDescriptorSetLayoutBinding>>		m_allocatedDescriptorSets;
+	int32_t																				m_remainingSets;
 };

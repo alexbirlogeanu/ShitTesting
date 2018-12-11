@@ -243,7 +243,7 @@ void CSunRenderer::UpdateEditInfo()
     m_editInfo->SetTextItem(4, "(F/G)Samples: " + std::to_string(m_lightShaftSamples));*/
 }
 
-void CSunRenderer::CreateEditInfo(CUIManager* manager)
+void CSunRenderer::CreateEditInfo()
 {
     std::vector<std::string> texts;
     texts.resize(5);

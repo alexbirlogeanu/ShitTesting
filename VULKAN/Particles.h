@@ -173,7 +173,7 @@ public:
     void ToggleSim() { m_simPaused = !m_simPaused; }
 
     void Register(CParticleSystem* system);
-    void RegisterDebugManager(CUIManager* manager);
+    void RegisterDebugManager();
 
 	bool OnMouseEvent(const MouseInput& mouseInput);
 protected:
@@ -218,9 +218,6 @@ protected:
     Mesh*                               m_quad;
 
     std::vector<CParticleSystem*>       m_particleSystems;
-
-
-    CUIManager*                         m_uiManager; //debug purpose
 
     bool                                m_needUpdate;
     bool                                m_simPaused;

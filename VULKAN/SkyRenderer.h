@@ -40,7 +40,7 @@ public:
     void SetSunTexture(CTexture* t) { m_sunTexture = t; UpdateSunDescriptors(); }
 	bool OnKeyPressed(const KeyInput& key);
 
-    void CreateEditInfo(CUIManager* manager);
+    void CreateEditInfo();
 protected:
     struct SSunParams
     {

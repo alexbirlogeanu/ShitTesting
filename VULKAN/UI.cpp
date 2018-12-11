@@ -37,7 +37,7 @@ CUIText::CUIText(CFont2* font, const std::string& text, glm::uvec2 screenPos)
 
 CUIText::~CUIText()
 {
-    delete m_textMesh;
+    //delete m_textMesh; //dont delete m_textMesh - its a static mesh that is used by  a lot of graphic elemetns
 	MemoryManager::GetInstance()->FreeHandle(m_shaderParameters);
 }
 
@@ -189,9 +189,17 @@ void CUIRenderer::AddUIText(CUIText* item)
 
 void CUIRenderer::RemoveUIText(CUIText* item)
 {
+	//WARNING this function is a time bomb. probably if i will implement double buffering this function will blow the driver up.
+	// you need to delay the distruction of the descriptor set and do it in a safe place
 	auto del = std::find(m_uiTexts.begin(), m_uiTexts.end(), item);
 	if (del != m_uiTexts.end())
 		m_uiTexts.erase(del);
+
+	for (auto pool : m_uiElemDescriptorPool)
+	{
+		if (pool->FreeDescriptorSet(item->m_descriptorSet))
+			break;
+	}
 }
 
 void CUIRenderer::UpdateGraphicInterface()
@@ -276,7 +284,7 @@ void CUIRenderer::Init()
     m_textElemPipeline.SetDepthWrite(false);
 
     VkPipelineColorBlendAttachmentState blendState;
-    blendState.blendEnable = VK_FALSE;
+    blendState.blendEnable = VK_TRUE;
     blendState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
     blendState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
     blendState.colorBlendOp =  VK_BLEND_OP_ADD;
@@ -315,7 +323,7 @@ CUIManager::CUIManager()
     : m_font(nullptr)
     , m_uiRenderer(nullptr)
 {
-    CFontImporter fontImporter("kalinga24.fnt");
+    CFontImporter fontImporter("kalinga12.fnt");
     fontImporter.BuildFont();
 
     m_showUi.Set(false);
@@ -339,6 +347,20 @@ CUIText* CUIManager::CreateTextItem(const std::string& text, glm::uvec2 screenPo
 
     return item;
 }
+
+void CUIManager::DestroyTextItem(CUIText* item)
+{
+	TRAP(m_uiRenderer);
+	auto itItem = std::find(m_uiItems.begin(), m_uiItems.end(), item);
+	if (itItem != m_uiItems.end())
+	{
+		m_uiItems.erase(itItem);
+
+		m_uiRenderer->RemoveUIText(item);
+		delete item;
+	}
+}
+
 
 void CUIManager::SetupRenderer(CUIRenderer* uiRenderer)
 {

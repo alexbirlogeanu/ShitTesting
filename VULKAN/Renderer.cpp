@@ -799,6 +799,12 @@ void CRenderer::PrepareAll()
 		renderer->PreRender();
 }
 
+void CRenderer::ComputeAll()
+{
+	for (auto renderer : ms_Renderers)
+		renderer->Compute();
+}
+
 void CRenderer::Init()
 {
     std::vector<VkDescriptorPoolSize> poolSize;

@@ -8,6 +8,9 @@
 class BufferHandle;
 class CTexture;
 class Mesh;
+class KeyInput;
+class MouseInput;
+class CUIText;
 
 class VegetationRenderer : public CRenderer
 {
@@ -25,17 +28,21 @@ private:
 
 	void UpdateGraphicInterface() override;
 
-	void GenerateVegetation(); //TODO! use terrain as input
+	void GenerateVegetation();
 	void CreateBuffers();
 
 	void UpdateTextures();
 	void CopyBuffers();
+
+	void WindVariation();
+
+	bool OnDebugKey(const KeyInput& key);
+	bool OnDebugWindVelocityChange(const MouseInput& mouse);
 private:
 	struct PlantDescription
 	{
 		glm::vec4 Position; //world space
-		glm::vec4 Properties; //x - width, y - height of the billboard, z - current angular speed of the billboard, comes from "simulation", texture index
-		//probably indexes of the textured used
+		glm::vec4 Properties; //x - width, y - height of the billboard, z - bend factor used in wind simulation, comes from "simulation", texture index
 	};
 
 	struct GlobalParams
@@ -43,6 +50,7 @@ private:
 		glm::mat4 ProjViewMatrix;
 		glm::vec4 CameraPosition;
 		glm::vec4 LightDirection;
+		glm::vec4 WindVelocity;
 	} m_globals;
 
 	CGraphicPipeline				m_renderPipeline;
@@ -51,13 +59,22 @@ private:
 
 	DescriptorSetLayout				m_renderDescSetLayout;
 	VkDescriptorSet					m_renderDescSet;
-
+	
 	std::vector<PlantDescription>	m_plants;
-	//
+	glm::vec4						m_pushConstant;
 	std::vector<CTexture*>			m_albedoTextures;
-	//std::vector<CTexture*>			m_normalsTextures;
+
 	Mesh*							m_quad;
 
 	const uint32_t					m_maxTextures;
 	bool							m_isReady;
+	float							m_elapsedTime;
+
+	float							m_windStrength;
+	float							m_angularSpeed;
+	glm::vec2						m_windAngleLimits; //in degrees
+
+	//debug
+	bool							m_isDebugMode;
+	CUIText*						m_debugText;
 };

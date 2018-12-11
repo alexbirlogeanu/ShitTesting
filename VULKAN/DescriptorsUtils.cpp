@@ -56,7 +56,7 @@ DescriptorPool::DescriptorPool()
 	, m_remainingSets(0)
 {
 	for (uint32_t i = 0; i < m_descriptorPoolSizeRemaining.size(); ++i)
-		m_descriptorPoolSizeRemaining[i].descriptorCount = 0;
+		m_descriptorPoolSizeRemaining[i] = 0;
 }
 
 DescriptorPool::~DescriptorPool()
@@ -66,22 +66,22 @@ DescriptorPool::~DescriptorPool()
 
 void DescriptorPool::Construct(const DescriptorSetLayout& layoutType, uint32_t maxSets)
 {
-	std::vector<VkDescriptorSetLayoutBinding> bindings = layoutType.GetBindings();
+	const std::vector<VkDescriptorSetLayoutBinding>& bindings = layoutType.GetBindings();
 
 	for (auto binding : bindings)
 	{
-		m_descriptorPoolSizeRemaining[binding.descriptorType].descriptorCount += binding.descriptorCount;
-		m_descriptorPoolSizeRemaining[binding.descriptorType].type = binding.descriptorType;
+		m_descriptorPoolSizeRemaining[binding.descriptorType] += binding.descriptorCount;
 	}
 
 	std::vector<VkDescriptorPoolSize> poolSize;
-
-	for (auto& pSize : m_descriptorPoolSizeRemaining)
-		if (pSize.descriptorCount != 0)
+	for (int i = VK_DESCRIPTOR_TYPE_BEGIN_RANGE; i <= VK_DESCRIPTOR_TYPE_END_RANGE; ++i)
+	{
+		if (m_descriptorPoolSizeRemaining[i] != 0)
 		{
-			pSize.descriptorCount *= maxSets;
-			poolSize.push_back(pSize);
+			m_descriptorPoolSizeRemaining[i] *= maxSets;
+			poolSize.push_back({ (VkDescriptorType)i, m_descriptorPoolSizeRemaining[i] });
 		}
+	}
 
 	m_remainingSets = maxSets;
 
@@ -92,41 +92,44 @@ void DescriptorPool::Construct(const std::vector<DescriptorSetLayout*>& layouts,
 {
 	for (const auto& layout : layouts)
 	{
-		std::vector<VkDescriptorSetLayoutBinding> bindings = layout->GetBindings();
+		const std::vector<VkDescriptorSetLayoutBinding>& bindings = layout->GetBindings();
 
 		for (auto binding : bindings)
 		{
-			m_descriptorPoolSizeRemaining[binding.descriptorType].descriptorCount += binding.descriptorCount;
-			m_descriptorPoolSizeRemaining[binding.descriptorType].type = binding.descriptorType;
+			m_descriptorPoolSizeRemaining[binding.descriptorType] += binding.descriptorCount;
 		}
 	}
 
 	std::vector<VkDescriptorPoolSize> poolSize;
-
-	for (auto& pSize : m_descriptorPoolSizeRemaining)
-		if (pSize.descriptorCount != 0)
+	for (int i = VK_DESCRIPTOR_TYPE_BEGIN_RANGE; i <= VK_DESCRIPTOR_TYPE_END_RANGE; ++i )
+	{
+		if (m_descriptorPoolSizeRemaining[i] != 0)
 		{
-			pSize.descriptorCount *= maxSets;
-			poolSize.push_back(pSize);
+			m_descriptorPoolSizeRemaining[i] *= maxSets;
+			poolSize.push_back({ (VkDescriptorType)i, m_descriptorPoolSizeRemaining[i] });
 		}
+	}
 
 	m_remainingSets = maxSets * uint32_t(layouts.size());
-
 	NewDescriptorPool(poolSize, m_remainingSets, &m_descPoolHandle);
 }
 
 
 void DescriptorPool::Construct(const std::vector<VkDescriptorPoolSize>& poolSize, uint32_t maxSets)
 {
+	m_remainingSets = maxSets;
+	for (auto size : poolSize)
+		m_descriptorPoolSizeRemaining[size.type] = size.descriptorCount;
+
 	NewDescriptorPool(poolSize, maxSets, &m_descPoolHandle);
 }
 
 bool DescriptorPool::CanAllocate(const DescriptorSetLayout& layoutType)
 {
-	std::vector<VkDescriptorSetLayoutBinding> bindings = layoutType.GetBindings();
+	const std::vector<VkDescriptorSetLayoutBinding>& bindings = layoutType.GetBindings();
 	for (auto binding : bindings)
 	{
-		if (m_descriptorPoolSizeRemaining[binding.descriptorType].descriptorCount - binding.descriptorCount < 0)
+		if (m_descriptorPoolSizeRemaining[binding.descriptorType] - int32_t(binding.descriptorCount) < 0)
 			return false;
 	}
 
@@ -146,9 +149,40 @@ VkDescriptorSet DescriptorPool::AllocateDescriptorSet(const DescriptorSetLayout&
 {
 	VkDescriptorSet newDescSet;
 	AllocDescriptorSets(m_descPoolHandle, layoutType.Get(), &newDescSet);
+
+	const std::vector<VkDescriptorSetLayoutBinding>& bindings = layoutType.GetBindings();
+
+	for (auto binding : bindings)
+	{
+		m_descriptorPoolSizeRemaining[binding.descriptorType] -= binding.descriptorCount;
+		TRAP(m_descriptorPoolSizeRemaining[binding.descriptorType] >= 0);
+	}
+
+	m_allocatedDescriptorSets.emplace(newDescSet, bindings);
+
 	--m_remainingSets;
 	return newDescSet;
 }
+
+bool DescriptorPool::FreeDescriptorSet(VkDescriptorSet descSet)
+{
+	auto it = m_allocatedDescriptorSets.find(descSet);
+	if (it == m_allocatedDescriptorSets.end())
+		return false;
+
+	auto bindings = it->second;
+
+	for (auto binding : bindings)
+	{
+		m_descriptorPoolSizeRemaining[binding.descriptorType] += binding.descriptorCount;
+	}
+	++m_remainingSets;
+	vk::FreeDescriptorSets(vk::g_vulkanContext.m_device, m_descPoolHandle, 1, &it->first);
+
+	m_allocatedDescriptorSets.erase(it);
+	return true;
+}
+
 
 std::vector<VkDescriptorSet> DescriptorPool::AllocateDescriptorSet(const std::vector<DescriptorSetLayout>& layoutsTypes)
 {

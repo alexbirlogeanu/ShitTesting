@@ -23,7 +23,7 @@ public:
     void ChangeLightIntensity(float step);
 
     void ToggleDebug();
-    void CreateDebug(CUIManager* manager);
+    void CreateDebug();
 
 	bool OnKeyboardPressed(const KeyInput& key);
 	bool OnMouseEvent(const MouseInput& mouseInput);

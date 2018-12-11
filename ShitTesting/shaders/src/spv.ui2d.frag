@@ -13,5 +13,5 @@ void main()
 	
 	color = texture(fontTexture, uv.st);
 	if(color.a < 0.1)
-		color = vec4(0.4f, 0.4f, 0.4f, 0.5f);
+		color = vec4(0.4f, 0.4f, 0.4f, 0.75f);
 }

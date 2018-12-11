@@ -886,6 +886,7 @@ private:
     CTexture*       m_lut;
 };
 
+
 class CApplication
 {
 public:
@@ -896,7 +897,7 @@ public:
     void Render();
     void SwapBuffers();
 
-    
+	static float GetDeltaTime() { return ms_dt; }
 private:
     void InitWindow();
     void CenterCursor();
@@ -1050,8 +1051,6 @@ private:
 	TerrainRenderer*			m_terrainRenderer;
 	VegetationRenderer*			m_vegetationRenderer;
 
-    CUIManager*                 m_uiManager;
-
     //bool                        m_pickRecorded;
     bool                        m_screenshotRequested;
     WORD                        m_xPickCoord;
@@ -1062,10 +1061,17 @@ private:
     bool                        m_mouseMoved;
     float                       m_normMouseDX;
     float                       m_normMouseDY;
-    float                       dt;
+    static float                ms_dt;
 
     bool                        m_needReset;
 };
+
+float GetDeltaTime()
+{
+	return CApplication::GetDeltaTime();
+}
+
+float CApplication::ms_dt = 0.0f;
 
 CApplication::CApplication()
 	: m_windowClass(WNDCLASSNAME)
@@ -1114,7 +1120,6 @@ CApplication::CApplication()
 	, m_sunRenderer(nullptr)
 	, m_uiRenderer(nullptr)
 	, m_ssrRenderer(nullptr)
-	, m_uiManager(nullptr)
 	, m_vegetationRenderer(nullptr)
 	, m_terrainRenderer(nullptr)
     , m_screenshotRequested(false)
@@ -1138,6 +1143,7 @@ CApplication::CApplication()
 	ResourceLoader::CreateInstance();
 	BatchManager::CreateInstance();
 	MaterialLibrary::CreateInstance();
+	CUIManager::CreateInstance();
 
     CreateCommandBuffer();
     CPickManager::CreateInstance();
@@ -1178,11 +1184,8 @@ CApplication::~CApplication()
 {
     FreeImage_DeInitialise();
 
-    delete m_uiManager;
 
-    delete m_smokeTexture;
-
-
+	delete m_smokeTexture;
     delete m_objectRenderer;
     delete m_aoRenderer;
     delete m_lightRenderer;
@@ -1222,6 +1225,7 @@ CApplication::~CApplication()
     vk::DestroyRenderPass(dev, m_volumetricRenderPass, nullptr);
 	vk::DestroyRenderPass(dev, m_ssrRenderPass, nullptr);
 
+	CUIManager::DestroyInstance();
 	ObjectSerializer::DestroyInstance();
 	MaterialLibrary::DestroyInstance();
 	BatchManager::DestroyInstance();
@@ -1266,7 +1270,7 @@ void CApplication::Run()
             DispatchMessage(&msg);
         }
         UpdateCamera();
-        m_uiManager->Update();
+        CUIManager::GetInstance()->Update();
 		InputManager::GetInstance()->Update();
 
         Render();
@@ -1287,7 +1291,7 @@ void CApplication::Run()
         dtMs = stop - start;
         dtMs = (dtMs > 0)? dtMs : 1;
 
-        dt = (float)(dtMs) / 1000.0f;
+        ms_dt = (float)(dtMs) / 1000.0f;
     };
 }
 
@@ -2624,19 +2628,18 @@ void CApplication::CreateResources()
 
     CRenderer::UpdateAll();
 
-    m_uiManager = new CUIManager();
-    m_uiManager->SetupRenderer(m_uiRenderer);
+    CUIManager::GetInstance()->SetupRenderer(m_uiRenderer);
 
-    m_particlesRenderer->RegisterDebugManager(m_uiManager);
+    m_particlesRenderer->RegisterDebugManager();
 
     m_sunRenderer->SetSunTexture(m_sunTexture);
-    m_sunRenderer->CreateEditInfo(m_uiManager);
+    m_sunRenderer->CreateEditInfo();
 
     m_skyRenderer->SetTexture(m_skyTexture2D);
     m_skyRenderer->SetSkyImageView();
 
-    GetPickManager()->CreateDebug(m_uiManager);
-    directionalLight.CreateDebug(m_uiManager);
+    GetPickManager()->CreateDebug();
+    directionalLight.CreateDebug();
     //SetupParticles();
 
     //SetupPointLights();
@@ -2705,6 +2708,8 @@ void CApplication::Render()
     CTextureManager::GetInstance()->Update();
 	MeshManager::GetInstance()->Update();
 	BatchManager::GetInstance()->Update();
+
+	CRenderer::ComputeAll();
 
     //BeginFrame();
     QueryManager::GetInstance().Reset();

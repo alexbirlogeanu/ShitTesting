@@ -425,7 +425,7 @@ void CPickManager::Update()
 
 }
 
- void CPickManager::CreateDebug(CUIManager* manager)
+ void CPickManager::CreateDebug()
  {
      std::vector<std::string> infoTexts;
      infoTexts.resize(Count);

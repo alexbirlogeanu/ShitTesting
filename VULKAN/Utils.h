@@ -64,5 +64,7 @@ VkPipelineShaderStageCreateInfo CreatePipelineStage(VkShaderModule modue, VkShad
 
 void ReadXmlFile(const std::string& xml, char** fileContent);
 
+float GetDeltaTime();
+
 extern CCamera ms_camera;
 extern CDirectionalLight directionalLight;
