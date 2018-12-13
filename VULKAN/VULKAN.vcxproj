@@ -133,6 +133,7 @@
     <ClInclude Include="DefaultMaterial.h" />
     <ClInclude Include="DescriptorsUtils.h" />
     <ClInclude Include="Font.h" />
+    <ClInclude Include="Geometry.h" />
     <ClInclude Include="Input.h" />
     <ClInclude Include="Material.h" />
     <ClInclude Include="MemoryManager.h" />
@@ -175,6 +176,7 @@
     <ClCompile Include="DefaultMaterial.cpp" />
     <ClCompile Include="DescriptorsUtils.cpp" />
     <ClCompile Include="Font.cpp" />
+    <ClCompile Include="Geometry.cpp" />
     <ClCompile Include="Input.cpp" />
     <ClCompile Include="Material.cpp" />
     <ClCompile Include="MemoryManager.cpp" />

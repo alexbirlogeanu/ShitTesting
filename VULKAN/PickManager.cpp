@@ -235,7 +235,7 @@ void CPickRenderer::UpdateObjects()
     for(unsigned int i = 0; i < m_nodes.size(); ++i)
     {
         CPickable* p = m_nodes[i].Pickable;
-        BoundingBox bb = p->GetBoundingBox();
+        BoundingBox3D bb = p->GetBoundingBox();
 
 		SPickParams* params = m_nodes[i].buffer->GetPtr<SPickParams*>();
         params->ID = glm::uvec4(p->GetId());

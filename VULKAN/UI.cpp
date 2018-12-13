@@ -111,6 +111,23 @@ void CUIText::Render(CGraphicPipeline* pipeline)
 }
 
 //////////////////////////////////////////////////////////////////////////
+//DebugBoundingBox
+//////////////////////////////////////////////////////////////////////////
+DebugBoundingBox::DebugBoundingBox(const BoundingBox3D& bb, const glm::vec4& color)
+	: m_boundingBox(bb)
+	, m_color(color)
+{
+}
+
+
+struct DebugBBParams
+{
+	glm::vec4 Min;
+	glm::vec4 Max;
+	glm::vec4 Color;
+};
+
+//////////////////////////////////////////////////////////////////////////
 //CUIRenderer
 //////////////////////////////////////////////////////////////////////////
 
@@ -120,12 +137,18 @@ CUIRenderer::CUIRenderer(VkRenderPass renderPass)
     , m_usedFont(nullptr)
 	, m_globalsDescriptorSet(VK_NULL_HANDLE)
 	, m_globalsBuffer(nullptr)
+	, m_debugBBBuffer(nullptr)
+	, m_bbDescriptorSet(VK_NULL_HANDLE)
+	, m_visibleBb(0)
+	, m_boundingBoxMesh(nullptr)
 {
 }
 
 CUIRenderer::~CUIRenderer()
 {
 	MemoryManager::GetInstance()->FreeHandle(m_globalsBuffer);
+	MemoryManager::GetInstance()->FreeHandle(m_debugBBBuffer);
+
 	VkDevice dev = vk::g_vulkanContext.m_device;
 
 	vk::DestroySampler(dev, m_sampler, nullptr);
@@ -141,10 +164,28 @@ void CUIRenderer::PreRender()
 	UIGlobals* globals = m_globalsBuffer->GetPtr<UIGlobals*>();
 	globals->ScreenSize = glm::vec4(WIDTH, HEIGHT, 0.0f, 0.0f);
 
+	m_constants.ProjViewMatrix = m_projMatrix * ms_camera.GetViewMatrix();
+
 	for (auto uiText : m_uiTexts)
 	{
 		if (uiText->IsDirty())
 			uiText->PreRender();
+	}
+
+
+	DebugBBParams* params = m_debugBBBuffer->GetPtr<DebugBBParams*>();
+	
+	for (auto bb : m_debugBoundingBoxes)
+	{
+		if (bb->GetVisible())
+		{
+			params->Color = bb->GetColor();
+			params->Min = glm::vec4(bb->GetBoundingBox().Min, 1.0f);
+			params->Max = glm::vec4(bb->GetBoundingBox().Max, 1.0f);
+			++m_visibleBb;
+			++params;
+		}
+
 	}
 
 	MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::UI);
@@ -156,11 +197,22 @@ void CUIRenderer::Render()
 
 	VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
 
-	vk::CmdBindPipeline(cmdBuffer, m_textElemPipeline.GetBindPoint(), m_textElemPipeline.Get());
-	vk::CmdBindDescriptorSets(cmdBuffer, m_textElemPipeline.GetBindPoint(), m_textElemPipeline.GetLayout(), 0, 1, &m_globalsDescriptorSet, 0, nullptr);
-	for (auto& uiText : m_uiTexts)
-		if (uiText->GetVisible())
-			uiText->Render(&m_textElemPipeline);
+	if (!m_debugBoundingBoxes.empty())
+	{
+		vk::CmdBindPipeline(cmdBuffer, m_debugBBPipeline.GetBindPoint(), m_debugBBPipeline.Get());
+		vk::CmdBindDescriptorSets(cmdBuffer, m_debugBBPipeline.GetBindPoint(), m_debugBBPipeline.GetLayout(), 0, 1, &m_bbDescriptorSet, 0, nullptr);
+		vk::CmdPushConstants(cmdBuffer, m_debugBBPipeline.GetLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant), &m_constants);
+		m_boundingBoxMesh->Render(-1, m_visibleBb);
+	}
+
+	if (!m_uiTexts.empty())
+	{
+		vk::CmdBindPipeline(cmdBuffer, m_textElemPipeline.GetBindPoint(), m_textElemPipeline.Get());
+		vk::CmdBindDescriptorSets(cmdBuffer, m_textElemPipeline.GetBindPoint(), m_textElemPipeline.GetLayout(), 0, 1, &m_globalsDescriptorSet, 0, nullptr);
+		for (auto& uiText : m_uiTexts)
+			if (uiText->GetVisible())
+				uiText->Render(&m_textElemPipeline);
+	}
 
     EndRenderPass();
 }
@@ -181,7 +233,7 @@ void CUIRenderer::SetFont(CFont2* font)
 
 void CUIRenderer::AddUIText(CUIText* item)
 {
-	VkDescriptorSet set = AllocTextDescriptorSet();
+	VkDescriptorSet set = AllocElementDescriptorSet(m_textElemDescriptorLayout);
 	item->Create(set);
 
 	m_uiTexts.push_back(item);
@@ -202,30 +254,58 @@ void CUIRenderer::RemoveUIText(CUIText* item)
 	}
 }
 
+void CUIRenderer::AddDebugBoundingBox(DebugBoundingBox* bb)
+{
+	uint32_t neededMemory = (m_debugBoundingBoxes.size() + 1) * sizeof(DebugBBParams);
+
+	if (neededMemory > m_debugBBBuffer->GetSize())
+	{
+		MemoryManager::GetInstance()->FreeHandle(m_debugBBBuffer);
+		MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UI, m_debugBoundingBoxes.size() * 2 * sizeof(DebugBBParams), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
+		VkDescriptorBufferInfo bbBufferInfo = m_debugBBBuffer->GetDescriptor();
+		std::vector<VkWriteDescriptorSet> wDesc;
+		wDesc.push_back(InitUpdateDescriptor(m_bbDescriptorSet, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &bbBufferInfo));
+
+		vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
+	}
+
+	m_debugBoundingBoxes.push_back(bb);
+}
+
+void CUIRenderer::RemoveDebugBoundingBox(DebugBoundingBox* bb)
+{
+	auto it = std::find(m_debugBoundingBoxes.begin(), m_debugBoundingBoxes.end(), bb);
+	if (it != m_debugBoundingBoxes.end())
+		m_debugBoundingBoxes.erase(it);
+}
+
 void CUIRenderer::UpdateGraphicInterface()
 {
 	//VkDescriptorImageInfo fontInfo = CreateDescriptorImageInfo(m_sampler, m_usedFont->GetFontImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	VkDescriptorBufferInfo globalsInfo = m_globalsBuffer->GetDescriptor();
+	VkDescriptorBufferInfo bbBufferInfo = m_debugBBBuffer->GetDescriptor();
 	std::vector<VkWriteDescriptorSet> wDesc;
 	wDesc.push_back(InitUpdateDescriptor(m_globalsDescriptorSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &globalsInfo));
+	wDesc.push_back(InitUpdateDescriptor(m_bbDescriptorSet, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &bbBufferInfo));
 	//wDesc.push_back(InitUpdateDescriptor(m_globalsDescriptorSet, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &fontInfo));
 
 	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
 }
 
-VkDescriptorSet CUIRenderer::AllocTextDescriptorSet()
+VkDescriptorSet CUIRenderer::AllocElementDescriptorSet(const DescriptorSetLayout& layout)
 {
 	for (auto pool : m_uiElemDescriptorPool)
 	{
-		if (pool->CanAllocate(m_textElemDescriptorLayout))
-			return pool->AllocateDescriptorSet(m_textElemDescriptorLayout);
+		if (pool->CanAllocate(layout))
+			return pool->AllocateDescriptorSet(layout);
 	}
 
 	DescriptorPool* pool = new DescriptorPool();
-	pool->Construct(m_textElemDescriptorLayout, 20);
+	pool->Construct(layout, 20); //TODO this number should be tweaked
 
 	m_uiElemDescriptorPool.push_back(pool);
-	return pool->AllocateDescriptorSet(m_textElemDescriptorLayout);
+	return pool->AllocateDescriptorSet(layout);
 }
 
 void CUIRenderer::CreateDescriptorSetLayout()
@@ -236,6 +316,9 @@ void CUIRenderer::CreateDescriptorSetLayout()
 	m_globalsDescSetLayout.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1);
 	m_globalsDescSetLayout.Construct();
 	m_textElemDescriptorLayout.Construct();
+
+	m_bbDescriptorLayout.AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 1);
+	m_bbDescriptorLayout.Construct();
 }
 
 void CUIRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)
@@ -303,6 +386,21 @@ void CUIRenderer::Init()
     ConvertToProjMatrix(m_projMatrix);
 
 	m_globalsBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UI, sizeof(UIGlobals), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	m_debugBBBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UI, 10 * sizeof(DebugBBParams), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT); //for start alloc only for 10 bb to test the Add/Remove BB interaction
+
+	m_bbDescriptorSet = AllocElementDescriptorSet(m_bbDescriptorLayout);
+
+	m_debugBBPipeline.SetVertexShaderFile("debugbb.vert");
+	m_debugBBPipeline.SetFragmentShaderFile("debugbb.frag");
+	m_debugBBPipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState());
+	m_debugBBPipeline.SetVertexInputState(Mesh::GetVertexDesc());
+	m_debugBBPipeline.SetLineWidth(2.0f);
+	m_debugBBPipeline.AddPushConstant({ VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant) });
+	m_debugBBPipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
+	m_debugBBPipeline.CreatePipelineLayout(m_bbDescriptorLayout.Get());
+	m_debugBBPipeline.Init(this, m_renderPass, 0);
+
+	CreateBBMesh();
 
     //m_vectorElemPipeline.SetVertexShaderFile("uivector3d.vert");
     //m_vectorElemPipeline.SetFragmentShaderFile("uivector3d.frag");
@@ -314,6 +412,33 @@ void CUIRenderer::Init()
     //m_vectorElemPipeline.AddBlendState(blendState);
     //m_vectorElemPipeline.CreatePipelineLayout(m_commonDescSetLayout);
     //m_vectorElemPipeline.Init(this, m_renderPass, 0);
+}
+
+void CUIRenderer::CreateBBMesh()
+{
+	SVertex vertices[] = {
+		SVertex(glm::vec3(-1, 1, 1)),
+		SVertex(glm::vec3(1, 1, 1)),
+		SVertex(glm::vec3(1, -1, 1)),
+		SVertex(glm::vec3(-1, -1, 1)),
+		SVertex(glm::vec3(-1, 1, -1)),
+		SVertex(glm::vec3(1, 1, -1)),
+		SVertex(glm::vec3(1, -1, -1)),
+		SVertex(glm::vec3(-1, -1, -1))
+	};
+
+	//lines
+	unsigned int indices[] = {
+		0, 1, 1, 2, 2, 3, 3, 0,
+		0, 3, 3, 7, 7, 4, 4, 0,
+		4, 5, 5, 6, 6, 7, 7, 4,
+		1, 5, 5, 6, 6, 2, 2, 1,
+		2, 3, 3, 7, 7, 6, 6, 2,
+		0, 1, 1, 5, 5, 4, 4, 0
+	};
+
+	m_boundingBoxMesh = new Mesh(std::vector<SVertex>(vertices, vertices + 8), std::vector<unsigned int>(indices, indices + sizeof(indices) / sizeof(unsigned int)));
+
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -361,6 +486,17 @@ void CUIManager::DestroyTextItem(CUIText* item)
 	}
 }
 
+DebugBoundingBox* CUIManager::CreateDebugBoundingBox(const BoundingBox3D& bb, glm::vec4 color)
+{
+	DebugBoundingBox* dBB = new DebugBoundingBox(bb, color);
+	m_debugBBToAdd.push_back(dBB);
+	return dBB;
+}
+
+void CUIManager::DestroyTextItem(DebugBoundingBox* bb)
+{
+	m_debugBBToRemove.push_back(bb);
+}
 
 void CUIManager::SetupRenderer(CUIRenderer* uiRenderer)
 {
@@ -375,6 +511,22 @@ void CUIManager::SetupRenderer(CUIRenderer* uiRenderer)
 void CUIManager::Update()
 {
     ShowUIItems();
+
+	if (!m_debugBBToAdd.empty())
+	{
+		for (auto bb : m_debugBBToAdd)
+			m_uiRenderer->AddDebugBoundingBox(bb);
+
+		m_debugBBToAdd.clear();
+	}
+
+	if (!m_debugBBToRemove.empty())
+	{
+		for (auto bb : m_debugBBToRemove)
+			m_uiRenderer->RemoveDebugBoundingBox(bb);
+
+		m_debugBBToRemove.clear();
+	}
 }
 
 void CUIManager::ToggleDisplayInfo()

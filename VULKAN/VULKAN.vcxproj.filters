@@ -141,6 +141,9 @@
     <ClCompile Include="Scene.cpp">
       <Filter>Source Files\GraphicsUtils</Filter>
     </ClCompile>
+    <ClCompile Include="Geometry.cpp">
+      <Filter>Source Files\GraphicsUtils</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="VulkanLoader.h">
@@ -261,6 +264,9 @@
       <Filter>Header Files\Renderer</Filter>
     </ClInclude>
     <ClInclude Include="Scene.h">
+      <Filter>Header Files\GraphicsUtils</Filter>
+    </ClInclude>
+    <ClInclude Include="Geometry.h">
       <Filter>Header Files\GraphicsUtils</Filter>
     </ClInclude>
   </ItemGroup>

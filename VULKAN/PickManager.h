@@ -22,7 +22,7 @@ public:
 
     unsigned int GetId() const { return m_id; }
     virtual glm::mat4 GetModelMatrix()=0;
-    virtual BoundingBox GetBoundingBox() const =0;
+    virtual BoundingBox3D GetBoundingBox() const =0;
     virtual void Render()=0;
     virtual void GetPickableDescription(std::vector<std::string>& texts)=0;
     virtual bool ChangePickableProperties(unsigned int key)=0;

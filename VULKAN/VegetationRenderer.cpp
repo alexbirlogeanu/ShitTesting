@@ -9,6 +9,7 @@
 #include "Serializer.h"
 #include "Input.h"
 #include "UI.h"
+#include "Geometry.h"
 
 #include <random>
 
@@ -62,7 +63,181 @@ private:
 	std::vector<VegetationTemplate*>		m_templates;
 };
 
+///////////////////////////////////////////////////////////////////
+//QuadTree
+//////////////////////////////////////////////////////////////////
 
+class PartitionNode
+{
+public:
+	PartitionNode(glm::vec2 minLimits, glm::vec2 maxLimits, PartitionNode* parrent);
+	virtual ~PartitionNode() {};
+
+	PartitionNode*					GetParrent() { return m_parrent; }
+	std::vector<PartitionNode*>&	GetChildren() { return m_children; }
+	const BoundingBox3D&			GetBoundingBox3D() const { return m_boundingBox; }
+
+
+
+	void							CreateChildren();
+	void							AddObject(const PlantDescription& object);
+
+	bool							IsLeaf() const { return m_children.empty(); }
+	bool							ContainsAABB(const BoundingBox2D& bb) const;
+private:
+	void UpdateBoundingBox(const BoundingBox3D& bb);
+private:
+	PartitionNode*					m_parrent;
+	std::vector<PartitionNode*>		m_children;
+
+	std::vector<PlantDescription>	m_objects;
+
+	//limits of the area covered by this partition in world space
+	BoundingBox2D					m_partitionArea;
+	
+	//boundig box of the node used for frustrum culling
+	BoundingBox3D					m_boundingBox;
+};
+
+class QuadTree
+{
+public:
+	QuadTree(glm::vec2 Min, glm::vec2 Max, uint32_t maxLevel,  const std::vector<PlantDescription>& plants);
+	virtual ~QuadTree(){};
+private:
+	void InsertObject(const PlantDescription& object);
+	//void UpdateNodesBoundingBox(); //update the height of the bounding boxes
+private:
+	PartitionNode*				m_root;
+	uint32_t					m_maxLevel;
+};
+
+PartitionNode::PartitionNode(glm::vec2 minLimits, glm::vec2 maxLimits, PartitionNode* parrent)
+	: m_parrent(parrent)
+	, m_partitionArea(BoundingBox2D(minLimits, maxLimits))
+	, m_boundingBox(BoundingBox3D(glm::vec3(minLimits.x, 0.0f, minLimits.y), glm::vec3(maxLimits.x, 0.0f, maxLimits.y)))
+{
+}
+
+void PartitionNode::CreateChildren()
+{
+	TRAP(IsLeaf());
+	m_children.resize(4);
+	glm::vec2 center = (m_partitionArea.Max + m_partitionArea.Min) / 2.0f;
+	m_children[0] = new PartitionNode(m_partitionArea.Min, center, this);
+	m_children[1] = new PartitionNode(glm::vec2(center.x, m_partitionArea.Min.y), glm::vec2(m_partitionArea.Max.x, center.y), this);
+	m_children[2] = new PartitionNode(glm::vec2(m_partitionArea.Min.x, center.y), glm::vec2(center.x, m_partitionArea.Max.y), this);
+	m_children[3] = new PartitionNode(center, m_partitionArea.Max, this);
+}
+
+bool PartitionNode::ContainsAABB(const BoundingBox2D& bb) const
+{
+	//glm::vec2 pos(object.Position.x, object.Position.z);
+	//float halfSize = object.Properties.x / 2.0f; //for the creation of the plan AABB we consider only the width of the plant
+	//glm::vec2 objMin = pos - halfSize;
+	//glm::vec2 objMax = pos + halfSize;
+
+	return m_partitionArea.ContainsPoint(bb.Min) && m_partitionArea.ContainsPoint(bb.Max);
+}
+
+void PartitionNode::AddObject(const PlantDescription& object)
+{
+	float height = object.Position.y;
+	//we have to update the height of the partition bounding box
+	m_boundingBox.Min.y = glm::min(m_boundingBox.Min.y, height);
+	m_boundingBox.Max.y = glm::max(m_boundingBox.Max.y, height);
+	
+	if (m_parrent)
+		m_parrent->UpdateBoundingBox(m_boundingBox);
+
+	m_objects.push_back(object);
+}
+
+void PartitionNode::UpdateBoundingBox(const BoundingBox3D& bb)
+{
+	m_boundingBox.Min.y = glm::min(m_boundingBox.Min.y, bb.Min.y);
+	m_boundingBox.Max.y = glm::max(m_boundingBox.Max.y, bb.Max.y);
+
+	if (m_parrent)
+		m_parrent->UpdateBoundingBox(m_boundingBox);
+}
+
+QuadTree::QuadTree(glm::vec2 Min, glm::vec2 Max, uint32_t maxLevel, const std::vector<PlantDescription>& plants)
+	: m_maxLevel(maxLevel)
+{
+	m_root = new PartitionNode(Min, Max, nullptr);
+
+	for (auto plant : plants)
+		InsertObject(plant);
+
+	CUIManager::GetInstance()->CreateDebugBoundingBox(m_root->GetBoundingBox3D(), glm::vec4(0.0f, 1.0f, 0.0f, 1.0f));
+}
+
+void QuadTree::InsertObject(const PlantDescription& object)
+{
+	glm::vec2 pos(object.Position.x, object.Position.z);
+	float halfSize = object.Properties.x / 2.0f; //for the creation of the plan AABB we consider only the width of the plant
+	glm::vec2 objMin = pos - halfSize;
+	glm::vec2 objMax = pos + halfSize;
+	BoundingBox2D bb(objMin, objMax);
+
+	PartitionNode* currNode = m_root;
+	uint32_t level = 0;
+
+	while (level < m_maxLevel)
+	{
+		if (currNode->IsLeaf())
+			currNode->CreateChildren();
+		
+		bool added = false;
+
+		for (auto child : currNode->GetChildren())
+		{
+			if (child->ContainsAABB(bb))
+			{
+				currNode = child;
+				++level;
+				added = true;
+				break;
+			}
+		}
+
+		if (!added) //that means bb intersects 2 or more children quads
+			break; //from while
+	}
+
+	currNode->AddObject(object);
+}
+
+//void QuadTree::UpdateNodesBoundingBox()
+//{
+//	std::vector<PartitionNode*> stack;
+//
+//	stack.push_back(m_root);
+//	PartitionNode* currNode = nullptr;
+//	while (!stack.empty())
+//	{
+//		currNode = stack.back();
+//
+//		if (currNode->IsLeaf())
+//		{
+//			currNode = currNode->GetParrent();
+//			BoundingBox3D pBB = currNode->GetBoundingBox3D();
+//			for (auto child : currNode->GetChildren())
+//			{
+//				const BoundingBox3D& cBB = child->GetBoundingBox3D();
+//				pBB.Min.y = glm::min(pBB.Min.y, cBB.Min.y);
+//				pBB.Max.y = glm::max(pBB.Max.y, cBB.Max.y);
+//			}
+//
+//			currNode->GetBoundingBox3D(pBB);
+//		}
+//	};
+//}
+
+///////////////////////////////////////////////////////////////////
+//VegetationRenderer
+//////////////////////////////////////////////////////////////////
 
 VegetationRenderer::VegetationRenderer(VkRenderPass renderPass)
 	: CRenderer(renderPass, "VegetationPass")
@@ -78,6 +253,7 @@ VegetationRenderer::VegetationRenderer(VkRenderPass renderPass)
 	, m_angularSpeed(3.0f)
 	, m_windAngleLimits(75.0f, 135.0f)
 	, m_debugText(nullptr)
+	, m_partitionTree(nullptr)
 {
 	InputManager::GetInstance()->MapKeyPressed('3', InputManager::KeyPressedCallback(this, &VegetationRenderer::OnDebugKey));
 	InputManager::GetInstance()->MapMouseButton(InputManager::MouseButtonsCallback(this, &VegetationRenderer::OnDebugWindVelocityChange));
@@ -253,17 +429,22 @@ void VegetationRenderer::GenerateVegetation()
 
 	unsigned int seed = 67834;
 	std::mt19937 generator(seed);
-	std::uniform_int_distribution<uint32_t> texturIndexDistr(0, m_albedoTextures.size() - 1);
+	std::uniform_int_distribution<uint32_t> textureIndexDistr(0, m_albedoTextures.size() - 1);
 	std::uniform_real_distribution<float> bendFactorDistr(0.05f, 0.15f);
 	
 	for (auto p : plantsPosition)
 	{
-		uint32_t index = texturIndexDistr(generator);
+		uint32_t index = textureIndexDistr(generator);
 		float bendFactor = bendFactorDistr(generator);
 		VegetationTemplate* vegTemplate = templates[index];
 
 		m_plants.push_back({ glm::vec4(p, 1.0f), glm::vec4(glm::vec2(vegTemplate->GetSize()), bendFactor, float(index)) });
 	}
+
+	glm::vec3 sceneMin3D = glm::vec3(-CScene::TerrainSize.x / 2.0f, 0.0f, -CScene::TerrainSize.y / 2.0f) + CScene::TerrainTranslate;
+	glm::vec3 sceneMax3D = glm::vec3(CScene::TerrainSize.x / 2.0f, 0.0f, CScene::TerrainSize.y / 2.0f) + CScene::TerrainTranslate;
+
+	m_partitionTree = new QuadTree(glm::vec2(sceneMin3D.x, sceneMin3D.z), glm::vec2(sceneMax3D.x, sceneMax3D.z), 2, m_plants);
 }
 
 void VegetationRenderer::CopyBuffers()

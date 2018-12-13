@@ -84,6 +84,24 @@ private:
 	uint32_t		m_padding;
 };
 
+
+class DebugBoundingBox : public CUIItem
+{
+public:
+	DebugBoundingBox(const BoundingBox3D& bb, const glm::vec4& color);
+	virtual ~DebugBoundingBox(){}
+
+	const BoundingBox3D&	GetBoundingBox() const { return m_boundingBox; }
+	const glm::vec4&		GetColor() const { return m_color; }
+
+protected:
+	void Render(CGraphicPipeline* pipeline) override {} //not used. We render in batch this item
+	void PreRender() override{};
+private:
+	BoundingBox3D		m_boundingBox;
+	glm::vec4			m_color;
+};
+
 class CUIRenderer : public CRenderer
 {
 public:
@@ -104,13 +122,20 @@ private:
     void AddUIText(CUIText* item);
     void RemoveUIText(CUIText* item);
 
+	void AddDebugBoundingBox(DebugBoundingBox* bb);
+	void RemoveDebugBoundingBox(DebugBoundingBox* bb);
+
 	void UpdateGraphicInterface() override;
 
-	VkDescriptorSet AllocTextDescriptorSet();
+	VkDescriptorSet AllocElementDescriptorSet(const DescriptorSetLayout& layout);
+	void CreateBBMesh();
 
     friend class CUIManager;
 private:
-
+	struct PushConstant
+	{
+		glm::mat4 ProjViewMatrix;
+	} m_constants;
 private:
 	CGraphicPipeline				m_vectorElemPipeline;
 	CGraphicPipeline				m_textElemPipeline;
@@ -128,6 +153,16 @@ private:
     CFont2*                         m_usedFont;
 
 	std::vector<CUIText*>			m_uiTexts;
+
+	//debug bounding boxes
+	DescriptorSetLayout				m_bbDescriptorLayout;
+	VkDescriptorSet					m_bbDescriptorSet;
+	CGraphicPipeline				m_debugBBPipeline;
+
+	BufferHandle*					m_debugBBBuffer;
+	Mesh*							m_boundingBoxMesh;
+	std::vector<DebugBoundingBox*>	m_debugBoundingBoxes;
+	uint32_t						m_visibleBb;
 };
 
 class CUIManager : public Singleton<CUIManager>
@@ -136,6 +171,9 @@ class CUIManager : public Singleton<CUIManager>
 public:
     CUIText* CreateTextItem(const std::string& text, glm::uvec2 screenPos);
 	void DestroyTextItem(CUIText* item);
+
+	DebugBoundingBox* CreateDebugBoundingBox(const BoundingBox3D& bb, glm::vec4 color = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+	void DestroyTextItem(DebugBoundingBox* bb);
 
     void SetupRenderer(CUIRenderer* uiRenderer);
 
@@ -153,6 +191,8 @@ private:
     CUIRenderer*    m_uiRenderer;
 
     std::vector<CUIItem*> m_uiItems;
+	std::vector<DebugBoundingBox*>		m_debugBBToAdd;
+	std::vector<DebugBoundingBox*>		m_debugBBToRemove;
 
     enum EDisplayInfo
     {

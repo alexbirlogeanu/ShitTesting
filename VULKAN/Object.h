@@ -65,7 +65,7 @@ public:
         m_needComputeModelMtx = true;
     }
 
-    BoundingBox GetBoundingBox() const
+    BoundingBox3D GetBoundingBox() const
     {
         return GetObjectMesh()->GetBB();
     }

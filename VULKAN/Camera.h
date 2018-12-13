@@ -4,39 +4,10 @@
 #include "glm/gtx/rotate_vector.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtc/constants.hpp"
+#include "Geometry.h"
 
 class KeyInput;
 
-class CFrustrum
-{
-public:
-    enum FrustrumPoints
-    {
-        NTL = 0,
-        NTR,
-        NBR,
-        NBL,
-        FTL,
-        FTR,
-        FBR,
-        FBL,
-        FPCount
-    };
-
-    CFrustrum(float N, float F);
-    virtual ~CFrustrum();
-
-    void Update(glm::vec3 p, glm::vec3 dir, glm::vec3 up, glm::vec3 right, float fov);
-    glm::vec3 GetPoint(unsigned int p) const { return m_points[p]; }
-private:
-    void Construct(glm::vec3 p, glm::vec3 dir, glm::vec3 up, glm::vec3 right, float fov);
-    void GetPointsFromPlane(glm::vec3 start, glm::vec3 dir, glm::vec3 right, glm::vec3 up, float dist, float fov, glm::vec3 poitns[4]);
-private:
-    glm::vec3       m_points[FPCount];
-
-    float           m_near;
-    float           m_far;
-};
 
 class CCamera
 {

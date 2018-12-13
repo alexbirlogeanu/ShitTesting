@@ -11,6 +11,13 @@ class Mesh;
 class KeyInput;
 class MouseInput;
 class CUIText;
+class QuadTree;
+
+struct PlantDescription
+{
+	glm::vec4 Position; //world space
+	glm::vec4 Properties; //x - width, y - height of the billboard, z - bend factor used in wind simulation, comes from "simulation", texture index
+};
 
 class VegetationRenderer : public CRenderer
 {
@@ -39,11 +46,6 @@ private:
 	bool OnDebugKey(const KeyInput& key);
 	bool OnDebugWindVelocityChange(const MouseInput& mouse);
 private:
-	struct PlantDescription
-	{
-		glm::vec4 Position; //world space
-		glm::vec4 Properties; //x - width, y - height of the billboard, z - bend factor used in wind simulation, comes from "simulation", texture index
-	};
 
 	struct GlobalParams
 	{
@@ -65,6 +67,7 @@ private:
 	std::vector<CTexture*>			m_albedoTextures;
 
 	Mesh*							m_quad;
+	QuadTree*						m_partitionTree;
 
 	const uint32_t					m_maxTextures;
 	bool							m_isReady;

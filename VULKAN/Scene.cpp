@@ -7,7 +7,7 @@
 //CScene
 //////////////////////////////////////////////////////////////////////////
 std::unordered_set<Object*> CScene::ms_sceneObjects; //i got the objects in 2 places: here and in ObjectFactory. BUt fuck it. not important
-BoundingBox CScene::ms_sceneBoundingBox;
+BoundingBox3D CScene::ms_sceneBoundingBox;
 const glm::uvec2 CScene::TerrainGridSize (64, 64);
 const glm::vec2 CScene::TerrainSize (20.0f, 20.0f);
 const glm::vec3 CScene::TerrainTranslate = glm::vec3(0.0f, -5.0f, -3.0f); //lel
@@ -31,7 +31,7 @@ void CScene::UpdateBoundingBox()
 
 	for (auto o = ms_sceneObjects.begin(); o != ms_sceneObjects.end(); ++o)
 	{
-		BoundingBox bb = (*o)->GetBoundingBox();
+		BoundingBox3D bb = (*o)->GetBoundingBox();
 		std::vector<glm::vec3> bbPoints;
 		bb.Transform((*o)->GetModelMatrix(), bbPoints);
 		for (unsigned int i = 0; i < bbPoints.size(); ++i)
