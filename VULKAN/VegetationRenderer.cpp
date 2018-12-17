@@ -79,6 +79,7 @@ public:
 	std::vector<PartitionNode*>&	GetChildren() { return m_children; }
 	
 	const BoundingBox3D&			GetBoundingBox3D() const { return m_boundingBox; }
+	const BoundingBox2D&			GetPartitionArea() const { return m_partitionArea; }
 
 	void							CreateChildren();
 	void							AddObject(const PlantDescription& object);
@@ -97,7 +98,7 @@ private:
 
 	std::vector<PlantDescription>	m_objects;
 
-	//limits of the area covered by this partition in world space
+	//limits of the area covered by this partition in world space.  Bounding box could be used to replace this value alltogether but for clarity i will keep it for now
 	BoundingBox2D					m_partitionArea;
 	
 	//boundig box of the node used for frustrum culling
@@ -115,7 +116,7 @@ public:
 	QuadTree(glm::vec2 Min, glm::vec2 Max, uint32_t maxLevel,  const std::vector<PlantDescription>& plants);
 	virtual ~QuadTree(){};
 
-	void FrustrumCulling(const CFrustrum& frustrum, std::vector<PlantDescription>& outResult);
+	void FrustumCulling(const CFrustum& frustum, std::vector<PlantDescription>& outResult);
 
 	//debug
 	void ShowDebugBoundingBoxes();
@@ -232,7 +233,8 @@ void QuadTree::InsertObject(const PlantDescription& object)
 			currNode->CreateChildren();
 		
 		bool added = false;
-
+		PartitionNode* closestChild = nullptr;
+		float minDist = std::numeric_limits<float>::max();
 		for (auto child : currNode->GetChildren())
 		{
 			if (child->ContainsAABB(bb))
@@ -242,23 +244,38 @@ void QuadTree::InsertObject(const PlantDescription& object)
 				added = true;
 				break;
 			}
+			else
+			{
+				glm::vec2 childCenter = child->GetPartitionArea().GetCenter();
+				float dist = glm::length(childCenter - bb.GetCenter());
+				if (dist < minDist)
+				{
+					minDist = dist;
+					closestChild = child;
+				}
+			}
 		}
 
-		if (!added) //that means bb intersects 2 or more children quads
-			break; //from while
+		if (!added) //that means bb intersects 2 or more children quads. So we choose the closest one
+		{
+			TRAP(closestChild);
+			currNode = closestChild;
+			++level;
+		}
 	}
 
 	currNode->AddObject(object);
 }
 
-void QuadTree::FrustrumCulling(const CFrustrum& frustrum, std::vector<PlantDescription>& outResult)
+void QuadTree::FrustumCulling(const CFrustum& frustum, std::vector<PlantDescription>& outResult)
 {
 	std::vector<PartitionNode*> trasversalStack;
 	trasversalStack.push_back(m_root);
 
 	auto gatherObjects = [&outResult](PartitionNode* node)
 	{
-		outResult.insert(outResult.end(), node->GetObjects().begin(), node->GetObjects().end());
+		if (node->IsLeaf())
+			outResult.insert(outResult.end(), node->GetObjects().begin(), node->GetObjects().end());
 	};
 
 	while (!trasversalStack.empty())
@@ -266,7 +283,7 @@ void QuadTree::FrustrumCulling(const CFrustrum& frustrum, std::vector<PlantDescr
 		PartitionNode* currNode = trasversalStack.back();
 		trasversalStack.pop_back();
 
-		CollisionResult result = frustrum.Collision(currNode->GetBoundingBox3D());
+		CollisionResult result = frustum.Collision(currNode->GetBoundingBox3D());
 
 		if (result == CollisionResult::Intersect)
 		{
@@ -422,7 +439,7 @@ void VegetationRenderer::PreRender()
 	std::vector<PlantDescription> cullingResult;
 	cullingResult.reserve(100);
 
-	m_partitionTree->FrustrumCulling(ms_camera.GetFrustrum(), cullingResult);
+	m_partitionTree->FrustumCulling(ms_camera.GetFrustum(), cullingResult);
 
 	void* shaderParams = m_paramsBuffer->GetPtr<void*>();
 	memcpy(shaderParams, cullingResult.data(), sizeof(PlantDescription) * cullingResult.size());
@@ -619,7 +636,7 @@ bool VegetationRenderer::OnDebugKey(const KeyInput& key)
 			TRAP(!m_debugText);
 			m_debugText = CUIManager::GetInstance()->CreateTextItem("Vegetation: Wheel (WindStrength) + Shift (Speed) / Ctr(AngleLimits). Press 3 to close", glm::uvec2(10, 50));
 			m_countVisiblePlantsText = CUIManager::GetInstance()->CreateTextItem("Visible plants: 12345 FC: 30 ms", glm::uvec2(10, 70));
-			m_partitionTree->ShowDebugBoundingBoxes();
+			//m_partitionTree->ShowDebugBoundingBoxes();
 		}
 		else
 		{
@@ -627,7 +644,7 @@ bool VegetationRenderer::OnDebugKey(const KeyInput& key)
 			CUIManager::GetInstance()->DestroyTextItem(m_debugText);
 			CUIManager::GetInstance()->DestroyTextItem(m_countVisiblePlantsText);
 
-			m_partitionTree->HideDebugBoundingBoxes();
+			//m_partitionTree->HideDebugBoundingBoxes();
 			m_debugText = nullptr;
 			m_countVisiblePlantsText = nullptr;
 

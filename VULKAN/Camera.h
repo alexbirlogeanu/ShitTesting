@@ -27,7 +27,7 @@ public:
     //Getters
     const glm::vec3&    GetPos() const {return m_position; }
     const glm::mat4&    GetViewMatrix() { return m_viewMatrix; }
-    const CFrustrum&    GetFrustrum() const { return m_frustrum; }
+    const CFrustum&		GetFrustum() const { return m_frustrum; }
     glm::vec3           GetFrontVector() const { return m_front; }
     glm::vec3           GetUpVector() const { return m_up; }
     glm::vec3           GetRightVector() const { return m_right; }
@@ -60,5 +60,5 @@ private:
     float m_near;
     float m_fov; //radians
 
-    CFrustrum  m_frustrum;
+    CFrustum  m_frustrum;
 };

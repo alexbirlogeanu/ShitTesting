@@ -14,25 +14,25 @@ namespace Geometry
 	}
 };
 //////////////////////////////////////////////////////////////////////////////////////
-//CFrustrum
+//CFrustum
 //////////////////////////////////////////////////////////////////////////////////////
 
-CFrustrum::CFrustrum(float N, float F)
+CFrustum::CFrustum(float N, float F)
 	: m_near(N)
 	, m_far(F)
 {
 }
 
-CFrustrum::~CFrustrum()
+CFrustum::~CFrustum()
 {
 }
 
-void CFrustrum::Update(glm::vec3 eye, glm::vec3 dir, glm::vec3 up, glm::vec3 right, float fov)
+void CFrustum::Update(glm::vec3 eye, glm::vec3 dir, glm::vec3 up, glm::vec3 right, float fov)
 {
 	Construct(eye, dir, up, right, fov);
 }
 
-CollisionResult CFrustrum::Collision(const BoundingBox3D& bb) const
+CollisionResult CFrustum::Collision(const BoundingBox3D& bb) const
 {
 	CollisionResult result = CollisionResult::Inside;
 
@@ -78,7 +78,7 @@ CollisionResult CFrustrum::Collision(const BoundingBox3D& bb) const
 	return result;
 }
 
-void CFrustrum::Construct(glm::vec3 eye, glm::vec3 dir, glm::vec3 up, glm::vec3 right, float fov)
+void CFrustum::Construct(glm::vec3 eye, glm::vec3 dir, glm::vec3 up, glm::vec3 right, float fov)
 {
 	glm::vec3 nearPoints[4];
 	glm::vec3 farPoints[4];
@@ -92,7 +92,7 @@ void CFrustrum::Construct(glm::vec3 eye, glm::vec3 dir, glm::vec3 up, glm::vec3 
 	ConstructPlanes(dir);
 }
 
-void CFrustrum::GetPointsFromPlane(glm::vec3 start, glm::vec3 dir, glm::vec3 right, glm::vec3 up, float dist, float fov, glm::vec3 points[4])
+void CFrustum::GetPointsFromPlane(glm::vec3 start, glm::vec3 dir, glm::vec3 right, glm::vec3 up, float dist, float fov, glm::vec3 points[4])
 {
 	const float aspectRatio = 16.0f / 9.0f;
 	glm::vec3 center = start + dir * dist;
@@ -105,7 +105,7 @@ void CFrustrum::GetPointsFromPlane(glm::vec3 start, glm::vec3 dir, glm::vec3 rig
 	points[3] = center - up * halfHeight - right * halfWidth; //bot left
 }
 
-void CFrustrum::ConstructPlanes(const glm::vec3& viewDir)
+void CFrustum::ConstructPlanes(const glm::vec3& viewDir)
 {
 	m_planes[FrustrumPlane::Near] = Plane(glm::normalize(viewDir), m_points[FrustrumPoints::NTL]);
 	m_planes[FrustrumPlane::Far] = Plane(glm::normalize(-viewDir), m_points[FrustrumPoints::FTL]);

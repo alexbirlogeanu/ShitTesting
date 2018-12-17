@@ -70,17 +70,17 @@ void ShadowMapRenderer::ComputeCascadeProjMatrix(glm::mat4& proj, const glm::mat
 
 	float splitFar = alpha * cameraNear * glm::pow(cameraFar / cameraNear, splitIndex / splitNumbers) + (1.0f - alpha) * (cameraNear + (splitIndex / splitNumbers) * (cameraFar - cameraNear));
 
-	CFrustrum frustrum(cameraNear, splitFar);
-	frustrum.Update(ms_camera.GetPos(), ms_camera.GetFrontVector(), ms_camera.GetUpVector(), ms_camera.GetRightVector(), ms_camera.GetFOV()); //in worldspace
+	CFrustum frustum(cameraNear, splitFar);
+	frustum.Update(ms_camera.GetPos(), ms_camera.GetFrontVector(), ms_camera.GetUpVector(), ms_camera.GetRightVector(), ms_camera.GetFOV()); //in worldspace
 
 	proj = glm::ortho(-25.0f, 25.0f, -15.0f, 15.0f, cameraNear, splitFar);
 	glm::mat4 PV = proj * view;
 	glm::vec3 minLimits = glm::vec3(std::numeric_limits<float>::max());
 	glm::vec3 maxLimits = glm::vec3(std::numeric_limits<float>::min());
 
-	for (unsigned int i = 0; i < CFrustrum::FPCount; ++i)
+	for (unsigned int i = 0; i < CFrustum::FPCount; ++i)
 	{
-		glm::vec4 lightPos = PV * glm::vec4(frustrum.GetPoint(i), 1.0f);
+		glm::vec4 lightPos = PV * glm::vec4(frustum.GetPoint(i), 1.0f);
 		minLimits = glm::min(minLimits, glm::vec3(lightPos));
 		maxLimits = glm::max(maxLimits, glm::vec3(lightPos));
 	}

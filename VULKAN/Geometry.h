@@ -25,6 +25,11 @@ struct BoundingBox2D
 	{
 		return Min.x <= point.x && Min.y <= point.y && point.x <= Max.x && point.y <= Max.y;
 	}
+
+	glm::vec2 GetCenter() const
+	{
+		return (Max + Min) / 2.0f;
+	}
 };
 
 struct BoundingBox3D
@@ -82,7 +87,7 @@ struct Plane
 	}
 };
 
-class CFrustrum
+class CFrustum
 {
 public:
 	enum FrustrumPoints
@@ -109,8 +114,8 @@ public:
 		PLCount
 	};
 
-	CFrustrum(float N, float F);
-	virtual ~CFrustrum();
+	CFrustum(float N, float F);
+	virtual ~CFrustum();
 
 	void Update(glm::vec3 p, glm::vec3 dir, glm::vec3 up, glm::vec3 right, float fov);
 	glm::vec3 GetPoint(unsigned int p) const { return m_points[p]; }
