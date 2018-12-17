@@ -173,7 +173,7 @@ public:
 	void DestroyTextItem(CUIText* item);
 
 	DebugBoundingBox* CreateDebugBoundingBox(const BoundingBox3D& bb, glm::vec4 color = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
-	void DestroyTextItem(DebugBoundingBox* bb);
+	void DestroyDebugBoundingBox(DebugBoundingBox* bb);
 
     void SetupRenderer(CUIRenderer* uiRenderer);
 

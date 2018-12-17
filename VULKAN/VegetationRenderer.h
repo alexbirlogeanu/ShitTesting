@@ -37,6 +37,7 @@ private:
 
 	void GenerateVegetation();
 	void CreateBuffers();
+	void CreateBuffers2();
 
 	void UpdateTextures();
 	void CopyBuffers();
@@ -45,6 +46,8 @@ private:
 
 	bool OnDebugKey(const KeyInput& key);
 	bool OnDebugWindVelocityChange(const MouseInput& mouse);
+
+	void SetFrustrumDebugText(uint32_t plants, uint64_t dtMs);
 private:
 
 	struct GlobalParams
@@ -65,6 +68,7 @@ private:
 	std::vector<PlantDescription>	m_plants;
 	glm::vec4						m_pushConstant;
 	std::vector<CTexture*>			m_albedoTextures;
+	uint32_t						m_visibleInstances;
 
 	Mesh*							m_quad;
 	QuadTree*						m_partitionTree;
@@ -80,4 +84,5 @@ private:
 	//debug
 	bool							m_isDebugMode;
 	CUIText*						m_debugText;
+	CUIText*						m_countVisiblePlantsText;
 };

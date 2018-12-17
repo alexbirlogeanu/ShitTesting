@@ -5,6 +5,7 @@
 #include "glm/glm.hpp"
 #include "Texture.h"
 #include "Scene.h"
+#include "Geometry.h"
 
 #include "Input.h"
 
@@ -201,15 +202,6 @@ void TerrainRenderer::CreateGrid()
 		}
 	}
 	const uint32_t xVerts = xDivision + 1;
-	auto computeNormal = [](const glm::vec3& center, const glm::vec3& p1, const glm::vec3& p2)
-	{
-		glm::vec3 e1 = p2 - center;
-		glm::vec3 e2 = p1 - center;
-
-		glm:: vec3 normal = glm::vec3(e1.y * e2.z, e1.z * e2.x, e1.x * e2.y) - glm::vec3(e1.z * e2.y, e1.x * e2.z, e1.y * e2.x);
-
-		return glm::normalize(normal);
-	};
 
 	//now we compute normals
 	/*To get the normal of a vertex, first have to compute the normal of the adjancent triangles
@@ -235,10 +227,10 @@ void TerrainRenderer::CreateGrid()
 				const SVertex& P2 = vertices[(y + 1) * xVerts + x];
 				const SVertex& P3 = vertices[y * xVerts + x - 1];
 
-				P.normal = computeNormal(P.pos, P1.pos, P0.pos);
-				P.normal += computeNormal(P.pos, P2.pos, P1.pos);
-				P.normal += computeNormal(P.pos, P3.pos, P2.pos);
-				P.normal += computeNormal(P.pos, P0.pos, P3.pos);
+				P.normal = Geometry::ComputeNormal(P.pos, P1.pos, P0.pos);
+				P.normal += Geometry::ComputeNormal(P.pos, P2.pos, P1.pos);
+				P.normal += Geometry::ComputeNormal(P.pos, P3.pos, P2.pos);
+				P.normal += Geometry::ComputeNormal(P.pos, P0.pos, P3.pos);
 
 				P.normal = glm::normalize(P.normal / 4.0f);
 			}
@@ -252,8 +244,8 @@ void TerrainRenderer::CreateGrid()
 			const SVertex& P2 = vertices[x];
 			const SVertex& P3 = vertices[x - 1];
 
-			P.normal = computeNormal(P.pos, P2.pos, P1.pos);
-			P.normal += computeNormal(P.pos, P3.pos, P2.pos);
+			P.normal = Geometry::ComputeNormal(P.pos, P2.pos, P1.pos);
+			P.normal += Geometry::ComputeNormal(P.pos, P3.pos, P2.pos);
 
 			P.normal = glm::normalize(P.normal / 2.0f);
 		}
@@ -266,8 +258,8 @@ void TerrainRenderer::CreateGrid()
 			const SVertex& P1 = vertices[yDivision * xVerts + x + 1];
 			const SVertex& P3 = vertices[yDivision * xVerts + x - 1];
 
-			P.normal = computeNormal(P.pos, P1.pos, P0.pos);
-			P.normal += computeNormal(P.pos, P0.pos, P3.pos);
+			P.normal = Geometry::ComputeNormal(P.pos, P1.pos, P0.pos);
+			P.normal += Geometry::ComputeNormal(P.pos, P0.pos, P3.pos);
 
 			P.normal = glm::normalize(P.normal / 2.0f);
 		}
@@ -279,8 +271,8 @@ void TerrainRenderer::CreateGrid()
 			const SVertex& P1 = vertices[y * xVerts + 1];
 			const SVertex& P2 = vertices[(y + 1) * xVerts ];
 
-			P.normal = computeNormal(P.pos, P1.pos, P0.pos);
-			P.normal += computeNormal(P.pos, P2.pos, P1.pos);
+			P.normal = Geometry::ComputeNormal(P.pos, P1.pos, P0.pos);
+			P.normal += Geometry::ComputeNormal(P.pos, P2.pos, P1.pos);
 
 			P.normal = glm::normalize(P.normal / 2.0f);
 		}
@@ -293,8 +285,8 @@ void TerrainRenderer::CreateGrid()
 			const SVertex& P2 = vertices[(y + 1) * xVerts + xDivision];
 			const SVertex& P3 = vertices[y * xVerts + xDivision - 1];
 
-			P.normal = computeNormal(P.pos, P3.pos, P2.pos);
-			P.normal += computeNormal(P.pos, P0.pos, P3.pos);
+			P.normal = Geometry::ComputeNormal(P.pos, P3.pos, P2.pos);
+			P.normal += Geometry::ComputeNormal(P.pos, P0.pos, P3.pos);
 
 			P.normal = glm::normalize(P.normal / 2.0f);
 

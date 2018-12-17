@@ -4,6 +4,13 @@
 
 #include <vector>
 
+enum class CollisionResult
+{
+	Outside,
+	Intersect,
+	Inside
+};
+
 struct BoundingBox2D
 {
 	glm::vec2 Min;
@@ -54,6 +61,27 @@ struct BoundingBox3D
 	}
 };
 
+struct Plane
+{
+	glm::vec3 Normal;
+	glm::vec3 Point;
+
+	Plane()
+		: Normal(0.0f, 1.0f, 0.0f)
+		, Point(0.0f, 0.0f, 0.0f)
+	{}
+
+	Plane(const glm::vec3& normal, const glm::vec3& point)
+		: Normal(normal)
+		, Point(point)
+	{}
+
+	float GetDistance(const glm::vec3& point) const
+	{
+		return glm::dot(Normal, point) - glm::dot(Normal, Point);
+	}
+};
+
 class CFrustrum
 {
 public:
@@ -70,17 +98,38 @@ public:
 		FPCount
 	};
 
+	enum FrustrumPlane : uint32_t
+	{
+		Near = 0,
+		Far,
+		Right,
+		Left,
+		Top,
+		Bottom,
+		PLCount
+	};
+
 	CFrustrum(float N, float F);
 	virtual ~CFrustrum();
 
 	void Update(glm::vec3 p, glm::vec3 dir, glm::vec3 up, glm::vec3 right, float fov);
 	glm::vec3 GetPoint(unsigned int p) const { return m_points[p]; }
+
+	CollisionResult Collision(const BoundingBox3D& bb) const;
 private:
 	void Construct(glm::vec3 p, glm::vec3 dir, glm::vec3 up, glm::vec3 right, float fov);
 	void GetPointsFromPlane(glm::vec3 start, glm::vec3 dir, glm::vec3 right, glm::vec3 up, float dist, float fov, glm::vec3 poitns[4]);
+	void ConstructPlanes(const glm::vec3& viewDir);
 private:
 	glm::vec3       m_points[FPCount];
+	Plane			m_planes[PLCount];
 
 	float           m_near;
 	float           m_far;
+};
+
+
+namespace Geometry
+{
+	glm::vec3 ComputeNormal(const glm::vec3& center, const glm::vec3& p1, const glm::vec3& p2);
 };

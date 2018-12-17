@@ -12,6 +12,7 @@
 #include "Geometry.h"
 
 #include <random>
+#include <functional>
 
 class VegetationTemplate : public SeriableImpl<VegetationTemplate>
 {
@@ -73,17 +74,21 @@ public:
 	PartitionNode(glm::vec2 minLimits, glm::vec2 maxLimits, PartitionNode* parrent);
 	virtual ~PartitionNode() {};
 
+	const std::vector<PlantDescription>& GetObjects() const { return m_objects; }
 	PartitionNode*					GetParrent() { return m_parrent; }
 	std::vector<PartitionNode*>&	GetChildren() { return m_children; }
+	
 	const BoundingBox3D&			GetBoundingBox3D() const { return m_boundingBox; }
-
-
 
 	void							CreateChildren();
 	void							AddObject(const PlantDescription& object);
 
 	bool							IsLeaf() const { return m_children.empty(); }
 	bool							ContainsAABB(const BoundingBox2D& bb) const;
+
+	//debug
+	void ShowDebugBoundingBox();
+	void HideDebugBoundingBox();
 private:
 	void UpdateBoundingBox(const BoundingBox3D& bb);
 private:
@@ -97,6 +102,11 @@ private:
 	
 	//boundig box of the node used for frustrum culling
 	BoundingBox3D					m_boundingBox;
+
+	//debug
+	DebugBoundingBox*				m_debugBB;
+	uint32_t						m_treeLevel;
+
 };
 
 class QuadTree
@@ -104,9 +114,18 @@ class QuadTree
 public:
 	QuadTree(glm::vec2 Min, glm::vec2 Max, uint32_t maxLevel,  const std::vector<PlantDescription>& plants);
 	virtual ~QuadTree(){};
+
+	void FrustrumCulling(const CFrustrum& frustrum, std::vector<PlantDescription>& outResult);
+
+	//debug
+	void ShowDebugBoundingBoxes();
+	void HideDebugBoundingBoxes();
 private:
 	void InsertObject(const PlantDescription& object);
 	//void UpdateNodesBoundingBox(); //update the height of the bounding boxes
+
+	void Traverse(PartitionNode* startNode, std::function<void(PartitionNode* currNode)> process);
+
 private:
 	PartitionNode*				m_root;
 	uint32_t					m_maxLevel;
@@ -116,7 +135,9 @@ PartitionNode::PartitionNode(glm::vec2 minLimits, glm::vec2 maxLimits, Partition
 	: m_parrent(parrent)
 	, m_partitionArea(BoundingBox2D(minLimits, maxLimits))
 	, m_boundingBox(BoundingBox3D(glm::vec3(minLimits.x, 0.0f, minLimits.y), glm::vec3(maxLimits.x, 0.0f, maxLimits.y)))
+	, m_debugBB(nullptr)
 {
+	m_treeLevel = (m_parrent) ? ++(m_parrent->m_treeLevel) : 0;
 }
 
 void PartitionNode::CreateChildren()
@@ -142,7 +163,7 @@ bool PartitionNode::ContainsAABB(const BoundingBox2D& bb) const
 
 void PartitionNode::AddObject(const PlantDescription& object)
 {
-	float height = object.Position.y;
+	float height = object.Position.y + object.Properties.y;
 	//we have to update the height of the partition bounding box
 	m_boundingBox.Min.y = glm::min(m_boundingBox.Min.y, height);
 	m_boundingBox.Max.y = glm::max(m_boundingBox.Max.y, height);
@@ -162,6 +183,28 @@ void PartitionNode::UpdateBoundingBox(const BoundingBox3D& bb)
 		m_parrent->UpdateBoundingBox(m_boundingBox);
 }
 
+void PartitionNode::ShowDebugBoundingBox()
+{
+	TRAP(!m_debugBB);
+
+	glm::vec4 colors[] = {	glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
+							glm::vec4(0.0f, 1.0f, 0.0f, 1.0f),
+							glm::vec4(0.0f, 0.0f, 1.0f, 1.0f),
+							glm::vec4(1.0f, 1.0f, 0.0f, 1.0f)};
+
+	uint32_t n = sizeof(colors) / sizeof(uint32_t);
+	uint32_t i = m_treeLevel % n;
+	m_debugBB = CUIManager::GetInstance()->CreateDebugBoundingBox(m_boundingBox, colors[i]);
+
+}
+
+void PartitionNode::HideDebugBoundingBox()
+{
+	TRAP(m_debugBB);
+	CUIManager::GetInstance()->DestroyDebugBoundingBox(m_debugBB);
+	m_debugBB = nullptr;
+}
+
 QuadTree::QuadTree(glm::vec2 Min, glm::vec2 Max, uint32_t maxLevel, const std::vector<PlantDescription>& plants)
 	: m_maxLevel(maxLevel)
 {
@@ -170,7 +213,6 @@ QuadTree::QuadTree(glm::vec2 Min, glm::vec2 Max, uint32_t maxLevel, const std::v
 	for (auto plant : plants)
 		InsertObject(plant);
 
-	CUIManager::GetInstance()->CreateDebugBoundingBox(m_root->GetBoundingBox3D(), glm::vec4(0.0f, 1.0f, 0.0f, 1.0f));
 }
 
 void QuadTree::InsertObject(const PlantDescription& object)
@@ -209,31 +251,71 @@ void QuadTree::InsertObject(const PlantDescription& object)
 	currNode->AddObject(object);
 }
 
-//void QuadTree::UpdateNodesBoundingBox()
-//{
-//	std::vector<PartitionNode*> stack;
-//
-//	stack.push_back(m_root);
-//	PartitionNode* currNode = nullptr;
-//	while (!stack.empty())
-//	{
-//		currNode = stack.back();
-//
-//		if (currNode->IsLeaf())
-//		{
-//			currNode = currNode->GetParrent();
-//			BoundingBox3D pBB = currNode->GetBoundingBox3D();
-//			for (auto child : currNode->GetChildren())
-//			{
-//				const BoundingBox3D& cBB = child->GetBoundingBox3D();
-//				pBB.Min.y = glm::min(pBB.Min.y, cBB.Min.y);
-//				pBB.Max.y = glm::max(pBB.Max.y, cBB.Max.y);
-//			}
-//
-//			currNode->GetBoundingBox3D(pBB);
-//		}
-//	};
-//}
+void QuadTree::FrustrumCulling(const CFrustrum& frustrum, std::vector<PlantDescription>& outResult)
+{
+	std::vector<PartitionNode*> trasversalStack;
+	trasversalStack.push_back(m_root);
+
+	auto gatherObjects = [&outResult](PartitionNode* node)
+	{
+		outResult.insert(outResult.end(), node->GetObjects().begin(), node->GetObjects().end());
+	};
+
+	while (!trasversalStack.empty())
+	{
+		PartitionNode* currNode = trasversalStack.back();
+		trasversalStack.pop_back();
+
+		CollisionResult result = frustrum.Collision(currNode->GetBoundingBox3D());
+
+		if (result == CollisionResult::Intersect)
+		{
+			gatherObjects(currNode);
+
+			for (auto child : currNode->GetChildren())
+				trasversalStack.push_back(child);
+		}
+		else if (result == CollisionResult::Inside)
+		{
+			Traverse(currNode, gatherObjects); //gather all the children of the node but dont test with the frustrum. The bb is inside the frustrum so all the children bb is inside
+		}
+		//if outside do nothing. children are not visible too
+	}
+}
+
+void QuadTree::ShowDebugBoundingBoxes()
+{
+	Traverse(m_root, [](PartitionNode* currNode)
+	{
+		currNode->ShowDebugBoundingBox();
+	});
+}
+
+void QuadTree::HideDebugBoundingBoxes()
+{
+	Traverse(m_root, [](PartitionNode* currNode)
+	{
+		currNode->HideDebugBoundingBox();
+	});
+}
+
+void QuadTree::Traverse(PartitionNode* startNode, std::function<void(PartitionNode* currNode)> process)
+{
+	std::vector<PartitionNode*> transversalStack;
+	transversalStack.push_back(startNode);
+
+	while (!transversalStack.empty())
+	{
+		PartitionNode* currNode = transversalStack.back();
+		transversalStack.pop_back();
+
+		process(currNode);
+
+		for (auto child : currNode->GetChildren())
+			transversalStack.push_back(child);
+	}
+}
+
 
 ///////////////////////////////////////////////////////////////////
 //VegetationRenderer
@@ -254,6 +336,7 @@ VegetationRenderer::VegetationRenderer(VkRenderPass renderPass)
 	, m_windAngleLimits(75.0f, 135.0f)
 	, m_debugText(nullptr)
 	, m_partitionTree(nullptr)
+	, m_visibleInstances(0)
 {
 	InputManager::GetInstance()->MapKeyPressed('3', InputManager::KeyPressedCallback(this, &VegetationRenderer::OnDebugKey));
 	InputManager::GetInstance()->MapMouseButton(InputManager::MouseButtonsCallback(this, &VegetationRenderer::OnDebugWindVelocityChange));
@@ -270,7 +353,8 @@ void VegetationRenderer::Init()
 	
 	GenerateVegetation();
 	AllocDescriptorSets(m_descriptorPool, m_renderDescSetLayout.Get(), &m_renderDescSet);
-	CreateBuffers();
+	//CreateBuffers();
+	CreateBuffers2();
 
 	//m_quad = new Mesh("obj\\veg_plane.mb");
 	m_quad = CreateFullscreenQuad();
@@ -295,12 +379,12 @@ void VegetationRenderer::Init()
 
 void VegetationRenderer::Render()
 {
-	if (!m_isReady)
-	{
-		CopyBuffers();
-		m_isReady = true; //kinda iffy. We know that the data will be on the gpu next frame
-		return;
-	}
+	//if (!m_isReady)
+	//{
+	//	CopyBuffers();
+	//	m_isReady = true; //kinda iffy. We know that the data will be on the gpu next frame
+	//	return;
+	//}
 
 	if (m_isReady && m_staggingBuffer)
 	{
@@ -316,7 +400,7 @@ void VegetationRenderer::Render()
 	vk::CmdBindDescriptorSets(cmdBuff, m_renderPipeline.GetBindPoint(), m_renderPipeline.GetLayout(), 0, 1, &m_renderDescSet, 0, nullptr);
 	vk::CmdPushConstants(cmdBuff, m_renderPipeline.GetLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GlobalParams), &m_globals);
 
-	m_quad->Render(-1, (uint32_t)m_plants.size());
+	m_quad->Render(-1, (uint32_t)m_visibleInstances);
 
 	EndRenderPass();
 }
@@ -333,13 +417,26 @@ void VegetationRenderer::PreRender()
 	m_globals.ProjViewMatrix = proj * ms_camera.GetViewMatrix();
 	m_globals.CameraPosition = glm::vec4(ms_camera.GetPos(), 1.0f);
 	m_globals.LightDirection = glm::vec4(directionalLight.GetDirection());
+
+	ULONG64 start = GetTickCount64();
+	std::vector<PlantDescription> cullingResult;
+	cullingResult.reserve(100);
+
+	m_partitionTree->FrustrumCulling(ms_camera.GetFrustrum(), cullingResult);
+
+	void* shaderParams = m_paramsBuffer->GetPtr<void*>();
+	memcpy(shaderParams, cullingResult.data(), sizeof(PlantDescription) * cullingResult.size());
+	m_visibleInstances = uint32_t(cullingResult.size());
+
+	ULONG64 end = GetTickCount64();
+	SetFrustrumDebugText(uint32_t(cullingResult.size()), end - start);
+
 }
 
 void VegetationRenderer::UpdateTextures()
 {
 	std::vector<VkWriteDescriptorSet> wDesc;
 	std::vector<VkDescriptorImageInfo> colorInfos;
-	std::vector<VkDescriptorImageInfo> normalInfos;
 
 	auto fillTextures = [&](const std::vector<CTexture*>& textures, uint32_t bindingIndex, std::vector<VkDescriptorImageInfo>& imageInfos){
 
@@ -384,6 +481,8 @@ void VegetationRenderer::UpdateGraphicInterface()
 	wDesc.push_back(InitUpdateDescriptor(m_renderDescSet, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &bufferInfo));
 
 	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
+
+	UpdateTextures();
 }
 
 void VegetationRenderer::GenerateVegetation()
@@ -444,7 +543,8 @@ void VegetationRenderer::GenerateVegetation()
 	glm::vec3 sceneMin3D = glm::vec3(-CScene::TerrainSize.x / 2.0f, 0.0f, -CScene::TerrainSize.y / 2.0f) + CScene::TerrainTranslate;
 	glm::vec3 sceneMax3D = glm::vec3(CScene::TerrainSize.x / 2.0f, 0.0f, CScene::TerrainSize.y / 2.0f) + CScene::TerrainTranslate;
 
-	m_partitionTree = new QuadTree(glm::vec2(sceneMin3D.x, sceneMin3D.z), glm::vec2(sceneMax3D.x, sceneMax3D.z), 2, m_plants);
+	m_partitionTree = new QuadTree(glm::vec2(sceneMin3D.x, sceneMin3D.z), glm::vec2(sceneMax3D.x, sceneMax3D.z), 3, m_plants);
+
 }
 
 void VegetationRenderer::CopyBuffers()
@@ -485,6 +585,19 @@ void VegetationRenderer::CreateBuffers()
 
 }
 
+void VegetationRenderer::CreateBuffers2()
+{
+	TRAP(!m_plants.empty() && "Heeey maybe put some plants you dumb fuck");
+
+	if (m_plants.empty())
+		return;
+
+	VkDeviceSize totalSize = m_plants.size() * sizeof(PlantDescription);
+	m_paramsBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, totalSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
+}
+
+
 void VegetationRenderer::WindVariation()
 {
 	float as = glm::sin(m_elapsedTime * m_angularSpeed) + glm::sin(2.1f + m_elapsedTime * m_angularSpeed / 2.0f) + glm::sin(0.5f + m_elapsedTime * 2.0f * m_angularSpeed); //[-3, 3]
@@ -505,12 +618,18 @@ bool VegetationRenderer::OnDebugKey(const KeyInput& key)
 		{
 			TRAP(!m_debugText);
 			m_debugText = CUIManager::GetInstance()->CreateTextItem("Vegetation: Wheel (WindStrength) + Shift (Speed) / Ctr(AngleLimits). Press 3 to close", glm::uvec2(10, 50));
+			m_countVisiblePlantsText = CUIManager::GetInstance()->CreateTextItem("Visible plants: 12345 FC: 30 ms", glm::uvec2(10, 70));
+			m_partitionTree->ShowDebugBoundingBoxes();
 		}
 		else
 		{
 			TRAP(m_debugText);
 			CUIManager::GetInstance()->DestroyTextItem(m_debugText);
+			CUIManager::GetInstance()->DestroyTextItem(m_countVisiblePlantsText);
+
+			m_partitionTree->HideDebugBoundingBoxes();
 			m_debugText = nullptr;
+			m_countVisiblePlantsText = nullptr;
 
 		}
 		return true;
@@ -549,4 +668,13 @@ bool VegetationRenderer::OnDebugWindVelocityChange(const MouseInput& mouse)
 	}
 
 	return false;
+}
+
+void VegetationRenderer::SetFrustrumDebugText(uint32_t plants, uint64_t dtMs)
+{
+	if (m_countVisiblePlantsText)
+	{
+		std::string toDisplay = "Visible plants: " + std::to_string(plants) + " FC: " + std::to_string(dtMs) + " ms";
+		m_countVisiblePlantsText->SetText(toDisplay);
+	}
 }

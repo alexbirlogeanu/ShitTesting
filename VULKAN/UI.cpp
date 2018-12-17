@@ -256,12 +256,12 @@ void CUIRenderer::RemoveUIText(CUIText* item)
 
 void CUIRenderer::AddDebugBoundingBox(DebugBoundingBox* bb)
 {
-	uint32_t neededMemory = (m_debugBoundingBoxes.size() + 1) * sizeof(DebugBBParams);
+	uint32_t neededMemory = (uint32_t(m_debugBoundingBoxes.size()) + 1) * sizeof(DebugBBParams);
 
 	if (neededMemory > m_debugBBBuffer->GetSize())
 	{
 		MemoryManager::GetInstance()->FreeHandle(m_debugBBBuffer);
-		MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UI, m_debugBoundingBoxes.size() * 2 * sizeof(DebugBBParams), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+		m_debugBBBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UI, m_debugBoundingBoxes.size() * 2 * sizeof(DebugBBParams), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
 		VkDescriptorBufferInfo bbBufferInfo = m_debugBBBuffer->GetDescriptor();
 		std::vector<VkWriteDescriptorSet> wDesc;
@@ -493,7 +493,7 @@ DebugBoundingBox* CUIManager::CreateDebugBoundingBox(const BoundingBox3D& bb, gl
 	return dBB;
 }
 
-void CUIManager::DestroyTextItem(DebugBoundingBox* bb)
+void CUIManager::DestroyDebugBoundingBox(DebugBoundingBox* bb)
 {
 	m_debugBBToRemove.push_back(bb);
 }
