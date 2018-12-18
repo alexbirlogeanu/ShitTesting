@@ -81,10 +81,11 @@ private:
 
 	struct SubpassInfo
 	{
-		std::vector<VkDescriptorSet>						DescriptorSets;
+		uint32_t											IndirectCommandsNumber;
 		BufferHandle*										CommonBuffer;
 		BufferHandle*										SpecificBuffer;
 		BufferHandle*										IndirectCommands;
+		std::vector<VkDescriptorSet>						DescriptorSets;
 		std::vector<Object*>								RenderedObjects;
 	};
 
@@ -114,7 +115,6 @@ private:
 	//global handles for the memory
 	BufferHandle*			m_batchStorageBuffer;
 	BufferHandle*			m_indirectCommandBuffer;
-
 
 	MaterialTemplateBase*	m_materialTemplate;
 

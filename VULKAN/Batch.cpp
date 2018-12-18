@@ -70,7 +70,7 @@ void BatchManager::AddObject(Object* obj)
 
 	if (it != m_batchesCategories.end())
 	{
-		//get a suitable batch (for now we only have one)
+		//get a suitable batch
 		std::vector<Batch*> batches = it->second;
 		for (uint32_t i = 0; i < batches.size(); ++i)
 			if (batches[i]->CanAddObject(obj))
@@ -248,6 +248,7 @@ void Batch::UpdateIndirectCmdBuffer(SubpassInfo& subpass)
 	}
 
 	subpassObjects.clear();
+	subpass.IndirectCommandsNumber = 0;
 
 	uint32_t instances = 0;
 	VkDrawIndexedIndirectCommand* indCmd = subpass.IndirectCommands->GetPtr<VkDrawIndexedIndirectCommand*>();
@@ -263,6 +264,7 @@ void Batch::UpdateIndirectCmdBuffer(SubpassInfo& subpass)
 		indCmd->instanceCount = (uint32_t)bucket.second.size();
 
 		subpassObjects.insert(subpassObjects.end(), bucket.second.begin(), bucket.second.end());
+		++subpass.IndirectCommandsNumber;
 
 		instances += (uint32_t)bucket.second.size();
 		++indCmd;
@@ -507,7 +509,7 @@ void Batch::Render(SubpassIndex subpassIndex)
 	const SubpassInfo& subpass = m_subpasses[uint32_t(subpassIndex)];
 
 	StartDebugMarker(debugMarker);
-	vk::CmdDrawIndexedIndirect(cmdBuffer, subpass.IndirectCommands->Get(), 0, subpass.RenderedObjects.size(), sizeof(VkDrawIndexedIndirectCommand));
+	vk::CmdDrawIndexedIndirect(cmdBuffer, subpass.IndirectCommands->Get(), 0, subpass.IndirectCommandsNumber, sizeof(VkDrawIndexedIndirectCommand));
 	EndDebugMarker(debugMarker);
 }
 
