@@ -5,8 +5,9 @@
 #include "rapidxml/rapidxml.hpp"
 #include "defines.h"
 #include "Utils.h"
-
+#include "Batch.h"
 #include "Scene.h"
+#include "Material.h"
 
 #include <cstdlib>
 

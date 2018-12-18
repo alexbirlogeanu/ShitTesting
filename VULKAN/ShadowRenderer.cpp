@@ -4,6 +4,7 @@
 #include "Texture.h"
 #include "ResourceTable.h"
 #include "Object.h"
+#include "Batch.h"
 
 #include <random>
 

@@ -39,6 +39,8 @@
 #include "ScreenSpaceReflectionRenderer.h"
 #include "TerrainRenderer.h"
 #include "VegetationRenderer.h"
+#include "Batch.h"
+#include "Material.h"
 
 #include "MemoryManager.h"
 #include "Input.h"

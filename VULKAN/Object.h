@@ -1,23 +1,17 @@
 #pragma once
 
 #include "glm/glm.hpp"
-#include "PickManager.h"
 #include "Renderer.h"
 #include "VulkanLoader.h"
-#include "Batch.h"
-#include "Material.h"
 #include "Serializer.h"
 #include "Singleton.h"
 
 #include <string>
 #include <vector>
-#include <unordered_map>
-#include <array>
 
 class Mesh;
 class CTexture;
-class Object;
-
+class Material;
 enum class ObjectType
 {
     Solid,
@@ -95,6 +89,7 @@ private:
     float                   m_xRot;
 
     glm::mat4               m_modelMatrix;
+
 };
 
 class ObjectSerializer : public Serializer, public Singleton<ObjectSerializer>
