@@ -104,8 +104,8 @@ void BatchManager::RenderAll()
 
 		for (Batch* batch : category.second)
 		{
-			batch->PrepareRendering(pipeline, false);
-			batch->Render(false);
+			batch->PrepareRendering(pipeline, SubpassIndex::Solid);
+			batch->Render(SubpassIndex::Solid);
 		}
 	}
 }
@@ -117,16 +117,21 @@ void BatchManager::RenderShadows()
 
 	for (auto& batch : m_batches)
 	{
-		batch->PrepareRendering(*shadowPipeline, true);
-		batch->Render(true);
+		batch->PrepareRendering(*shadowPipeline, SubpassIndex::ShadowPass);
+		batch->Render(SubpassIndex::ShadowPass);
 	}
 
 }
 
 void BatchManager::PreRender()
 {
+	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::IndirectDrawCmdBuffer);
+
 	for (auto& batch : m_batches)
 		batch->PreRender();
+
+	MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::IndirectDrawCmdBuffer);
+
 }
 
 ////////////////////////////////////////////////////////////////////
@@ -146,8 +151,6 @@ Batch::Batch(MaterialTemplateBase* materialTemplate)
 	, m_staggingBuffer(nullptr)
 	, m_indirectCommandBuffer(nullptr)
 	, m_batchStorageBuffer(nullptr)
-	, m_batchCommonsBuffer(nullptr)
-	, m_batchSpecificsBuffer(nullptr)
 	, m_batchVertexBuffer(nullptr)
 	, m_batchIndexBuffer(nullptr)
 	, m_totalBatchMemory(0)
@@ -155,7 +158,6 @@ Batch::Batch(MaterialTemplateBase* materialTemplate)
 	, m_needCleanup(false)
 	, m_isReady(false)
 	, m_materialTemplate(materialTemplate)
-	, m_shadowCasterCommands(0)
 {
 }
 
@@ -167,35 +169,41 @@ Batch::~Batch()
 void Batch::AddObject(Object* obj)
 {
 	m_objects.push_back(obj);
-	std::vector<VkDeviceSize> sizes(2);
-	std::unordered_set<Mesh*> meshes;
-
-	for (Object* obj : m_objects)
-		meshes.insert(obj->GetObjectMesh());
-		
-	for (Mesh* mesh : meshes)
+	
+	auto it = m_batchMeshes.find(obj->GetObjectMesh());
+	if (it == m_batchMeshes.end())
 	{
-		sizes[0] += mesh->GetVerticesMemorySize(); //first part of memory will be vertexes
-		sizes[1] += mesh->GetIndicesMemorySize();  //second part will be indexes
+		std::vector<VkDeviceSize> sizes(2);
+		Mesh* mesh = obj->GetObjectMesh();
+		
+		m_batchMeshes[obj->GetObjectMesh()] = MeshBufferInfo(); //should be filled at reconstuct
+
+		sizes[0] = mesh->GetVerticesMemorySize(); //first part of memory will be vertexes
+		sizes[1] = mesh->GetIndicesMemorySize();  //second part will be indexes
+
+		m_totalBatchMemory += MemoryManager::ComputeTotalSize(sizes);
+		
+		if (m_totalBatchMemory > ms_memoryLimit)
+			std::cout << "Warning!! Batch uses too much memory!! Maybe the batch contains only one detailed object. In this case we create descriptor sets for texture that are not used" << std::endl;
 	}
 
-	m_totalBatchMemory = MemoryManager::ComputeTotalSize(sizes);
 	m_needReconstruct = true;
-
-	if (m_totalBatchMemory > ms_memoryLimit)
-		std::cout << "Warning!! Batch uses too much memory!! Maybe the batch contains only one detailed object. In this case we create descriptor sets for texture that are not used" << std::endl;
 }
 
 bool Batch::CanAddObject(Object* obj)
 {
-	std::vector<VkDeviceSize> newObjMeshSizes(2);
-	newObjMeshSizes[0] = obj->GetObjectMesh()->GetVerticesMemorySize();
-	newObjMeshSizes[1] = obj->GetObjectMesh()->GetIndicesMemorySize();
+	auto it = m_batchMeshes.find(obj->GetObjectMesh());
+	if (it == m_batchMeshes.end())
+	{
+		std::vector<VkDeviceSize> newObjMeshSizes(2);
+		newObjMeshSizes[0] = obj->GetObjectMesh()->GetVerticesMemorySize();
+		newObjMeshSizes[1] = obj->GetObjectMesh()->GetIndicesMemorySize();
 
-	VkDeviceSize newMeshSize = MemoryManager::ComputeTotalSize(newObjMeshSizes);
+		VkDeviceSize newMeshSize = MemoryManager::ComputeTotalSize(newObjMeshSizes);
 
-	if (newMeshSize + m_totalBatchMemory > ms_memoryLimit)
-		return false;
+		if (newMeshSize + m_totalBatchMemory > ms_memoryLimit)
+			return false;
+	}
 
 	Material* material = obj->GetObjectMaterial();
 	TRAP(material->GetTemplate() == m_materialTemplate);
@@ -217,11 +225,10 @@ bool Batch::CanAddObject(Object* obj)
 
 void Batch::Construct()
 {
-	std::unordered_map<Mesh*, MeshBufferInfo> meshCommands;
-	BuildMeshBuffers(meshCommands);
-	CreateIndirectCommandBuffer(meshCommands);
+	BuildMeshBuffers();
+//	CreateIndirectCommandBuffer(meshCommands);
 
-	ConstructBatchSpecifics();
+	InitSubpasses();
 	IndexTextures();
 	UpdateGraphicsInterface();
 	m_needReconstruct = false;
@@ -229,87 +236,49 @@ void Batch::Construct()
 	m_debugMarkerName = m_materialTemplate->GetName() + "_" + std::to_string(m_totalBatchMemory % 100);
 }
 
-void Batch::CreateIndirectCommandBuffer(const std::unordered_map<Mesh*, MeshBufferInfo>& meshCommands)
+void Batch::UpdateIndirectCmdBuffer(SubpassInfo& subpass)
 {
-	//order objects in m_objects based on the criteria of cast shadows or not. Our vector will be split in 2 parts, with the non-caster at the end
-	std::vector<Object*> nonCasters;
-	std::vector<Object*> casters;
-
-	for (Object* obj : m_objects)
+	std::unordered_map<Mesh*, std::vector<Object*>> buckets; //object buckets based on the mesh they use
+	std::vector<Object*>& subpassObjects = subpass.RenderedObjects;
+	
+	for (auto obj : subpassObjects)
 	{
-		if (obj->GetIsShadowCaster())
-			casters.push_back(obj);
-		else
-			nonCasters.push_back(obj);
+		auto& bucket = buckets[obj->GetObjectMesh()];
+		bucket.push_back(obj);
 	}
-	m_objects.clear();
 
-	//after the shadow caster/ non shadow casters split, move the objects that use same mesh adjancently, by caster no caster category. We have to have the objects ordered that way because uniform buffer expects that object in the same draw command to be one after the other. 
-	//we order per category, because some objects can be set not to be draw in render shadows pass and we will add the indirect draw command at the back of the command vector
-	std::unordered_map<Mesh*, std::vector<Object*>> casterSplitter;
-	std::unordered_map<Mesh*, std::vector<Object*>> nonCasterSplitter;
-
-	auto orderer = [](const std::vector<Object*>& objects, std::unordered_map<Mesh*, std::vector<Object*>>& splitter)
-	{
-		for (Object* obj : objects)
-		{
-			auto& split = splitter[obj->GetObjectMesh()];
-			split.push_back(obj);
-		}
-	};
-
-	orderer(casters, casterSplitter);
-	orderer(nonCasters, nonCasterSplitter);
+	subpassObjects.clear();
 
 	uint32_t instances = 0;
-	auto createIndirectCommand = [&, meshCommands](const std::unordered_map<Mesh*, std::vector<Object*>> splitter)
+	VkDrawIndexedIndirectCommand* indCmd = subpass.IndirectCommands->GetPtr<VkDrawIndexedIndirectCommand*>();
+	for (const auto& bucket : buckets)
 	{
-		for (const auto& elem : splitter)
-		{
-			auto it = meshCommands.find(elem.first);
-			TRAP(it != meshCommands.end());
+		auto meshInfoIt = m_batchMeshes.find(bucket.first);// find the info for mesh
+		TRAP(meshInfoIt != m_batchMeshes.end()); //every time we have to find the info in the map
+		const MeshBufferInfo& buffInfo = meshInfoIt->second;
+		indCmd->firstIndex = buffInfo.firstIndex;
+		indCmd->indexCount = buffInfo.indexCount;
+		indCmd->vertexOffset = buffInfo.vertexOffset;
+		indCmd->firstInstance = instances;
+		indCmd->instanceCount = (uint32_t)bucket.second.size();
 
-			const MeshBufferInfo& info = it->second;
-			const auto& objects = elem.second;
-			VkDrawIndexedIndirectCommand indirectCommand;
+		subpassObjects.insert(subpassObjects.end(), bucket.second.begin(), bucket.second.end());
 
-			indirectCommand.firstIndex = info.firstIndex;
-			indirectCommand.vertexOffset = info.vertexOffset;
-			indirectCommand.indexCount = info.indexCount;
-			indirectCommand.firstInstance = instances; //??
-			indirectCommand.instanceCount = (uint32_t)objects.size(); //this are the vectors
+		instances += (uint32_t)bucket.second.size();
+		++indCmd;
+	}
 
-			instances += (uint32_t)objects.size();
-			m_indirectCommands.push_back(indirectCommand);
-
-			m_objects.insert(m_objects.end(), objects.begin(), objects.end());
-		}
-	};
-	createIndirectCommand(casterSplitter);
-	//save the number of commands that will be called in render shadow pass
-	m_shadowCasterCommands = (uint32_t)m_indirectCommands.size();
-	//append the non caster commands
-	createIndirectCommand(nonCasterSplitter);
-
-	m_indirectCommandBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::IndirectDrawCmdBuffer, m_indirectCommands.size() * sizeof(VkDrawIndexedIndirectCommand), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
-
-	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::IndirectDrawCmdBuffer);
-	void* mem = m_indirectCommandBuffer->GetPtr<void*>();
-	memcpy(mem, m_indirectCommands.data(), m_indirectCommands.size() * sizeof(VkDrawIndexedIndirectCommand));
-	MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::IndirectDrawCmdBuffer);
 }
 
-void Batch::BuildMeshBuffers(std::unordered_map<Mesh*, MeshBufferInfo>& meshCommands)
+void Batch::BuildMeshBuffers()
 {
 	std::vector<VkDeviceSize> subBuffersSizes(2);
-	std::unordered_set<Mesh*> meshes;
 
 	subBuffersSizes[0] = subBuffersSizes[1] = 0;//unnecessary i think
-	for (Object* obj : m_objects)
-		meshes.insert(obj->GetObjectMesh());
 
-	for (Mesh* mesh : meshes)
+	for (const auto& meshBuffer : m_batchMeshes)
 	{
+		Mesh* mesh = meshBuffer.first;
 		subBuffersSizes[0] += (VkDeviceSize)mesh->GetVerticesMemorySize(); //in first part of the memory we keep the vertices
 		subBuffersSizes[1] += (VkDeviceSize)mesh->GetIndicesMemorySize(); //in the second part of the memory we keep the indices
 	}
@@ -330,8 +299,9 @@ void Batch::BuildMeshBuffers(std::unordered_map<Mesh*, MeshBufferInfo>& meshComm
 	uint32_t vertexOffset = 0;
 	uint32_t indexOffset = 0;
 
-	for (Mesh* mesh : meshes)
+	for (const auto& meshBuffer : m_batchMeshes)
 	{
+		Mesh* mesh = meshBuffer.first;
 		mesh->CopyLocalData(vertexMemory, indexMemory);
 		
 		//we partially fill indirect command structure
@@ -340,7 +310,7 @@ void Batch::BuildMeshBuffers(std::unordered_map<Mesh*, MeshBufferInfo>& meshComm
 		info.vertexOffset = vertexOffset;
 		info.indexCount = mesh->GetIndexCount();
 
-		meshCommands.emplace(mesh, info);
+		m_batchMeshes[mesh] = info;
 
 		vertexOffset += mesh->GetVertexCount();
 		indexOffset += mesh->GetIndexCount();
@@ -367,8 +337,9 @@ void Batch::BuildMeshBuffers(std::unordered_map<Mesh*, MeshBufferInfo>& meshComm
 	m_needCleanup = true;
 }
 
-void Batch::ConstructBatchSpecifics()
+void Batch::InitSubpasses()
 {
+	//first we allocate memory used by the subpass
 	/*
 		Storage buffer will look like this
 		C_C_C_C_C_C_C_S_S_S_S_S_S_S
@@ -379,38 +350,51 @@ void Batch::ConstructBatchSpecifics()
 	sizes[0] = m_objects.size() * sizeof(BatchCommons);
 	sizes[1] = m_objects.size() * m_materialTemplate->GetDataStride();
 	
-	VkDeviceSize totalSize = MemoryManager::GetInstance()->ComputeTotalSize(sizes);
+	VkDeviceSize totalSize = MemoryManager::GetInstance()->ComputeTotalSize(sizes) * m_subpasses.size();
+
+	VkDeviceSize indirectCmdSize = m_objects.size() * sizeof(VkDrawIndexedIndirectCommand);
+	VkDeviceSize indirectCmdsSizeTotal = indirectCmdSize * m_subpasses.size();
 
 	m_batchStorageBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, totalSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-	m_batchCommonsBuffer = m_batchStorageBuffer->CreateSubbuffer(sizes[0]);
-	m_batchSpecificsBuffer = m_batchStorageBuffer->CreateSubbuffer(sizes[1]);
+	m_indirectCommandBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::IndirectDrawCmdBuffer, indirectCmdsSizeTotal, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 
-	m_batchDescriptorSets = m_materialTemplate->GetNewDescriptorSets();
+	for (uint32_t i = 0; i < uint32_t(SubpassIndex::Count); ++i)
+	{
+		SubpassInfo& subpass = m_subpasses[i];
+		subpass.CommonBuffer = m_batchStorageBuffer->CreateSubbuffer(sizes[0]);
+		subpass.SpecificBuffer = m_batchStorageBuffer->CreateSubbuffer(sizes[1]);
+		subpass.IndirectCommands = m_indirectCommandBuffer->CreateSubbuffer(indirectCmdSize);
+		subpass.DescriptorSets = m_materialTemplate->GetNewDescriptorSets();
+		subpass.RenderedObjects = m_objects; //TODO for now render all the objects
+	}
 }
 
 void Batch::UpdateGraphicsInterface()
 {
 	std::vector<VkWriteDescriptorSet> wDesc;
 
-	VkDescriptorBufferInfo commonBuffInfo = m_batchCommonsBuffer->GetDescriptor();
-	wDesc.push_back(InitUpdateDescriptor(m_batchDescriptorSets[DescriptorIndex::Common], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &commonBuffInfo));
-	
-	VkDescriptorBufferInfo specificBuffInfo = m_batchSpecificsBuffer->GetDescriptor();
-	wDesc.push_back(InitUpdateDescriptor(m_batchDescriptorSets[DescriptorIndex::Specific], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &specificBuffInfo));
-
 	std::vector<VkDescriptorImageInfo> imageInfo;
 	for (const auto& text : m_batchTextures)
 		imageInfo.push_back(text->GetTextureDescriptor());
-	
-	wDesc.push_back(InitUpdateDescriptor(m_batchDescriptorSets[DescriptorIndex::Specific], 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, imageInfo));
 
 	//fill with default textures
 	std::vector<VkDescriptorImageInfo> defaultTextures;
 	for (uint32_t i = (uint32_t)m_batchTextures.size(); i < ms_texturesLimit; ++i)
 		defaultTextures.push_back(m_batchTextures[0]->GetTextureDescriptor());
 
-	if (!defaultTextures.empty())
-		wDesc.push_back(InitUpdateDescriptor(m_batchDescriptorSets[DescriptorIndex::Specific], 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, (uint32_t)m_batchTextures.size(), defaultTextures));
+	for (auto& subpass : m_subpasses)
+	{
+		VkDescriptorBufferInfo commonBuffInfo = subpass.CommonBuffer->GetDescriptor();
+		wDesc.push_back(InitUpdateDescriptor(subpass.DescriptorSets[DescriptorIndex::Common], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &commonBuffInfo));
+
+		VkDescriptorBufferInfo specificBuffInfo = subpass.SpecificBuffer->GetDescriptor();
+		wDesc.push_back(InitUpdateDescriptor(subpass.DescriptorSets[DescriptorIndex::Specific], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &specificBuffInfo));
+
+		wDesc.push_back(InitUpdateDescriptor(subpass.DescriptorSets[DescriptorIndex::Specific], 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, imageInfo));
+
+		if (!defaultTextures.empty())
+			wDesc.push_back(InitUpdateDescriptor(subpass.DescriptorSets[DescriptorIndex::Specific], 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, (uint32_t)m_batchTextures.size(), defaultTextures));
+	}
 
 	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
 }
@@ -470,8 +454,7 @@ void Batch::Destruct()
 
 	m_materialTemplate = nullptr;
 
-	m_indirectCommands.clear();
-	m_objects.size();
+	m_objects.clear();
 
 	// TODO m_batchDescriptorSets i dont know how to approach the problem with descriptor sets being cleared and new construction being allocated. even if a batch is deleted, descriptors remain untill de descriptor pool is deleted
 }
@@ -481,16 +464,23 @@ void Batch::PreRender()
 	if (!m_isReady)
 		return;
 
-	BatchCommons* commonMem = m_batchCommonsBuffer->GetPtr<BatchCommons*>();
-	uint8_t* materialMemory = m_batchSpecificsBuffer->GetPtr<uint8_t*>();
-
 	uint32_t stride = m_materialTemplate->GetDataStride();
-	for (unsigned int i = 0; i < m_objects.size(); ++i, ++commonMem, materialMemory += stride)
+
+	for (auto& subpass : m_subpasses)
 	{
-		Object* obj = m_objects[i];
-		TRAP(obj->GetObjectMaterial()->GetTemplate() == m_materialTemplate);
-		commonMem->ModelMtx = obj->GetModelMatrix();
-		memcpy(materialMemory, m_objects[i]->GetObjectMaterial()->GetData(), m_materialTemplate->GetDataStride());
+		BatchCommons* commonMem = subpass.CommonBuffer->GetPtr<BatchCommons*>();
+		uint8_t* materialMemory = subpass.SpecificBuffer->GetPtr<uint8_t*>();
+
+		UpdateIndirectCmdBuffer(subpass);
+
+		for (unsigned int i = 0; i < subpass.RenderedObjects.size(); ++i, ++commonMem, materialMemory += stride)
+		{
+			Object* obj = subpass.RenderedObjects[i];
+			TRAP(obj->GetObjectMaterial()->GetTemplate() == m_materialTemplate);
+			commonMem->ModelMtx = obj->GetModelMatrix();
+			memcpy(materialMemory, obj->GetObjectMaterial()->GetData(), m_materialTemplate->GetDataStride());
+		}
+
 	}
 
 	glm::mat4 projMatrix;
@@ -502,34 +492,51 @@ void Batch::PreRender()
 	m_batchParams.ShadowProjViewMatrix = g_commonResources.GetAs<glm::mat4>(EResourceType_ShadowProjViewMat);
 }
 
-void Batch::Render(bool shadowPass)
+void Batch::Render(SubpassIndex subpassIndex)
 {
 	if (!m_isReady)
 		return;
 
 	VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
-	uint32_t nShadowCastersObjects = (shadowPass) ? m_shadowCasterCommands : (uint32_t)m_indirectCommands.size();
 
 	VkDeviceSize offset = 0;
 	vk::CmdBindVertexBuffers(cmdBuffer, 0, 1, &m_batchVertexBuffer->Get(), &offset);
 	vk::CmdBindIndexBuffer(cmdBuffer, m_batchIndexBuffer->Get(), m_batchIndexBuffer->GetOffset(), VK_INDEX_TYPE_UINT32);
 
-	StartDebugMarker(m_debugMarkerName);
-	vk::CmdDrawIndexedIndirect(cmdBuffer, m_indirectCommandBuffer->Get(), 0, nShadowCastersObjects, sizeof(VkDrawIndexedIndirectCommand));
-	EndDebugMarker(m_debugMarkerName);
+	std::string debugMarker = m_debugMarkerName + GetSubpassDebugMarker(subpassIndex);
+	const SubpassInfo& subpass = m_subpasses[uint32_t(subpassIndex)];
+
+	StartDebugMarker(debugMarker);
+	vk::CmdDrawIndexedIndirect(cmdBuffer, subpass.IndirectCommands->Get(), 0, subpass.RenderedObjects.size(), sizeof(VkDrawIndexedIndirectCommand));
+	EndDebugMarker(debugMarker);
 }
 
-void Batch::PrepareRendering(const CGraphicPipeline& pipeline, bool shadowPass)
+void Batch::PrepareRendering(const CGraphicPipeline& pipeline, SubpassIndex subpassIndex)
 {
 	if (!m_isReady)
 		return;
 	
 	VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
+	const SubpassInfo& subpassInfo = m_subpasses[uint32_t(subpassIndex)];
 
-	if (shadowPass)
-		vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.GetLayout(), 0, 1, &m_batchDescriptorSets[DescriptorIndex::Common], 0, nullptr);
+	if (subpassIndex == SubpassIndex::Solid)
+		vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.GetLayout(), 0, (uint32_t)subpassInfo.DescriptorSets.size(), subpassInfo.DescriptorSets.data(), 0, nullptr);
 	else
-		vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.GetLayout(), 0, (uint32_t)m_batchDescriptorSets.size(), m_batchDescriptorSets.data(), 0, nullptr);
-		
+		vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.GetLayout(), 0, 1, &subpassInfo.DescriptorSets[0], 0, nullptr);
+
 	vk::CmdPushConstants(cmdBuffer, pipeline.GetLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(BatchParams), &m_batchParams);
+}
+
+std::string Batch::GetSubpassDebugMarker(SubpassIndex subpass)
+{
+	switch (subpass)
+	{
+	case SubpassIndex::Solid:
+		return "_solid";
+	case SubpassIndex::ShadowPass:
+		return "_shadow";
+	default:
+		TRAP(false);
+		return "_error";
+	}
 }

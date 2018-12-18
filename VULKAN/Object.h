@@ -28,7 +28,11 @@ enum class ObjectType
 class Object :/* public CPickable,*/ public SeriableImpl<Object>
 {
 public:
-    
+	Object();
+	virtual ~Object();
+	
+	void Render();
+
     void RotateX(float dir)
     {
         m_xRot += dir * glm::quarter_pi<float>();
@@ -71,12 +75,6 @@ public:
     }
 
     glm::mat4 GetModelMatrix();
-
-    void Render();
-    //virtual void GetPickableDescription(std::vector<std::string>& texts) override;
-    //virtual bool ChangePickableProperties(unsigned int key) override;
-	Object();
-	virtual ~Object();
 private:
    
 

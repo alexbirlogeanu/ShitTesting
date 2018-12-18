@@ -1269,10 +1269,11 @@ void CApplication::Run()
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
-        UpdateCamera();
+        
         CUIManager::GetInstance()->Update();
 		InputManager::GetInstance()->Update();
 
+		UpdateCamera();
         Render();
 
         HideCursor(m_centerCursor);

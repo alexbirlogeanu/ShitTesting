@@ -464,7 +464,7 @@ BufferHandle* MemoryManager::CreateBuffer(EMemoryContextType context, std::vecto
 VkDeviceSize MemoryManager::ComputeTotalSize(const std::vector<VkDeviceSize>& sizes)
 {
 	VkDeviceSize totalSize = 0;
-	VkDeviceSize minAllign = vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment;
+	VkDeviceSize minAllign = vk::g_vulkanContext.m_limits.minUniformBufferOffsetAlignment; //this is not a good align. there are multiple types of buffers
 	for (auto size : sizes)
 		totalSize += (size / minAllign + 1) * minAllign;
 

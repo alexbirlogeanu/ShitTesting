@@ -437,7 +437,7 @@ void VegetationRenderer::PreRender()
 
 	ULONG64 start = GetTickCount64();
 	std::vector<PlantDescription> cullingResult;
-	cullingResult.reserve(100);
+	cullingResult.reserve(64);
 
 	m_partitionTree->FrustumCulling(ms_camera.GetFrustum(), cullingResult);
 

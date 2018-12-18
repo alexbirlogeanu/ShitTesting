@@ -41,6 +41,13 @@ private:
 	TBatchMap						m_batchesCategories;
 };
 
+enum class SubpassIndex
+{
+	ShadowPass,
+	Solid,
+	Count
+};
+
 class Batch
 {
 public:
@@ -56,8 +63,8 @@ public:
 	void Cleanup();
 
 	void PreRender();
-	void Render(bool shadowPass);
-	void PrepareRendering(const CGraphicPipeline& pipeline, bool shadowPass);
+	void Render(SubpassIndex subpassIndex);
+	void PrepareRendering(const CGraphicPipeline& pipeline, SubpassIndex subpassIndex);
 
 	bool NeedReconstruct() const { return m_needReconstruct; }
 	bool NeedCleanup() const { return m_needCleanup; }
@@ -71,12 +78,27 @@ private:
 		uint32_t vertexOffset;
 		uint32_t indexCount;
 	};
-	void CreateIndirectCommandBuffer(const std::unordered_map<Mesh*, MeshBufferInfo>& meshCommands);
-	void BuildMeshBuffers(std::unordered_map<Mesh*, MeshBufferInfo>& meshCommands);
-	void ConstructBatchSpecifics();
+
+	struct SubpassInfo
+	{
+		std::vector<VkDescriptorSet>						DescriptorSets;
+		BufferHandle*										CommonBuffer;
+		BufferHandle*										SpecificBuffer;
+		BufferHandle*										IndirectCommands;
+		std::vector<Object*>								RenderedObjects;
+	};
+
+	void BuildMeshBuffers();
+	void InitSubpasses();
 	void UpdateGraphicsInterface();
 	void IndexTextures();
+
+	void UpdateIndirectCmdBuffer(SubpassInfo& subpass);
+
+	std::string GetSubpassDebugMarker(SubpassIndex subpassIndex);
 private:
+	typedef std::unordered_map<Mesh*, MeshBufferInfo> TMeshMap;
+
 	struct BatchParams
 	{
 		glm::mat4 ProjViewMatrix;
@@ -86,13 +108,13 @@ private:
 
 	BufferHandle*			m_batchBuffer;
 	BufferHandle*			m_staggingBuffer;
-	BufferHandle*			m_indirectCommandBuffer;
 	BufferHandle*			m_batchVertexBuffer;
 	BufferHandle*			m_batchIndexBuffer;
 	
+	//global handles for the memory
 	BufferHandle*			m_batchStorageBuffer;
-	BufferHandle*			m_batchCommonsBuffer;
-	BufferHandle*			m_batchSpecificsBuffer;
+	BufferHandle*			m_indirectCommandBuffer;
+
 
 	MaterialTemplateBase*	m_materialTemplate;
 
@@ -104,13 +126,14 @@ private:
 	bool					m_isReady;
 
 	//need a buffer for uniforms. Also need to pack descriptors??
-	std::vector<VkDescriptorSet>			m_batchDescriptorSets;
-	std::vector<CTexture*>					m_batchTextures;
-	uint32_t								m_shadowCasterCommands;
-	std::vector<VkDrawIndexedIndirectCommand> m_indirectCommands;
+	std::vector<CTexture*>						m_batchTextures;
+	std::array<SubpassInfo, uint32_t(SubpassIndex::Count)> m_subpasses;
 
-	static uint32_t							ms_memoryLimit;
-	static uint32_t							ms_texturesLimit;
+	TMeshMap									m_batchMeshes;
 
-	std::string								m_debugMarkerName;
+	static uint32_t								ms_memoryLimit;
+	static uint32_t								ms_texturesLimit;
+
+	std::string									m_debugMarkerName;
+
 };
