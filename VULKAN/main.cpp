@@ -41,6 +41,7 @@
 #include "VegetationRenderer.h"
 #include "Batch.h"
 #include "Material.h"
+#include "Scene.h"
 
 #include "MemoryManager.h"
 #include "Input.h"
@@ -970,7 +971,7 @@ private:
 	void RegisterSpecialInputListeners(); //TODO find a better solution at refactoring
 
     void CreateResources();
-    void UpdateCamera();
+    void UpdateCameraRotation();
     static LRESULT CALLBACK WindowProc(
         HWND   hwnd,
         UINT   uMsg,
@@ -1146,6 +1147,7 @@ CApplication::CApplication()
 	BatchManager::CreateInstance();
 	MaterialLibrary::CreateInstance();
 	CUIManager::CreateInstance();
+	Scene::CreateInstance();
 
     CreateCommandBuffer();
     CPickManager::CreateInstance();
@@ -1227,6 +1229,7 @@ CApplication::~CApplication()
     vk::DestroyRenderPass(dev, m_volumetricRenderPass, nullptr);
 	vk::DestroyRenderPass(dev, m_ssrRenderPass, nullptr);
 
+	Scene::DestroyInstance();
 	CUIManager::DestroyInstance();
 	ObjectSerializer::DestroyInstance();
 	MaterialLibrary::DestroyInstance();
@@ -1274,8 +1277,11 @@ void CApplication::Run()
         
         CUIManager::GetInstance()->Update();
 		InputManager::GetInstance()->Update();
+		
+		UpdateCameraRotation();
+		Scene::GetInstance()->Update(ms_dt);
+		ms_camera.Update(); //ugly and i hope so temporary fix
 
-		UpdateCamera();
         Render();
 
         HideCursor(m_centerCursor);
@@ -2648,7 +2654,7 @@ void CApplication::CreateResources()
     //SetupPointLights();
 }
 
-void CApplication::UpdateCamera()
+void CApplication::UpdateCameraRotation()
 {
     if(!m_centerCursor)
         return;
@@ -2675,8 +2681,6 @@ void CApplication::UpdateCamera()
         ms_camera.Rotate(m_normMouseDX, m_normMouseDY);
         CenterCursor();
     }
-
-    ms_camera.Update();
 }
 LRESULT CApplication::WindowProc(
     HWND   hwnd,

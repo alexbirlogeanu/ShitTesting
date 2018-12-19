@@ -34,6 +34,7 @@ public:
     float               GetFar() const { return m_far; }
     float               GetNear() const { return m_near; }
     float               GetFOV() const { return m_fov; }
+	bool				GetIsDirty() const { return m_dirty; }
     // End Getters
 
     void Rotate(float x, float y);

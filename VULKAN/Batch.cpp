@@ -49,7 +49,7 @@ void BatchManager::Update()
 	if (memoryNeeded > 0)
 	{
 		MemoryManager::GetInstance()->AllocMemory(EMemoryContextType::BatchStaggingBuffer, memoryNeeded);
-
+		MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::IndirectDrawCmdBuffer);
 		for (auto batch : m_batches)
 		{
 			if (batch->NeedReconstruct())
@@ -58,6 +58,7 @@ void BatchManager::Update()
 				m_inProgressBatches.push_back(batch);
 			}
 		}
+		MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::IndirectDrawCmdBuffer);
 	}
 }
 
@@ -226,8 +227,6 @@ bool Batch::CanAddObject(Object* obj)
 void Batch::Construct()
 {
 	BuildMeshBuffers();
-//	CreateIndirectCommandBuffer(meshCommands);
-
 	InitSubpasses();
 	IndexTextures();
 	UpdateGraphicsInterface();
@@ -239,7 +238,7 @@ void Batch::Construct()
 void Batch::UpdateIndirectCmdBuffer(SubpassInfo& subpass)
 {
 	std::unordered_map<Mesh*, std::vector<Object*>> buckets; //object buckets based on the mesh they use
-	std::vector<Object*>& subpassObjects = subpass.RenderedObjects;
+	std::vector<Object*>& subpassObjects = subpass.VisibleObjects;
 	
 	for (auto obj : subpassObjects)
 	{
@@ -270,6 +269,33 @@ void Batch::UpdateIndirectCmdBuffer(SubpassInfo& subpass)
 		++indCmd;
 	}
 
+}
+
+bool Batch::UpdateVisibleObjects(SubpassInfo& subpass)
+{
+	/*auto lastVisible = std::stable_partition(m_objects.begin(), m_objects.end(), [&subpass](const Object* obj)
+	{
+		return obj->CheckVisibility((VisibilityType)subpass.VisibilityMask);
+	});*/
+
+	std::vector<Object*> visible;
+
+	std::copy_if(m_objects.begin(), m_objects.end(), std::back_inserter(visible), [&subpass](const Object* obj)
+	{
+		return obj->CheckVisibility((VisibilityType)subpass.VisibilityMask);
+
+	});
+
+	if (visible.size() == subpass.VisibleObjects.size()) //i feel like its a week condition, but lets put it in practice
+		return false; //visible objects didnt change 
+
+	auto& visObjects = subpass.VisibleObjects;
+	//visObjects.clear();
+	//visObjects.insert(visObjects.end(), m_objects.begin(), lastVisible);
+
+	visObjects = visible;
+
+	return true;
 }
 
 void Batch::BuildMeshBuffers()
@@ -360,6 +386,22 @@ void Batch::InitSubpasses()
 	m_batchStorageBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, totalSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 	m_indirectCommandBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::IndirectDrawCmdBuffer, indirectCmdsSizeTotal, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 
+	auto mapVisibility = [](SubpassIndex index)
+	{
+		switch (index)
+		{
+		case SubpassIndex::Solid:
+			return VisibilityType::InCameraFrustum;
+		case SubpassIndex::ShadowPass:
+			return VisibilityType::InShadowFrustum;
+		default:
+			TRAP(false);
+			return VisibilityType::Invalid;
+		};
+
+	};
+
+
 	for (uint32_t i = 0; i < uint32_t(SubpassIndex::Count); ++i)
 	{
 		SubpassInfo& subpass = m_subpasses[i];
@@ -367,7 +409,10 @@ void Batch::InitSubpasses()
 		subpass.SpecificBuffer = m_batchStorageBuffer->CreateSubbuffer(sizes[1]);
 		subpass.IndirectCommands = m_indirectCommandBuffer->CreateSubbuffer(indirectCmdSize);
 		subpass.DescriptorSets = m_materialTemplate->GetNewDescriptorSets();
-		subpass.RenderedObjects = m_objects; //TODO for now render all the objects
+		subpass.VisibilityMask = mapVisibility((SubpassIndex)i);
+		subpass.VisibleObjects = m_objects; //TODO for now render all the objects
+
+		UpdateIndirectCmdBuffer(subpass);
 	}
 }
 
@@ -384,13 +429,17 @@ void Batch::UpdateGraphicsInterface()
 	for (uint32_t i = (uint32_t)m_batchTextures.size(); i < ms_texturesLimit; ++i)
 		defaultTextures.push_back(m_batchTextures[0]->GetTextureDescriptor());
 
-	for (auto& subpass : m_subpasses)
-	{
-		VkDescriptorBufferInfo commonBuffInfo = subpass.CommonBuffer->GetDescriptor();
-		wDesc.push_back(InitUpdateDescriptor(subpass.DescriptorSets[DescriptorIndex::Common], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &commonBuffInfo));
+	VkDescriptorBufferInfo commonBuffInfo[uint32_t(SubpassIndex::Count)];
+	VkDescriptorBufferInfo specificBuffInfo[uint32_t(SubpassIndex::Count)];
 
-		VkDescriptorBufferInfo specificBuffInfo = subpass.SpecificBuffer->GetDescriptor();
-		wDesc.push_back(InitUpdateDescriptor(subpass.DescriptorSets[DescriptorIndex::Specific], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &specificBuffInfo));
+	for (uint32_t i = 0; i < uint32_t(SubpassIndex::Count); ++i)
+	{
+		auto& subpass = m_subpasses[i];
+		commonBuffInfo[i] = subpass.CommonBuffer->GetDescriptor();
+		wDesc.push_back(InitUpdateDescriptor(subpass.DescriptorSets[DescriptorIndex::Common], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &commonBuffInfo[i]));
+
+		specificBuffInfo[i] = subpass.SpecificBuffer->GetDescriptor();
+		wDesc.push_back(InitUpdateDescriptor(subpass.DescriptorSets[DescriptorIndex::Specific], 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &specificBuffInfo[i]));
 
 		wDesc.push_back(InitUpdateDescriptor(subpass.DescriptorSets[DescriptorIndex::Specific], 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, imageInfo));
 
@@ -470,14 +519,15 @@ void Batch::PreRender()
 
 	for (auto& subpass : m_subpasses)
 	{
+		if (UpdateVisibleObjects(subpass))
+			UpdateIndirectCmdBuffer(subpass);
+
 		BatchCommons* commonMem = subpass.CommonBuffer->GetPtr<BatchCommons*>();
 		uint8_t* materialMemory = subpass.SpecificBuffer->GetPtr<uint8_t*>();
 
-		UpdateIndirectCmdBuffer(subpass);
-
-		for (unsigned int i = 0; i < subpass.RenderedObjects.size(); ++i, ++commonMem, materialMemory += stride)
+		for (unsigned int i = 0; i < subpass.VisibleObjects.size(); ++i, ++commonMem, materialMemory += stride)
 		{
-			Object* obj = subpass.RenderedObjects[i];
+			Object* obj = subpass.VisibleObjects[i];
 			TRAP(obj->GetObjectMaterial()->GetTemplate() == m_materialTemplate);
 			commonMem->ModelMtx = obj->GetModelMatrix();
 			memcpy(materialMemory, obj->GetObjectMaterial()->GetData(), m_materialTemplate->GetDataStride());
@@ -509,7 +559,7 @@ void Batch::Render(SubpassIndex subpassIndex)
 	const SubpassInfo& subpass = m_subpasses[uint32_t(subpassIndex)];
 
 	StartDebugMarker(debugMarker);
-	vk::CmdDrawIndexedIndirect(cmdBuffer, subpass.IndirectCommands->Get(), 0, subpass.IndirectCommandsNumber, sizeof(VkDrawIndexedIndirectCommand));
+	vk::CmdDrawIndexedIndirect(cmdBuffer, subpass.IndirectCommands->Get(), subpass.IndirectCommands->GetOffset(), subpass.IndirectCommandsNumber, sizeof(VkDrawIndexedIndirectCommand));
 	EndDebugMarker(debugMarker);
 }
 

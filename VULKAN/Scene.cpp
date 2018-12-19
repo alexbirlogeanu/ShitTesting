@@ -2,8 +2,11 @@
 
 #include "Object.h"
 #include "Texture.h"
+#include "Input.h"
+#include "UI.h"
 
 #include <random>
+#include <algorithm>
 
 //////////////////////////////////////////////////////////////////////////
 //CScene
@@ -15,8 +18,9 @@ const glm::vec3 Scene::TerrainTranslate = glm::vec3(0.0f, -5.0f, -3.0f); //lel
 
 Scene::Scene()
 {
-
+	InputManager::GetInstance()->MapKeyPressed('5', InputManager::KeyPressedCallback(this, &Scene::OnDebugKey));
 }
+
 Scene::~Scene()
 {
 
@@ -104,5 +108,42 @@ void Scene::CalculatePlantsPositions(glm::uvec2 vegetationGridSize, const std::v
 
 void Scene::Update(float dt)
 {
+	if (ms_camera.GetIsDirty())
+		FrustumCulling();
+}
 
+bool Scene::OnDebugKey(const KeyInput& key)
+{
+	if (m_debugBoundigBoxes.empty())
+	{
+		m_debugBoundigBoxes.reserve(m_sceneObjects.size());
+		for (auto obj : m_sceneObjects)
+			m_debugBoundigBoxes.push_back(CUIManager::GetInstance()->CreateDebugBoundingBox(obj->GetBoundingBox()));
+	}
+	else
+	{
+		for (auto bb : m_debugBoundigBoxes)
+			CUIManager::GetInstance()->DestroyDebugBoundingBox(bb);
+
+		m_debugBoundigBoxes.clear();
+	}
+	return true;
+}
+
+void Scene::FrustumCulling()
+{
+	CFrustum frustum = ms_camera.GetFrustum();
+	std::for_each(m_sceneObjects.begin(), m_sceneObjects.end(), [&frustum](Object* obj)
+	{
+		BoundingBox3D bb = obj->GetBoundingBox();
+		if (frustum.Collision(bb) == CollisionResult::Outside)
+			obj->ResetVisibility(VisibilityType::InCameraFrustum);
+		else
+			obj->SetVisibility(VisibilityType::InCameraFrustum);
+
+		if (obj->GetIsShadowCaster())
+			obj->SetVisibility(VisibilityType::InShadowFrustum);
+		else
+			obj->ResetVisibility(VisibilityType::InShadowFrustum);
+	});
 }

@@ -5,7 +5,8 @@
 
 #include <unordered_set>
 class Object;
-
+class KeyInput;
+class DebugBoundingBox;
 class Scene : public Singleton<Scene>
 {
 	friend class Singleton<Scene>;
@@ -21,13 +22,18 @@ public:
 
 	void Update(float dt);
 
+	bool OnDebugKey(const KeyInput&);
 private:
 	Scene();
 	virtual ~Scene();
 
 	void UpdateBoundingBox();
+	void FrustumCulling();
 private:
-	std::unordered_set<Object*>      m_sceneObjects;
-	BoundingBox3D                    m_sceneBoundingBox;
+	std::unordered_set<Object*>			m_sceneObjects;
+	BoundingBox3D						m_sceneBoundingBox;
 
+
+	//debug
+	std::vector<DebugBoundingBox*>		m_debugBoundigBoxes;
 };

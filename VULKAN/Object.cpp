@@ -98,6 +98,10 @@ glm::mat4 Object::GetModelMatrix()
 
         m_modelMatrix = m_modelMatrix * rotateMat;
         m_needComputeModelMtx = false;
+
+		BoundingBox3D meshBB = GetObjectMesh()->GetBB();
+		m_boundingBox.Max = glm::vec3(m_modelMatrix * glm::vec4(meshBB.Max, 1.0f));
+		m_boundingBox.Min = glm::vec3(m_modelMatrix * glm::vec4(meshBB.Min, 1.0f));
     }
 
     return m_modelMatrix;
@@ -108,44 +112,8 @@ void Object::Render()
 	if (m_ObjectMesh)
 		m_ObjectMesh->Render();
 }
-
- /*void Object::GetPickableDescription(std::vector<std::string>& texts)
-{
-   texts.reserve(2);
-    texts.push_back("R/T Change roughness: " + std::to_string(m_roughtness));
-    texts.push_back("F/G Change metallic: " + std::to_string(m_metallic));
-}
-*/
- /*bool Object::ChangePickableProperties(unsigned int key)
-{
-   if (key == 'R')
-    {
-        m_roughtness = glm::max(m_roughtness - 0.05f, 0.0f);
-        return true;
-    }
-    else if(key == 'T')
-    {
-        m_roughtness = glm::min(m_roughtness + 0.05f, 1.0f);
-        return true;
-    }
-    else if(key == 'F')
-    {
-        m_metallic = glm::max(m_metallic - 0.05f, 0.0f);
-        return true;
-    }
-    else if(key == 'G')
-    {
-        m_metallic = glm::min(m_metallic + 0.05f, 1.0f);
-        return true;
-    }
-
-    return false;
-}
-*/
 void Object::ValidateResources()
 {
-    //if (m_type == ObjectType::NormalMap)
-        //TRAP(m_normalMapTexture);
 }
 
 //////////////////////////////////////////////////////////////////////////

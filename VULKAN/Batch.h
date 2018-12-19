@@ -81,12 +81,13 @@ private:
 
 	struct SubpassInfo
 	{
+		uint8_t												VisibilityMask;
 		uint32_t											IndirectCommandsNumber;
 		BufferHandle*										CommonBuffer;
 		BufferHandle*										SpecificBuffer;
 		BufferHandle*										IndirectCommands;
 		std::vector<VkDescriptorSet>						DescriptorSets;
-		std::vector<Object*>								RenderedObjects;
+		std::vector<Object*>								VisibleObjects;
 	};
 
 	void BuildMeshBuffers();
@@ -95,6 +96,7 @@ private:
 	void IndexTextures();
 
 	void UpdateIndirectCmdBuffer(SubpassInfo& subpass);
+	bool UpdateVisibleObjects(SubpassInfo& subpass);
 
 	std::string GetSubpassDebugMarker(SubpassIndex subpassIndex);
 private:

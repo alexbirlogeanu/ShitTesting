@@ -5,6 +5,7 @@
 #include "VulkanLoader.h"
 #include "Serializer.h"
 #include "Singleton.h"
+#include "Geometry.h"
 
 #include <string>
 #include <vector>
@@ -12,11 +13,12 @@
 class Mesh;
 class CTexture;
 class Material;
-enum class ObjectType
+
+enum VisibilityType : uint8_t
 {
-    Solid,
-    NormalMap,
-    Count
+	Invalid = 0,
+	InCameraFrustum = 1 << 0,
+	InShadowFrustum = 1 << 1
 };
 
 class Object :/* public CPickable,*/ public SeriableImpl<Object>
@@ -65,13 +67,15 @@ public:
 
     BoundingBox3D GetBoundingBox() const
     {
-        return GetObjectMesh()->GetBB();
+		return m_boundingBox;
     }
 
     glm::mat4 GetModelMatrix();
-private:
-   
 
+	bool CheckVisibility(VisibilityType type) const { return (m_visibilityMask & type) != 0; }
+	void SetVisibility(VisibilityType type) { m_visibilityMask = m_visibilityMask | type; }
+	void ResetVisibility(VisibilityType type) { m_visibilityMask = m_visibilityMask & (~type); }
+private:
     void ValidateResources();
 
     friend class ObjectSerializer;
@@ -89,7 +93,9 @@ private:
     float                   m_xRot;
 
     glm::mat4               m_modelMatrix;
+	BoundingBox3D			m_boundingBox;
 
+	uint8_t					m_visibilityMask;
 };
 
 class ObjectSerializer : public Serializer, public Singleton<ObjectSerializer>
