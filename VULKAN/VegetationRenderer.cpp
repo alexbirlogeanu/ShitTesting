@@ -529,7 +529,7 @@ void VegetationRenderer::GenerateVegetation()
 	std::vector<glm::vec3> plantsPosition;
 	plantsPosition.reserve(totalPlants);
 
-	CScene::CalculatePlantsPositions(glm::uvec2(width, height), numberOfPlantsPerCell, plantsPosition);
+	Scene::GetInstance()->CalculatePlantsPositions(glm::uvec2(width, height), numberOfPlantsPerCell, plantsPosition);
 
 	delete[] vegetationDistribution.data;
 
@@ -557,8 +557,8 @@ void VegetationRenderer::GenerateVegetation()
 		m_plants.push_back({ glm::vec4(p, 1.0f), glm::vec4(glm::vec2(vegTemplate->GetSize()), bendFactor, float(index)) });
 	}
 
-	glm::vec3 sceneMin3D = glm::vec3(-CScene::TerrainSize.x / 2.0f, 0.0f, -CScene::TerrainSize.y / 2.0f) + CScene::TerrainTranslate;
-	glm::vec3 sceneMax3D = glm::vec3(CScene::TerrainSize.x / 2.0f, 0.0f, CScene::TerrainSize.y / 2.0f) + CScene::TerrainTranslate;
+	glm::vec3 sceneMin3D = glm::vec3(-Scene::TerrainSize.x / 2.0f, 0.0f, -Scene::TerrainSize.y / 2.0f) + Scene::TerrainTranslate;
+	glm::vec3 sceneMax3D = glm::vec3(Scene::TerrainSize.x / 2.0f, 0.0f, Scene::TerrainSize.y / 2.0f) + Scene::TerrainTranslate;
 
 	m_partitionTree = new QuadTree(glm::vec2(sceneMin3D.x, sceneMin3D.z), glm::vec2(sceneMax3D.x, sceneMax3D.z), 3, m_plants);
 

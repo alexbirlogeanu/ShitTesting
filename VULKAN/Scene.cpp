@@ -8,30 +8,38 @@
 //////////////////////////////////////////////////////////////////////////
 //CScene
 //////////////////////////////////////////////////////////////////////////
-std::unordered_set<Object*> CScene::ms_sceneObjects; //i got the objects in 2 places: here and in ObjectFactory. BUt fuck it. not important
-BoundingBox3D CScene::ms_sceneBoundingBox;
-const glm::uvec2 CScene::TerrainGridSize (64, 64);
-const glm::vec2 CScene::TerrainSize (20.0f, 20.0f);
-const glm::vec3 CScene::TerrainTranslate = glm::vec3(0.0f, -5.0f, -3.0f); //lel
 
-void CScene::AddObject(Object* obj)
+const glm::uvec2 Scene::TerrainGridSize(64, 64);
+const glm::vec2 Scene::TerrainSize(20.0f, 20.0f);
+const glm::vec3 Scene::TerrainTranslate = glm::vec3(0.0f, -5.0f, -3.0f); //lel
+
+Scene::Scene()
 {
-	auto result = ms_sceneObjects.insert(obj);
-	TRAP(result.second == true);
 
-	CScene::UpdateBoundingBox();
+}
+Scene::~Scene()
+{
+
 }
 
-void CScene::UpdateBoundingBox()
+void Scene::AddObject(Object* obj)
 {
-	ms_sceneBoundingBox.Max = ms_sceneBoundingBox.Min = glm::vec3();
-	if (ms_sceneObjects.empty())
+	auto result = m_sceneObjects.insert(obj);
+	TRAP(result.second == true);
+
+	UpdateBoundingBox();
+}
+
+void Scene::UpdateBoundingBox()
+{
+	m_sceneBoundingBox.Max = m_sceneBoundingBox.Min = glm::vec3();
+	if (m_sceneObjects.empty())
 		return;
 
 	glm::vec3 maxLimits(std::numeric_limits<float>::min());
 	glm::vec3 minLimits(std::numeric_limits<float>::max());
 
-	for (auto o = ms_sceneObjects.begin(); o != ms_sceneObjects.end(); ++o)
+	for (auto o = m_sceneObjects.begin(); o != m_sceneObjects.end(); ++o)
 	{
 		BoundingBox3D bb = (*o)->GetBoundingBox();
 		std::vector<glm::vec3> bbPoints;
@@ -43,11 +51,11 @@ void CScene::UpdateBoundingBox()
 		}
 	}
 
-	ms_sceneBoundingBox.Max = maxLimits;
-	ms_sceneBoundingBox.Min = minLimits;
+	m_sceneBoundingBox.Max = maxLimits;
+	m_sceneBoundingBox.Min = minLimits;
 }
 
-void CScene::CalculatePlantsPositions(glm::uvec2 vegetationGridSize, const std::vector<uint32_t>& plantsPerCell, std::vector<glm::vec3>& outPositions)
+void Scene::CalculatePlantsPositions(glm::uvec2 vegetationGridSize, const std::vector<uint32_t>& plantsPerCell, std::vector<glm::vec3>& outPositions)
 {
 	unsigned int seed = 986923;
 	std::mt19937 generator(seed);
@@ -86,10 +94,15 @@ void CScene::CalculatePlantsPositions(glm::uvec2 vegetationGridSize, const std::
 
 					float height = heightMap.GetRed(uint32_t(heightPixel.x), uint32_t(heightPixel.y)) * 7.0f; //the max height of the terrain. can be found in terrainrenderer. TODO should be centralized
 
-					outPositions.push_back(glm::vec3(pos.x, height, pos.y) + CScene::TerrainTranslate - glm::vec3(TerrainSize.x / 2.0f, 1.0f, TerrainSize.y / 2.0f)); //set height 0. it will be computed later based on heightmap
+					outPositions.push_back(glm::vec3(pos.x, height, pos.y) + Scene::TerrainTranslate - glm::vec3(TerrainSize.x / 2.0f, 1.0f, TerrainSize.y / 2.0f)); //set height 0. it will be computed later based on heightmap
 				}
 		}
 	}
 
 	delete[] heightMap.data;
+}
+
+void Scene::Update(float dt)
+{
+
 }

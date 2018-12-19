@@ -86,7 +86,7 @@ void TerrainRenderer::PreRender()
 {
 	TerrainParams* params = m_terrainParamsBuffer->GetPtr<TerrainParams*>();
 
-	glm::mat4 modelMatrix = glm::scale(glm::translate(glm::mat4(1.0f), CScene::TerrainTranslate), glm::vec3(1.0f));
+	glm::mat4 modelMatrix = glm::scale(glm::translate(glm::mat4(1.0f), Scene::TerrainTranslate), glm::vec3(1.0f));
 	m_pushConstants.ModelMatrix = modelMatrix;
 
 	glm::mat4 projMatrix;
@@ -169,10 +169,10 @@ void TerrainRenderer::CreateGrid()
 	std::vector<SVertex> vertices;
 	std::vector<uint32_t> indices;
 
-	const uint32_t xDivision = CScene::TerrainGridSize.x;
-	const uint32_t yDivision = CScene::TerrainGridSize.y;
-	const float xLength = CScene::TerrainSize.x;
-	const float yLength = CScene::TerrainSize.y;
+	const uint32_t xDivision = Scene::TerrainGridSize.x;
+	const uint32_t yDivision = Scene::TerrainGridSize.y;
+	const float xLength = Scene::TerrainSize.x;
+	const float yLength = Scene::TerrainSize.y;
 
 	const float xStride = xLength / xDivision;
 	const float yStride = yLength / yDivision;

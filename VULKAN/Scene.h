@@ -1,25 +1,33 @@
 #pragma once
 
 #include "Geometry.h"
+#include "Singleton.h"
 
 #include <unordered_set>
 class Object;
 
-class CScene
+class Scene : public Singleton<Scene>
 {
+	friend class Singleton<Scene>;
 public:
+	//keep this shit for now
 	const static glm::uvec2 TerrainGridSize;
 	const static glm::vec2 TerrainSize;
 	const static glm::vec3 TerrainTranslate; //lel
 
-	static void AddObject(Object* obj);
-	static BoundingBox3D GetBoundingBox() { return ms_sceneBoundingBox; };
-	static void CalculatePlantsPositions(glm::uvec2 vegetationGridSize, const std::vector<uint32_t>& plantsPerCell, std::vector<glm::vec3>& outPositions);
+	void AddObject(Object* obj);
+	BoundingBox3D GetBoundingBox() { return m_sceneBoundingBox; };
+	void CalculatePlantsPositions(glm::uvec2 vegetationGridSize, const std::vector<uint32_t>& plantsPerCell, std::vector<glm::vec3>& outPositions);
+
+	void Update(float dt);
 
 private:
-	static void UpdateBoundingBox();
+	Scene();
+	virtual ~Scene();
+
+	void UpdateBoundingBox();
 private:
-	static std::unordered_set<Object*>      ms_sceneObjects;
-	static BoundingBox3D                    ms_sceneBoundingBox;
+	std::unordered_set<Object*>      m_sceneObjects;
+	BoundingBox3D                    m_sceneBoundingBox;
 
 };
