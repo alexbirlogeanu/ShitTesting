@@ -273,27 +273,17 @@ void Batch::UpdateIndirectCmdBuffer(SubpassInfo& subpass)
 
 bool Batch::UpdateVisibleObjects(SubpassInfo& subpass)
 {
-	/*auto lastVisible = std::stable_partition(m_objects.begin(), m_objects.end(), [&subpass](const Object* obj)
+	auto lastVisible = std::stable_partition(m_objects.begin(), m_objects.end(), [&subpass](const Object* obj)
 	{
 		return obj->CheckVisibility((VisibilityType)subpass.VisibilityMask);
-	});*/
-
-	std::vector<Object*> visible;
-
-	std::copy_if(m_objects.begin(), m_objects.end(), std::back_inserter(visible), [&subpass](const Object* obj)
-	{
-		return obj->CheckVisibility((VisibilityType)subpass.VisibilityMask);
-
 	});
 
-	if (visible.size() == subpass.VisibleObjects.size()) //i feel like its a week condition, but lets put it in practice
+	if ((lastVisible - m_objects.begin()) == subpass.VisibleObjects.size()) //i feel like its a week condition, but lets put it in practice
 		return false; //visible objects didnt change 
 
 	auto& visObjects = subpass.VisibleObjects;
-	//visObjects.clear();
-	//visObjects.insert(visObjects.end(), m_objects.begin(), lastVisible);
-
-	visObjects = visible;
+	visObjects.clear();
+	visObjects.insert(visObjects.end(), m_objects.begin(), lastVisible);
 
 	return true;
 }
