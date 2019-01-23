@@ -49,7 +49,7 @@ vec4 GetPlaneFrom(vec4 p1, vec4 p2, vec4 p3)
 
 float InverseDepthTransform(float z)
 {
-	float near = 0.1f;
+	float near = 0.01f;
 	float far = 75.0f;
 	float range = (far - near);
 	return (far + near) / range - 2 * near / (z * range);

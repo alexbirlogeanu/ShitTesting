@@ -25,14 +25,14 @@ mat4 InvProjMatrix;
 
 float LiniarizeDepth(float z)
 {
-	float near = 0.1;
+	float near = 0.01;
 	float far = 75.0f;
 	return (2 * near) / (far + near - z * (far - near));
 }
 
 float InvLiniarizeDepth(float z)
 {
-	float near = 0.1;
+	float near = 0.01;
 	float far = 75.0f;
 	
 	return (far + near) / (far - near) - (2 * near) / (z * (far - near));

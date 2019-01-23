@@ -5,7 +5,7 @@
 float Depth()
 {
 	float z = gl_FragCoord.z;
-	float near = 0.1;
+	float near = 0.01;
 	float far = 75.0f;
 	return (2 * near) / (far + near - z * (far - near));
 }

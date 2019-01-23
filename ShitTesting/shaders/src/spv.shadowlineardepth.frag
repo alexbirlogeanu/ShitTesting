@@ -5,8 +5,8 @@
 void main()
 {
 	float z = gl_FragCoord.z;
-	float near = 0.1;
-	float far = 4.0f;
+	float near = 0.01;
+	float far = 75.0f;
 	gl_FragDepth = (2 * near) / (far + near - z * (far - near));
 	//gl_FragDepth = z;
 }
