@@ -144,6 +144,9 @@
     <ClCompile Include="Geometry.cpp">
       <Filter>Source Files\GraphicsUtils</Filter>
     </ClCompile>
+    <ClCompile Include="TestRenderer.cpp">
+      <Filter>Source Files\Renderer</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="VulkanLoader.h">
@@ -268,6 +271,9 @@
     </ClInclude>
     <ClInclude Include="Geometry.h">
       <Filter>Header Files\GraphicsUtils</Filter>
+    </ClInclude>
+    <ClInclude Include="TestRenderer.h">
+      <Filter>Header Files\Renderer</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

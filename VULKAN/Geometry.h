@@ -64,6 +64,32 @@ struct BoundingBox3D
 		for (unsigned int i = 0; i < tPoints.size(); ++i)
 			tPoints[i] = glm::vec3(tMatrix * glm::vec4(tPoints[i], 1.0f));
 	}
+
+	glm::vec3 GetPositiveVertex(const glm::vec3& dir)
+	{
+		glm::vec3 p = Min;
+		if (dir.x >= 0.0f)
+			p.x = Max.x;
+		if (dir.y >= 0.0f)
+			p.y = Max.y;
+		if (dir.z >= 0.0f)
+			p.z = Max.z;
+
+		return p;
+	}
+
+	glm::vec3 GetNegativeVertex(const glm::vec3& dir)
+	{
+		glm::vec3 n = Max;
+		if (dir.x >= 0.0f)
+			n.x = Min.x;
+		if (dir.y >= 0.0f)
+			n.y = Min.y;
+		if (dir.z >= 0.0f)
+			n.z = Min.z;
+
+		return n;
+	}
 };
 
 struct Plane
@@ -114,6 +140,7 @@ public:
 		PLCount
 	};
 
+	CFrustum() {}
 	CFrustum(float N, float F);
 	virtual ~CFrustum();
 

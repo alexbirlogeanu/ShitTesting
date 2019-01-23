@@ -12,14 +12,22 @@
 //ShadowMapRenderer
 //////////////////////////////////////////////////////////////////////////
 
+struct ShadowParams
+{
+	glm::ivec4 NSplits;
+	ShadowMapRenderer::SplitsArrayType Splits;
+};
 
 ShadowMapRenderer::ShadowMapRenderer(VkRenderPass renderPass)
-    : CRenderer(renderPass, "ShadowmapRenderPass")
+	: CRenderer(renderPass, "ShadowmapRenderPass")
+	, m_splitsBuffer(nullptr)
+	, m_splitsDescSet(VK_NULL_HANDLE)
 {
 }
 
 ShadowMapRenderer::~ShadowMapRenderer()
 {
+	MemoryManager::GetInstance()->FreeHandle(m_splitsBuffer);
 }
 
 void ShadowMapRenderer::Init()
@@ -27,8 +35,12 @@ void ShadowMapRenderer::Init()
     CRenderer::Init();
 	g_commonResources.SetAs<VkRenderPass>(&m_renderPass, EResourceType_ShadowRenderPass); //kinda tricky if i forgot that the order of renderers matters.
 
+	m_splitsBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(ShadowParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+
+	AllocDescriptorSets(m_descriptorPool, m_splitDescLayout.Get(), &m_splitsDescSet);
+
 	VkPushConstantRange pushConstRange;
-	pushConstRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	pushConstRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT;
 	pushConstRange.offset = 0;
 	pushConstRange.size = 256; //max push constant range(can get it from limits)
 
@@ -37,51 +49,105 @@ void ShadowMapRenderer::Init()
     m_pipeline.SetScissor(SHADOWW, SHADOWH);
     m_pipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
     m_pipeline.SetVertexShaderFile("shadow.vert");
-    //m_pipeline.SetFragmentShaderFile("shadowlineardepth.frag");
-    m_pipeline.SetStencilTest(true);
-    m_pipeline.SetStencilOp(VK_COMPARE_OP_ALWAYS);
-    m_pipeline.SetStencilOperations(VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_REPLACE);
-    m_pipeline.SetStencilValues(0x01, 0x01, 1);
+	m_pipeline.SetGeometryShaderFile("shadow.geom");
+    m_pipeline.SetFragmentShaderFile("shadowlineardepth.frag");
 	m_pipeline.AddPushConstant(pushConstRange);
 
-    m_pipeline.CreatePipelineLayout(m_descriptorSetLayout);
+	std::vector<VkDescriptorSetLayout> layouts{ m_descriptorSetLayout, m_splitDescLayout.Get() };
+    m_pipeline.CreatePipelineLayout(layouts);
     m_pipeline.Init(this, m_renderPass, 0);
 }
 
-void ShadowMapRenderer::ComputeCascadeViewMatrix(glm::mat4& view)
+void ShadowMapRenderer::ComputeCascadeSplitMatrices(/*const glm::mat4& view*/)
 {
-	glm::vec3 lightDir(directionalLight.GetDirection());
-
-	glm::vec3 sceneMin(-10.0f, -5.0f, -13.0f); //hardcoded for now
-	glm::vec3 sceneMax(10.0f, 2.0f, 7.0f); //need to move this in a scene manager that computes the terrain bounding box based on the terrain mesh
-	glm::vec3 orig = (sceneMax + sceneMin) / 2.0f;
-
-	float radius = glm::length(sceneMax - orig);
-
-	view = glm::lookAt(orig - radius * lightDir, orig, glm::vec3(0.0f, 1.0f, 0.0f));
-}
-
-void ShadowMapRenderer::ComputeCascadeProjMatrix(glm::mat4& proj, const glm::mat4& view)
-{
-	float alpha = 0.25f;
+	float alpha = 0.15f;
 	float cameraNear = ms_camera.GetNear();
 	float cameraFar = ms_camera.GetFar();
-	float splitIndex = 1.0f;//for split index we have zi as near plane and zi+1 as far plane
-	float splitNumbers = 3.0f;
 
-	float splitFar = alpha * cameraNear * glm::pow(cameraFar / cameraNear, splitIndex / splitNumbers) + (1.0f - alpha) * (cameraNear + (splitIndex / splitNumbers) * (cameraFar - cameraNear));
+	float splitNumbers =  float(SHADOWSPLITS);
+	float splitFar = 0;
+	float splitNear = cameraNear;
 
-	CFrustum frustum(cameraNear, splitFar);
-	frustum.Update(ms_camera.GetPos(), ms_camera.GetFrontVector(), ms_camera.GetUpVector(), ms_camera.GetRightVector(), ms_camera.GetFOV()); //in worldspace
+	auto linearizeDepth = [](float z)
+	{
+		float n = 0.01f;
+		float f = 75.0f;
+		return (2 * n) / (f + n - z * (f - n));
+	};
 
-	proj = glm::ortho(-25.0f, 25.0f, -15.0f, 15.0f, cameraNear, splitFar);
-	glm::mat4 PV = proj * view;
+	glm::vec3 j = glm::vec3(.0f, 1.0f, 0.0f);
+	glm::vec3 lightDir = glm::vec3(directionalLight.GetDirection());
+	glm::vec3 lightRight = glm::normalize(glm::cross(lightDir, j));
+	glm::vec3 lightUp = glm::normalize(glm::cross(lightRight, lightUp));
+
+	glm::mat4  initialProj = glm::ortho(-20.f, 20.1f, -11.f, 11.5f, 0.01f, 20.0f);
+	ConvertToProjMatrix(initialProj);
+
+	for (uint32_t s = 0; s < SHADOWSPLITS; ++s)
+	{
+		float splitIndex = float(s + 1.0f);//for split index we have zi as near plane and zi+1 as far plane
+		glm::mat4 view;
+		glm::mat4 proj;
+
+		splitFar = alpha * cameraNear * glm::pow(cameraFar / cameraNear, splitIndex / splitNumbers) + (1.0f - alpha) * (cameraNear + (splitIndex / splitNumbers) * (cameraFar - cameraNear));
+
+		CFrustum frustum(splitNear, splitFar);
+		frustum.Update(ms_camera.GetPos(), ms_camera.GetFrontVector(), ms_camera.GetUpVector(), ms_camera.GetRightVector(), ms_camera.GetFOV()); //in worldspace
+		
+		ComputeCascadeViewMatrix(frustum, lightDir, lightUp, view);
+		ComputeCascadeProjMatrix(frustum, view, initialProj, proj);
+
+		//I will explain this for the future self, to not make stupid faces while you're trying to understand. its the same as:
+		// projVec4 = ProjMatrix * viewPosVector4; //but we do the multiply only for z component
+		//projVec4.z /= projVec4.w;
+		//and then we bring z from -1, 1 -> 0, 1 because ProjMatrix is the old opengl format with z between -1, 1, vulkan changed that
+		/*
+		expanded fomulae:
+		z = -splitFar * (-(cameraFar + cameraNear) / (cameraFar - cameraNear) - (2 * cameraFar * cameraNear) /(cameraFar - cameraNear);
+		w = (-1) * (-splitFar);
+
+		projZ = z / w;
+		its -splitFar  beacause in Vulkan camera points towards the -z axes
+		*/
+		
+		float projectedZ = ((splitFar * (cameraFar + cameraNear) - 2.0f * (cameraFar * cameraNear)) / (cameraFar - cameraNear)) / splitFar;
+		projectedZ = projectedZ * 0.5f + 0.5f;
+
+		m_splitProjMatrix[s].NearFar = glm::vec4(splitNear, linearizeDepth(projectedZ), 0.0f, 0.0f);
+		m_splitProjMatrix[s].ProjViewMatrix = proj * view;
+
+		splitNear = splitFar;
+	}
+}
+
+void ShadowMapRenderer::ComputeCascadeViewMatrix(const CFrustum& splitFrustrum, const glm::vec3& lightDir, const glm::vec3& lightUp, glm::mat4& outView)
+{
+	const float kLightCameraDist = 7.5f;
+	glm::vec3 wpMin = glm::vec3(std::numeric_limits<float>::max());
+	glm::vec3 wpMax = glm::vec3(std::numeric_limits<float>::min());
+
+	for (unsigned int i = 0; i < CFrustum::FPCount; ++i)
+	{
+		wpMin = glm::min(wpMin, splitFrustrum.GetPoint(i));
+		wpMax = glm::max(wpMax, splitFrustrum.GetPoint(i));
+	}
+
+	BoundingBox3D bb(wpMin, wpMax);
+	glm::vec3 lightCameraEye = bb.GetNegativeVertex(lightDir) - lightDir * kLightCameraDist;
+	//glm::vec3 lightCameraEye = (wpMin + wpMax) / 2.0f - lightDir * kLightCameraDist;
+
+	outView = glm::lookAt(lightCameraEye, lightCameraEye + lightDir, lightUp); //this up vector for me doesnt seem right
+}
+
+void ShadowMapRenderer::ComputeCascadeProjMatrix(const CFrustum& splitFrustum, const glm::mat4& lightViewMatrix, const glm::mat4& lightProjMatrix, glm::mat4& outCroppedProjMatrix)
+{
+	glm::mat4 PV = lightProjMatrix * lightViewMatrix;
 	glm::vec3 minLimits = glm::vec3(std::numeric_limits<float>::max());
 	glm::vec3 maxLimits = glm::vec3(std::numeric_limits<float>::min());
 
 	for (unsigned int i = 0; i < CFrustum::FPCount; ++i)
 	{
-		glm::vec4 lightPos = PV * glm::vec4(frustum.GetPoint(i), 1.0f);
+		glm::vec4 lightPos = PV * glm::vec4(splitFrustum.GetPoint(i), 1.0f);
 		minLimits = glm::min(minLimits, glm::vec3(lightPos));
 		maxLimits = glm::max(maxLimits, glm::vec3(lightPos));
 	}
@@ -98,39 +164,45 @@ void ShadowMapRenderer::ComputeCascadeProjMatrix(glm::mat4& proj, const glm::mat
 		glm::vec4(0.0f, scaleY, 0.0f, 0.0f),
 		glm::vec4(0.0f, 0.0f, scaleZ, 0.0f),
 		glm::vec4(offsetX, offsetY, offsetZ, 1.0f)
-		);
+	);
 
-	proj = C * proj;
-
-	ConvertToProjMatrix(proj);
+	outCroppedProjMatrix = C * lightProjMatrix;
 }
 
 void ShadowMapRenderer::UpdateGraphicInterface()
 {
+	VkDescriptorBufferInfo splitBuffer = m_splitsBuffer->GetDescriptor();
+
+	std::vector<VkWriteDescriptorSet> wDesc;
+	wDesc.push_back(InitUpdateDescriptor(m_splitsDescSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &splitBuffer));
+
+	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
 }
 
 void ShadowMapRenderer::PreRender()
 {
-	glm::mat4 view;
-	glm::mat4 proj;
+	ComputeCascadeSplitMatrices();
 
-	ComputeCascadeViewMatrix(view);
-	ComputeCascadeProjMatrix(proj, view);
-	
-	m_shadowViewProj = proj * view;
+	m_shadowViewProj = m_splitProjMatrix[0].ProjViewMatrix;
+
+	ShadowParams* params = m_splitsBuffer->GetPtr<ShadowParams*>();
+	params->NSplits = glm::ivec4(SHADOWSPLITS);
+	params->Splits = m_splitProjMatrix;
 }
 
 void ShadowMapRenderer::Render()
 {
     VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
 
-	BatchManager::GetInstance()->RenderShadows();
+	vk::CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.Get());
+	vk::CmdBindDescriptorSets(cmd, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 1, 1, &m_splitsDescSet, 0, nullptr);
 
+	BatchManager::GetInstance()->RenderShadows();
 }
 
 void ShadowMapRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)
 {
-    AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1);
+    AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1);
     maxSets = 1;
 }
 
@@ -138,6 +210,7 @@ void ShadowMapRenderer::UpdateResourceTable()
 {
     UpdateResourceTableForDepth(EResourceType_ShadowMapImage);
     g_commonResources.SetAs<glm::mat4>(&m_shadowViewProj, EResourceType_ShadowProjViewMat);
+	g_commonResources.SetAs<SplitsArrayType>(&m_splitProjMatrix, EResourceType_ShadowMapSplits);
 
 	TRAP(m_pipeline.IsValid());
 	g_commonResources.SetAs<CGraphicPipeline>(&m_pipeline, EResourceType_ShadowRenderPipeline);
@@ -151,6 +224,9 @@ void ShadowMapRenderer::CreateDescriptorSetLayout()
 	descCnt[0] = CreateDescriptorBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
 
     NewDescriptorSetLayout(descCnt, &m_descriptorSetLayout);
+
+	m_splitDescLayout.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_GEOMETRY_BIT, 1);
+	m_splitDescLayout.Construct();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -161,6 +237,8 @@ struct ShadowResolveParameters
     glm::vec4   LightDirection;
     glm::vec4   CameraPosition; 
     glm::mat4   ShadowProjMatrix;
+	glm::ivec4	NSplits;
+	ShadowMapRenderer::SplitsArrayType Splits;
 };
 
 CShadowResolveRenderer::CShadowResolveRenderer(VkRenderPass renderpass)
@@ -295,6 +373,8 @@ void CShadowResolveRenderer::UpdateShaderParams()
     params->ShadowProjMatrix = shadowProj;
     params->LightDirection = directionalLight.GetDirection();
     params->CameraPosition = glm::vec4(ms_camera.GetPos(), 1.0f);
+	params->Splits = g_commonResources.GetAs<ShadowMapRenderer::SplitsArrayType>(EResourceType_ShadowMapSplits);
+	params->NSplits = glm::ivec4(SHADOWSPLITS);
 }
 
 void CShadowResolveRenderer::UpdateGraphicInterface()
@@ -302,14 +382,17 @@ void CShadowResolveRenderer::UpdateGraphicInterface()
 	ImageHandle* normalImage = g_commonResources.GetAs<ImageHandle*>(EResourceType_NormalsImage);
 	ImageHandle* positionImage = g_commonResources.GetAs<ImageHandle*>(EResourceType_PositionsImage);
 	ImageHandle* shadowMapImage = g_commonResources.GetAs<ImageHandle*>(EResourceType_ShadowMapImage);
+	ImageHandle* depthImage = g_commonResources.GetAs<ImageHandle*>(EResourceType_DepthBufferImage);
 
     VkDescriptorImageInfo normalInfo = CreateDescriptorImageInfo(m_nearSampler, normalImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     VkDescriptorImageInfo posInfo = CreateDescriptorImageInfo(m_nearSampler, positionImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     VkDescriptorImageInfo shadowhInfo = CreateDescriptorImageInfo(m_depthSampler, shadowMapImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	//VkDescriptorImageInfo shadowhInfo = CreateDescriptorImageInfo(m_depthSampler, shadowMapImage->GetLayerView(0), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 	VkDescriptorBufferInfo constInfo = m_uniformBuffer->GetDescriptor();
     VkDescriptorImageInfo shadowText = CreateDescriptorImageInfo(m_nearSampler, shadowMapImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     VkDescriptorImageInfo blockerDistText = CreateDescriptorImageInfo(m_nearSampler, m_blockerDistrText->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     VkDescriptorImageInfo pcfDistText = CreateDescriptorImageInfo(m_nearSampler, m_PCFDistrText->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkDescriptorImageInfo depthText = CreateDescriptorImageInfo(m_nearSampler, depthImage->GetView(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
     std::vector<VkWriteDescriptorSet> wDesc;
     wDesc.push_back(InitUpdateDescriptor(m_descriptorSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &constInfo));
@@ -319,6 +402,7 @@ void CShadowResolveRenderer::UpdateGraphicInterface()
     wDesc.push_back(InitUpdateDescriptor(m_descriptorSet, 4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &shadowText));
     wDesc.push_back(InitUpdateDescriptor(m_descriptorSet, 5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &blockerDistText));
     wDesc.push_back(InitUpdateDescriptor(m_descriptorSet, 6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &pcfDistText));
+	wDesc.push_back(InitUpdateDescriptor(m_descriptorSet, 7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &depthText));
 
 #ifdef USE_SHADOW_BLUR
     VkSampler blurSampler = m_nearSampler;
@@ -342,6 +426,7 @@ void CShadowResolveRenderer::CreateDescriptorSetLayout()
         bindings.push_back(CreateDescriptorBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT));
         bindings.push_back(CreateDescriptorBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT));
         bindings.push_back(CreateDescriptorBinding(6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT));
+		bindings.push_back(CreateDescriptorBinding(7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT));
 
         VkDescriptorSetLayoutCreateInfo crtInfo;
         cleanStructure(crtInfo);
@@ -372,7 +457,7 @@ void CShadowResolveRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>&
 {
     maxSets = 3;
     AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1);
-    AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8);
+    AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 9);
 }
 
 void CShadowResolveRenderer::UpdateResourceTable()

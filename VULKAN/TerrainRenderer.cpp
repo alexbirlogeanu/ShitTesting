@@ -6,6 +6,7 @@
 #include "Texture.h"
 #include "Scene.h"
 #include "Geometry.h"
+#include "ShadowRenderer.h"
 
 #include "Input.h"
 
@@ -18,11 +19,19 @@ struct TerrainParams
 	glm::vec4 PatchParams; //xy - number of cells that are in terrain texture patch, zw - total number of cells in a terrain grid
 };
 
+struct ShadowTerrainParams
+{
+	glm::ivec4								NSplits;
+	ShadowMapRenderer::SplitsArrayType		Splits;
+};
+
 TerrainRenderer::TerrainRenderer(VkRenderPass renderPass)
 	: CRenderer(renderPass, "TerrainRenderPass")
 	, m_grid(nullptr)
 	, m_descSet(VK_NULL_HANDLE)
+	, m_shadowDescSet(VK_NULL_HANDLE)
 	, m_terrainParamsBuffer(nullptr)
+	, m_shadowSplitsBuffer(nullptr)
 	, m_splatterTexture(nullptr)
 	, m_activePipeline(nullptr)
 	, m_editMode(false)
@@ -45,8 +54,10 @@ void TerrainRenderer::Init()
 	CRenderer::Init();
 
 	m_terrainParamsBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(TerrainParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	m_shadowSplitsBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(ShadowTerrainParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
 	AllocDescriptorSets(m_descriptorPool, m_descriptorLayout.Get(), &m_descSet);
+	AllocDescriptorSets(m_descriptorPool, m_shadowDescLayout.Get(), &m_shadowDescSet);
 
 	CreatePipeline();
 
@@ -71,27 +82,34 @@ void TerrainRenderer::Render()
 
 void TerrainRenderer::RenderShadows()
 {
+	glm::mat4 proj;
+	PerspectiveMatrix(proj);
+	ConvertToProjMatrix(proj);
 	m_pushConstants.ShadowProjViewMatrix = g_commonResources.GetAs<glm::mat4>(EResourceType_ShadowProjViewMat);
-
+	m_pushConstants.ViewMatrix = proj * ms_camera.GetViewMatrix();
 	VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
 
 	vk::CmdBindPipeline(cmdBuffer, m_shadowPipeline.GetBindPoint(), m_shadowPipeline.Get());
-	vk::CmdPushConstants(cmdBuffer, m_shadowPipeline.GetLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ShadowParams), &m_pushConstants);
+	vk::CmdPushConstants(cmdBuffer, m_shadowPipeline.GetLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(ShadowPushConstants), &m_pushConstants);
+	vk::CmdBindDescriptorSets(cmdBuffer, m_shadowPipeline.GetBindPoint(), m_shadowPipeline.GetLayout(), 0, 1, &m_shadowDescSet, 0, nullptr);
 
 	m_grid->Render();
-
 }
 
 void TerrainRenderer::PreRender()
 {
-	TerrainParams* params = m_terrainParamsBuffer->GetPtr<TerrainParams*>();
-
 	glm::mat4 modelMatrix = glm::scale(glm::translate(glm::mat4(1.0f), Scene::TerrainTranslate), glm::vec3(1.0f));
 	m_pushConstants.ModelMatrix = modelMatrix;
+	
+	ShadowTerrainParams* shadowParams = m_shadowSplitsBuffer->GetPtr<ShadowTerrainParams*>();
+	shadowParams->NSplits = glm::ivec4(SHADOWSPLITS);
+	shadowParams->Splits = g_commonResources.GetAs<ShadowMapRenderer::SplitsArrayType>(EResourceType_ShadowMapSplits);
 
 	glm::mat4 projMatrix;
 	PerspectiveMatrix(projMatrix);
 	ConvertToProjMatrix(projMatrix);
+	
+	TerrainParams* params = m_terrainParamsBuffer->GetPtr<TerrainParams*>();
 
 	params->MaterialProp = glm::vec4(0.90, 0.1, 0.5, 0.0f);
 	params->WorldMatrix = modelMatrix;
@@ -109,7 +127,8 @@ void TerrainRenderer::CreateDescriptorSetLayout()
 
 	m_descriptorLayout.Construct();
 
-	m_shadowDescLayout.Construct(); //its empty. use push constants
+	m_shadowDescLayout.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_GEOMETRY_BIT, 1);
+	m_shadowDescLayout.Construct(); 
 }
 
 void TerrainRenderer::CreatePipeline()
@@ -151,13 +170,13 @@ void TerrainRenderer::CreatePipeline()
 	m_shadowPipeline.SetScissor(SHADOWW, SHADOWH);
 	//m_shadowPipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
 	m_shadowPipeline.SetVertexShaderFile("shadow_terrain.vert");
-	m_shadowPipeline.AddPushConstant({VK_SHADER_STAGE_VERTEX_BIT, 0, 256});
+	m_shadowPipeline.SetGeometryShaderFile("shadow_terrain.geom");
+	m_shadowPipeline.SetFragmentShaderFile("shadowlineardepth.frag");
+	m_shadowPipeline.AddPushConstant({VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 0, 256});
 
 	m_shadowPipeline.CreatePipelineLayout(m_shadowDescLayout.Get());
 	m_shadowPipeline.Init(this, shadowRenderPass, 0);
 }
-
-
 
 //shit function
 void TerrainRenderer::CreateGrid()
@@ -412,10 +431,11 @@ bool TerrainRenderer::OnMouseInput(const MouseInput& mouseInput)
 
 void TerrainRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)
 {
-	maxSets = 1;
+	maxSets = 2;
 	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1);
 	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1);
 	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, (uint32_t)m_terrainTextures.size());
+	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1); //shadow
 }
 
 void TerrainRenderer::UpdateResourceTable()
@@ -428,6 +448,7 @@ void TerrainRenderer::UpdateGraphicInterface()
 	std::vector<VkWriteDescriptorSet> wDesc;
 
 	VkDescriptorBufferInfo buffInfo = m_terrainParamsBuffer->GetDescriptor();
+	VkDescriptorBufferInfo splitsInfo = m_shadowSplitsBuffer->GetDescriptor();
 	std::vector<VkDescriptorImageInfo> textInfos;
 
 	for (auto text : m_terrainTextures)
@@ -436,6 +457,7 @@ void TerrainRenderer::UpdateGraphicInterface()
 	wDesc.push_back(InitUpdateDescriptor(m_descSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfo));
 	wDesc.push_back(InitUpdateDescriptor(m_descSet, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &m_splatterTexture->GetTextureDescriptor()));
 	wDesc.push_back(InitUpdateDescriptor(m_descSet, 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, textInfos));
+	wDesc.push_back(InitUpdateDescriptor(m_shadowDescSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &splitsInfo));
 
 	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
 }

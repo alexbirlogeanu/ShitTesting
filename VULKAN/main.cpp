@@ -42,6 +42,7 @@
 #include "Batch.h"
 #include "Material.h"
 #include "Scene.h"
+#include "TestRenderer.h"
 
 #include "MemoryManager.h"
 #include "Input.h"
@@ -930,6 +931,7 @@ private:
 	void SetupScreenSpaceReflectionsRendering();
 	void SetupTerrainRendering();
 	void SetupVegetationRendering();
+	void SetupTestRendering();
 
     void CreateDeferredRenderPass(const FramebufferDescription& fbDesc);
     void CreateAORenderPass(const FramebufferDescription& fbDesc);
@@ -949,6 +951,7 @@ private:
 	void CreateSSRRenderPass(const FramebufferDescription& fbDesc);
 	void CreateTerrainRenderPass(const FramebufferDescription& fbDesc);
 	void CreateVegetationRenderPass(const FramebufferDescription& fbDesc);
+	void CreateTestRenderPass(const FramebufferDescription& fbDesc);
 
     void CreateCommandBuffer();
   
@@ -963,8 +966,6 @@ private:
     //pipeline
     void GetQueue();
     void CreateSynchronizationHelpers();
-
-    //void CreateDescriptorPool();
     void CreateQueryPools();
 
     void SetupParticles();
@@ -1009,6 +1010,7 @@ private:
 	VkRenderPass				m_ssrRenderPass;
 	VkRenderPass				m_terrainRenderPass;
 	VkRenderPass				m_vegetationRenderPass;
+	VkRenderPass				m_testRenderPass;
 
     VkQueue                     m_queue;
 
@@ -1053,6 +1055,7 @@ private:
 	ScreenSpaceReflectionsRenderer*	m_ssrRenderer;
 	TerrainRenderer*			m_terrainRenderer;
 	VegetationRenderer*			m_vegetationRenderer;
+	TestRenderer*				m_testRenderer;
 
     //bool                        m_pickRecorded;
     bool                        m_screenshotRequested;
@@ -1173,6 +1176,7 @@ CApplication::CApplication()
 	SetupScreenSpaceReflectionsRendering();
 	SetupTerrainRendering();
 	SetupVegetationRendering();
+	//SetupTestRendering();
 
     GetPickManager()->Setup();
 
@@ -1869,14 +1873,14 @@ void CApplication::SetupShadowMapRendering()
 {
     FramebufferDescription fbDesc;
     fbDesc.Begin(0);
-    fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "ShadowMap");
+    fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "ShadowMap", SHADOWSPLITS);
     fbDesc.End();
 
     CreateShadowRenderPass(fbDesc);
     m_shadowRenderer = new ShadowMapRenderer(m_shadowRenderPass);
     m_shadowRenderer->Init();
 
-    m_shadowRenderer->CreateFramebuffer(fbDesc, SHADOWW, SHADOWH);
+	m_shadowRenderer->CreateFramebuffer(fbDesc, SHADOWW, SHADOWH, SHADOWSPLITS);
 }
 
  void CApplication::SetupShadowResolveRendering()
@@ -1884,7 +1888,7 @@ void CApplication::SetupShadowMapRendering()
      FramebufferDescription fbDesc;
      fbDesc.Begin(3);
      fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "ShadowResolveFinal");
-     fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "ShadowResolveDebug");
+     fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "ShadowResolveDebug");
      fbDesc.AddColorAttachmentDesc(2, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "ShadowResolveBlur");
      fbDesc.End();
 
@@ -2080,6 +2084,20 @@ void CApplication::SetupVegetationRendering()
 	m_vegetationRenderer = new VegetationRenderer(m_vegetationRenderPass);
 	m_vegetationRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
 	m_vegetationRenderer->Init();
+}
+
+void CApplication::SetupTestRendering()
+{
+	FramebufferDescription fbDesc;
+	fbDesc.Begin(0);
+	fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, 0, "TestDepth", 3);
+	fbDesc.End();
+
+	CreateTestRenderPass(fbDesc);
+
+	m_testRenderer = new TestRenderer(m_testRenderPass);
+	m_testRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT, 3);
+	m_testRenderer->Init();
 }
 
 void CApplication::CreateShadowRenderPass(const FramebufferDescription& fbDesc)
@@ -2492,6 +2510,18 @@ void CApplication::CreateVegetationRenderPass(const FramebufferDescription& fbDe
 	NewRenderPass(&m_vegetationRenderPass, ad, subpasses, dependencies);
 }
 
+void CApplication::CreateTestRenderPass(const FramebufferDescription& fbDesc)
+{
+	VkAttachmentDescription depth;
+	AddAttachementDesc(depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format);
+
+	VkAttachmentReference depthRef = CreateAttachmentReference(0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+	VkSubpassDescription subpass = CreateSubpassDesc(nullptr, 0, &depthRef);
+
+	NewRenderPass(&m_testRenderPass, { depth }, { subpass });
+}
+
 void CApplication::CreateCommandBuffer()
 {
     VkCommandPoolCreateInfo cmdPoolCi;
@@ -2722,6 +2752,8 @@ void CApplication::Render()
     QueryManager::GetInstance().Reset();
     QueryManager::GetInstance().StartStatistics();
     RenderShadows();
+
+	//m_testRenderer->Render();
 
     m_objectRenderer->Render();
 	m_terrainRenderer->Render();//TODO object renderer clear the GBuffer. I have to move it at the start of frame

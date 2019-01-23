@@ -58,8 +58,15 @@ ImageHandle::ImageHandle(VkImage vkHandle, VkDeviceSize size, VkDeviceSize align
 	, m_view(VK_NULL_HANDLE)
 	, m_format(imgInfo.format)
 	, m_dimensions(imgInfo.extent)
+	, m_layers(imgInfo.arrayLayers)
 {
 	CreateImageView(m_view, Get(), imgInfo);
+	if (m_layers > 1)
+	{
+		m_layersViews.resize(m_layers);
+		for (uint32_t i = 0; i < m_layers; ++i)
+			CreateImageView(m_layersViews[i], Get(), imgInfo.format, imgInfo.extent, 1, i, imgInfo.mipLevels, 0);
+	}
 }
 
 void ImageHandle::FreeResources()
@@ -68,6 +75,10 @@ void ImageHandle::FreeResources()
 	{
 		VkDevice dev = vk::g_vulkanContext.m_device;
 		vk::DestroyImageView(dev, m_view, nullptr);
+		
+		for (auto& layerView : m_layersViews)
+			vk::DestroyImageView(dev, layerView, nullptr);
+
 		vk::DestroyImage(dev, Get(), nullptr);
 	}
 }
@@ -119,6 +130,16 @@ VkImageMemoryBarrier ImageHandle::CreateMemoryBarrierForMips(uint32_t mipLevel, 
 	outBarrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 
 	return outBarrier;
+}
+
+const VkImageView& ImageHandle::GetLayerView(uint32_t layer) const
+{
+	if (m_layers == 1) //if image is not a layered one ignore the param
+		return m_view;
+
+	TRAP(layer < m_layers);
+	TRAP(!m_layersViews.empty() && "Layers not initialized!");
+	return m_layersViews[layer];
 }
 
 ///////////////////////////////////////////////////////////////////////////////////

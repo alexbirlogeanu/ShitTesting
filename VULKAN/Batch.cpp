@@ -114,7 +114,6 @@ void BatchManager::RenderAll()
 void BatchManager::RenderShadows()
 {
 	CGraphicPipeline* shadowPipeline = g_commonResources.GetAsPtr<CGraphicPipeline>(EResourceType_ShadowRenderPipeline);
-	vk::CmdBindPipeline(vk::g_vulkanContext.m_mainCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shadowPipeline->Get());
 
 	for (auto& batch : m_batches)
 	{
@@ -566,7 +565,7 @@ void Batch::PrepareRendering(const CGraphicPipeline& pipeline, SubpassIndex subp
 	else
 		vk::CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.GetLayout(), 0, 1, &subpassInfo.DescriptorSets[0], 0, nullptr);
 
-	vk::CmdPushConstants(cmdBuffer, pipeline.GetLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(BatchParams), &m_batchParams);
+	vk::CmdPushConstants(cmdBuffer, pipeline.GetLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(BatchParams), &m_batchParams);
 }
 
 std::string Batch::GetSubpassDebugMarker(SubpassIndex subpass)

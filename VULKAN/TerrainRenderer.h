@@ -42,9 +42,10 @@ private:
 
 	bool OnMouseInput(const MouseInput& mouseInput);
 private:
-	struct ShadowParams
+	struct ShadowPushConstants
 	{
 		glm::mat4 ShadowProjViewMatrix;
+		glm::mat4 ViewMatrix;
 		glm::mat4 ModelMatrix;
 	};
 
@@ -54,7 +55,8 @@ private:
 	CGraphicPipeline				m_shadowPipeline;
 
 	BufferHandle*					m_terrainParamsBuffer;
-	
+	BufferHandle*					m_shadowSplitsBuffer;
+
 	Mesh*							m_grid;
 	std::vector<CTexture*>			m_terrainTextures;
 	CTexture*						m_splatterTexture;
@@ -63,10 +65,11 @@ private:
 	DescriptorSetLayout				m_shadowDescLayout;
 
 	VkDescriptorSet					m_descSet;
+	VkDescriptorSet					m_shadowDescSet;
 
 	glm::vec4						m_tesselationParameters;
 	glm::vec4						m_terrainPatchParameters; //use for texturing. Packs following data: xy - number of cells that are in a patch, zw - total number of cells that are in a terrain grid
-	ShadowParams					m_pushConstants;
+	ShadowPushConstants				m_pushConstants;
 
 	bool							m_drawWireframe;
 	bool							m_editMode;

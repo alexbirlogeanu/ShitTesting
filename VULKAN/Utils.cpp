@@ -479,23 +479,27 @@ bool CreateShaderModule(const std::string& inFileName, VkShaderModule& outModule
 
 void CreateImageView(VkImageView& outImgView, const VkImage& img, const VkImageCreateInfo& crtInfo)
 {
-    VkFormat format = crtInfo.format;
-    VkImageAspectFlags aspectFlags = 0;
-    if(IsColorFormat(format))
-    {
-        aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
-    }
-    else
-    {
-        aspectFlags = (IsDepthFormat(format))? VK_IMAGE_ASPECT_DEPTH_BIT : 0;
-        //aspectFlags |= (IsStencilFormat(format))? VK_IMAGE_ASPECT_STENCIL_BIT : 0;
-    }
+	CreateImageView(outImgView, img, crtInfo.format, crtInfo.extent, crtInfo.arrayLayers, 0, crtInfo.mipLevels, 0);
+}
 
-    TRAP(aspectFlags);
-	VkImageViewType viewType = (crtInfo.extent.height > 1) ? VK_IMAGE_VIEW_TYPE_2D : VK_IMAGE_VIEW_TYPE_1D;
-	viewType = (crtInfo.extent.depth > 1) ? VK_IMAGE_VIEW_TYPE_3D : viewType;
+void CreateImageView(VkImageView& outImgView, const VkImage& img, VkFormat format, const VkExtent3D& extent, uint32_t arrayLayers, uint32_t baseLayer, uint32_t mipLevels, uint32_t baseMipLevel)
+{
+	VkImageAspectFlags aspectFlags = 0;
+	if (IsColorFormat(format))
+	{
+		aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
+	}
+	else
+	{
+		aspectFlags = (IsDepthFormat(format)) ? VK_IMAGE_ASPECT_DEPTH_BIT : 0;
+		//aspectFlags |= (IsStencilFormat(format))? VK_IMAGE_ASPECT_STENCIL_BIT : 0;
+	}
 
-	if (crtInfo.arrayLayers > 1)
+	TRAP(aspectFlags);
+	VkImageViewType viewType = (extent.height > 1) ? VK_IMAGE_VIEW_TYPE_2D : VK_IMAGE_VIEW_TYPE_1D;
+	viewType = (extent.depth > 1) ? VK_IMAGE_VIEW_TYPE_3D : viewType;
+
+	if (arrayLayers > 1)
 	{
 		if (viewType == VK_IMAGE_VIEW_TYPE_2D)
 			viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
@@ -503,26 +507,24 @@ void CreateImageView(VkImageView& outImgView, const VkImage& img, const VkImageC
 			viewType = VK_IMAGE_VIEW_TYPE_1D_ARRAY;
 	}
 
-    //VkImageViewType viewType = (crtInfo.arrayLayers > 1)? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
-
-	if (crtInfo.extent.depth > 1)
+	if (extent.depth > 1)
 		viewType = VK_IMAGE_VIEW_TYPE_3D;
 
-    VkImageViewCreateInfo ImgView;
-    cleanStructure(ImgView);
-    ImgView.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    ImgView.pNext = nullptr;
-    ImgView.flags = 0;
-    ImgView.image = img;
-    ImgView.viewType = viewType;
-    ImgView.format = format;
-    ImgView.subresourceRange.aspectMask = aspectFlags;
-    ImgView.subresourceRange.layerCount = crtInfo.arrayLayers;
-	ImgView.subresourceRange.levelCount = crtInfo.mipLevels;
-    ImgView.subresourceRange.baseArrayLayer = 0;
-    ImgView.subresourceRange.baseMipLevel = 0;
+	VkImageViewCreateInfo ImgView;
+	cleanStructure(ImgView);
+	ImgView.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	ImgView.pNext = nullptr;
+	ImgView.flags = 0;
+	ImgView.image = img;
+	ImgView.viewType = viewType;
+	ImgView.format = format;
+	ImgView.subresourceRange.aspectMask = aspectFlags;
+	ImgView.subresourceRange.layerCount = arrayLayers;
+	ImgView.subresourceRange.levelCount = mipLevels;
+	ImgView.subresourceRange.baseArrayLayer = baseLayer;
+	ImgView.subresourceRange.baseMipLevel = baseMipLevel;
 
-    VULKAN_ASSERT(vk::CreateImageView(vk::g_vulkanContext.m_device, &ImgView, nullptr, &outImgView));
+	VULKAN_ASSERT(vk::CreateImageView(vk::g_vulkanContext.m_device, &ImgView, nullptr, &outImgView));
 }
 
 void AllocBufferMemory(VkBuffer& buffer, VkDeviceMemory& memory, uint32_t size, VkBufferUsageFlags usage)

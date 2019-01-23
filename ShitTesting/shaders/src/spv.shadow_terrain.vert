@@ -7,10 +7,11 @@ layout(location=0) in vec3 position;
 layout(push_constant) uniform PushConstants
 {
 	mat4 ShadowProjViewMatrix;
+	mat4 ViewMatrix;
 	mat4 WorldMatrix;
 };
 
 void main()
 {
-    gl_Position = ShadowProjViewMatrix * WorldMatrix * vec4(position, 1.0f);
+    gl_Position = WorldMatrix * vec4(position, 1.0f);
 }

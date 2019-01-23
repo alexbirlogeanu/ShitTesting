@@ -107,7 +107,7 @@ MaterialTemplateBase::~MaterialTemplateBase()
 void MaterialTemplateBase::CreatePipeline(CRenderer* renderer)
 {
 	VkPushConstantRange pushConstRange;
-	pushConstRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	pushConstRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT;
 	pushConstRange.offset = 0;
 	pushConstRange.size = 256; //max push constant range(can get it from limits)
 

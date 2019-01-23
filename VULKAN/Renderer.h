@@ -86,13 +86,13 @@ struct FramebufferDescription
 		m_colorAttachments[index] = FBAttachment(img, clr);
     }
 
-    void AddDepthAttachmentDesc(VkFormat format, VkImageUsageFlags additionalUsage, const std::string& debugName = std::string(), uint8_t stencilClrValue = 0)
+	void AddDepthAttachmentDesc(VkFormat format, VkImageUsageFlags additionalUsage, const std::string& debugName = std::string(), unsigned int layers = 1, uint8_t stencilClrValue = 0)
     {
         TRAP(IsDepthFormat(format));
         VkClearValue clrVal;
         clrVal.depthStencil.depth = 1.0f;
         clrVal.depthStencil.stencil = stencilClrValue;
-        m_depthAttachments = FBAttachment(format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | additionalUsage, 1, clrVal, debugName);
+		m_depthAttachments = FBAttachment(format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | additionalUsage, layers, clrVal, debugName);
     }
 
      void AddDepthAttachmentDesc( ImageHandle* existingImage, uint8_t stencilClrValue = 0)

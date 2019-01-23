@@ -8,6 +8,7 @@
 	<shader shaderfile="spv.light.vert" out="light.vert" />
 	<shader shaderfile="spv.light.frag" out="light.frag" />
 	<shader shaderfile="spv.shadow.vert" out="shadow.vert" />
+	<shader shaderfile="spv.shadow.geom" out="shadow.geom" />
 	<shader shaderfile="spv.screenquad.vert" out="screenquad.vert" />
 	<shader shaderfile="spv.fxaa.frag" out="fxaa.frag" />
 	<shader shaderfile="spv.ui2d.vert" out="ui2d.vert" />
@@ -65,6 +66,7 @@
 	<shader shaderfile="spv.terrain.geom" out="terrain.geom"/>
 	<shader shaderfile="spv.terrain_debug.vert" out="terrain_debug.vert"/>
 	<shader shaderfile="spv.shadow_terrain.vert" out="shadow_terrain.vert"/>
+	<shader shaderfile="spv.shadow_terrain.geom" out="shadow_terrain.geom"/>
 	<shader shaderfile="spv.grass.vert" out="grass.vert"/>
 	<shader shaderfile="spv.grass.frag" out="grass.frag"/>
 	<shader shaderfile="spv.debugbb.vert" out="debugbb.vert"/>

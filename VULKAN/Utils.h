@@ -51,7 +51,8 @@ bool IsDepthFormat(VkFormat format);
 bool IsStencilFormat(VkFormat format);
 bool IsColorFormat(VkFormat format);
 bool CreateShaderModule(const std::string& inFileName, VkShaderModule& outModule);
-void CreateImageView(VkImageView& outImgView, const VkImage& img, const VkImageCreateInfo& crtInfo);
+void CreateImageView(VkImageView& outImgView, const VkImage& img, const VkImageCreateInfo& crtInfo); //TODO delete this function use the new one instead
+void CreateImageView(VkImageView& outImgView, const VkImage& img, VkFormat format, const VkExtent3D& extent, uint32_t arrayLayers, uint32_t baseLayer, uint32_t mipLevels, uint32_t baseMipLevel); // NEW ONE
 void AllocBufferMemory(VkBuffer& buffer, VkDeviceMemory& memory, uint32_t size, VkBufferUsageFlags usage);
 void AllocImageMemory(const VkImageCreateInfo& imgInfo, VkImage& outImage, VkDeviceMemory& outMemory, const std::string& debugName = std::string());
 

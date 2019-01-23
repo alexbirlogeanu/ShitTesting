@@ -4,6 +4,7 @@
 #include "Utils.h"
 #include "defines.h"
 #include "VulkanLoader.h"
+#include "DescriptorsUtils.h"
 
 #include <vector>
 
@@ -12,9 +13,18 @@
 class Mesh;
 class CTexture;
 class Object;
+class CFrustum;
+
+struct ShadowSplit
+{
+	glm::mat4 ProjViewMatrix;
+	glm::vec4 NearFar;
+};
 
 class ShadowMapRenderer : public CRenderer //this one have to be refactored. Maybe will not need this anymore
 {
+public:
+	typedef std::array<ShadowSplit, SHADOWSPLITS> SplitsArrayType;
 public:
     ShadowMapRenderer(VkRenderPass renderPass);
     virtual ~ShadowMapRenderer();
@@ -27,8 +37,9 @@ protected:
     void CreateDescriptorSetLayout() override;
     virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override;
 	
-	void ComputeCascadeViewMatrix(glm::mat4& view);
-	void ComputeCascadeProjMatrix(glm::mat4& proj, const glm::mat4& view);
+	void ComputeCascadeSplitMatrices();
+	void ComputeCascadeViewMatrix(const CFrustum& splitFrustrum, const glm::vec3& lightDir, const glm::vec3& lightUp, glm::mat4& outView);
+	void ComputeCascadeProjMatrix(const CFrustum& splitFrustum, const glm::mat4& lightViewMatrix, const glm::mat4& lightProjMatrix, glm::mat4& outCroppedProjMatrix);
 
     void UpdateGraphicInterface() override;
 private:
@@ -36,6 +47,12 @@ private:
 
     CGraphicPipeline                m_pipeline;
     VkDescriptorSetLayout           m_descriptorSetLayout;
+
+	BufferHandle*					m_splitsBuffer;
+	VkDescriptorSet					m_splitsDescSet;
+	DescriptorSetLayout				m_splitDescLayout;
+
+	SplitsArrayType					m_splitProjMatrix;
 };
 
 

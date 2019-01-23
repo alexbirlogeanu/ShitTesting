@@ -151,7 +151,8 @@ public:
 	VkImageMemoryBarrier CreateMemoryBarrier(VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcMask, VkAccessFlags dstMask, VkImageAspectFlags aspectFlags, unsigned int layersCount = VK_REMAINING_ARRAY_LAYERS);
 	VkImageMemoryBarrier CreateMemoryBarrierForMips(uint32_t mipLevel, VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcMask, VkAccessFlags dstMask, VkImageAspectFlags aspectFlags, uint32_t mipCount = 1);
 
-	VkImageView& GetView() { return m_view; }
+	const VkImageView& GetView() const { return m_view; };
+	const VkImageView& GetLayerView(uint32_t layer) const;
 	VkFormat GetFormat() const { return m_format; }
 	const VkExtent3D GetDimensions() const { return m_dimensions; }
 protected:
@@ -165,7 +166,9 @@ protected:
 	virtual void FreeResources() override;
 protected:
 	VkImageView						m_view; //image view associated with de img
+	std::vector<VkImageView>		m_layersViews; //if a img is multi layers, we create a view for every layer.
 	VkFormat						m_format;
+	uint32_t						m_layers;
 	VkExtent3D						m_dimensions;
 };
 

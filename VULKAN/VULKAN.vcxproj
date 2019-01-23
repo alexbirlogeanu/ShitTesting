@@ -160,6 +160,7 @@
     <ClInclude Include="ShadowRenderer.h" />
     <ClInclude Include="SVertex.h" />
     <ClInclude Include="TerrainRenderer.h" />
+    <ClInclude Include="TestRenderer.h" />
     <ClInclude Include="Texture.h" />
     <ClInclude Include="UI.h" />
     <ClInclude Include="UiUtils.h" />
@@ -198,6 +199,7 @@
     <ClCompile Include="Renderer.cpp" />
     <ClCompile Include="ShadowRenderer.cpp" />
     <ClCompile Include="TerrainRenderer.cpp" />
+    <ClCompile Include="TestRenderer.cpp" />
     <ClCompile Include="Texture.cpp" />
     <ClCompile Include="UI.cpp" />
     <ClCompile Include="Utils.cpp" />
