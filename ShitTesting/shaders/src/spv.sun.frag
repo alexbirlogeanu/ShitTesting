@@ -21,21 +21,20 @@ layout(set=0, binding=2) uniform sampler2D DepthText;
 layout(location=0) in vec4 uv;
 layout(location=1) in vec4 debug;
 
-float Depth()
+/* float Depth()
 {
 	float z = gl_FragCoord.z;
 	float near = 0.01;
 	float far = 75.0f;
 	return (2 * near) / (far + near - z * (far - near));
-}
+} */
 
 void main()
 {
 	color = texture(SunFlare, uv.st);
 	color.rgb *= LightColor.rgb * color.a;
-	float tDepth = Depth();
 	float d = texture(DepthText, gl_FragCoord.xy / Scale.zw).r;
 	
-	if(!any(bvec3(color.rgb)) || (tDepth > d))
+	if(!any(bvec3(color.rgb)) || (d < 1.0f))
 		color.rgb = vec3(0.0f);
 }

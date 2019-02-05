@@ -28,5 +28,6 @@ void main()
 	pos.xyz -= Scale.x * in_position.x * CameraRight.xyz;
 	pos.xyz += Scale.x * in_position.y * CameraUp.xyz;
 	gl_Position = ProjMatrix * ViewMatrix * vec4(pos, 1.0f);
+	gl_Position.z = gl_Position.w;
 	debug = gl_Position;
 }

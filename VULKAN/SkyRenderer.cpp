@@ -69,7 +69,7 @@ void CSunRenderer::Init()
 
     auto initPipeline = [&](CGraphicPipeline& pipeline, unsigned int subpass, char* vertex, char* fragment, VkDescriptorSetLayout& layout){
         pipeline.SetCullMode(VK_CULL_MODE_NONE);
-        pipeline.SetDepthTest(VK_FALSE);
+        //pipeline.SetDepthTest(VK_FALSE);
         pipeline.SetVertexInputState(Mesh::GetVertexDesc());
         pipeline.SetViewport(width, height);
         pipeline.SetScissor(width, height);
@@ -83,11 +83,6 @@ void CSunRenderer::Init()
     initPipeline(m_blurVPipeline, ESunPass_BlurV, "screenquad.vert", "vblur.frag", m_blurSetLayout);
     initPipeline(m_blurHPipeline, ESunPass_BlurH, "screenquad.vert", "hblur.frag", m_blurSetLayout);
     initPipeline(m_blurRadialPipeline, ESunPass_BlurRadial, "screenquad.vert", "radialblur.frag", m_radialBlurSetLayout);
-
-    //warning
-    m_sunPipeline.SetDepthTest(VK_TRUE);
-    m_sunPipeline.SetDepthOp(VK_COMPARE_OP_LESS_OR_EQUAL);
-    m_sunPipeline.SetDepthWrite(false);
     initPipeline(m_sunPipeline, ESunPass_Sun, "sun.vert", "sun.frag", m_sunDescriptorSetLayout);
 
     CreateLinearSampler(m_sampler);
@@ -328,9 +323,10 @@ void CSunRenderer::UpdateShaderParams()
     sunParams->CameraRight = glm::vec4(ms_camera.GetRightVector(), 0.0f);
     sunParams->CameraUp = glm::vec4(ms_camera.GetUpVector(), 0.0f);
 
-    static const float farDist = 20.0f;
+    const float farDist = ms_camera.GetFar();
     glm::vec4 sunPos = proj * ms_camera.GetViewMatrix() * glm::vec4(glm::vec3(-directionalLight.GetDirection()) * farDist, 1.0f);
     sunPos = sunPos / sunPos.w;
+	sunPos.z = 1.0f;
 
     SRadialBlurParams* rbParams = m_radialBlurParamsBuffer->GetPtr<SRadialBlurParams*>();
     rbParams->ProjSunPos = sunPos;
@@ -340,7 +336,7 @@ void CSunRenderer::UpdateShaderParams()
     rbParams->SampleWeight = glm::vec4(m_lightShaftWeight);
     rbParams->ShaftSamples = glm::vec4(m_lightShaftSamples);
 
-    m_renderSun = glm::all(glm::greaterThanEqual(glm::vec3(sunPos), glm::vec3(-1.5f))) && glm::all(glm::lessThanEqual(glm::vec3(sunPos), glm::vec3(1.5f)));
+    m_renderSun = glm::all(glm::greaterThanEqual(glm::vec3(sunPos), glm::vec3(-1.0f))) && glm::all(glm::lessThanEqual(glm::vec3(sunPos), glm::vec3(1.0f)));
 }
 
 void CSunRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)
