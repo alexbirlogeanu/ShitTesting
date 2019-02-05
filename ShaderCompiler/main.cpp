@@ -7,8 +7,9 @@
 #include <string>
 #include <cstdint>
 
-#define SRCXML "src/shaderlist.xml"
-#define SRCDIR "src/"
+#define SRCXML std::string("src/shaderlist.xml")
+#define SRCDIR std::string("src/")
+#define HEADERDIR std::string("headers/")
 
 typedef rapidxml::xml_document<char> TXmlDoc;
 typedef rapidxml::xml_node<char>      TXmlNode;
@@ -132,9 +133,13 @@ bool CompileShader(const char* const shaderFile, const char* const outFile, cons
 
     std::string outLocation = outDir + "/" + outFile;
     std::string nonConstShaderFile = shaderFile;
+	std::string includeOption = " -I" + SRCDIR + HEADERDIR;
+	std::string outputOption = " -o " + outLocation;
+	std::string binaryOption = " -V " + SRCDIR + nonConstShaderFile;
+
     std::string commandLine = SRCDIR;
-    commandLine += "glslangValidator.exe -V "; 
-    commandLine += SRCDIR + nonConstShaderFile + " -o " + outLocation;
+    commandLine += "glslangValidator.exe "; 
+    commandLine += binaryOption + outputOption + includeOption;
 
     char data[128];
     memcpy(data, commandLine.data(), commandLine.size());
