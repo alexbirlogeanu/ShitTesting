@@ -5,6 +5,8 @@
 #include "ResourceTable.h"
 #include "Object.h"
 #include "Batch.h"
+#include "Input.h"
+#include "UI.h"
 
 #include <random>
 
@@ -22,7 +24,11 @@ ShadowMapRenderer::ShadowMapRenderer(VkRenderPass renderPass)
 	: CRenderer(renderPass, "ShadowmapRenderPass")
 	, m_splitsBuffer(nullptr)
 	, m_splitsDescSet(VK_NULL_HANDLE)
+	, m_splitsAlphaFactor(0.15f)
+	, m_isDebugMode(false)
+	, m_debugText(nullptr)
 {
+	InputManager::GetInstance()->MapKeysPressed({ '4','T', 'G' }, InputManager::KeyPressedCallback(this, &ShadowMapRenderer::OnKeyPressed));
 }
 
 ShadowMapRenderer::~ShadowMapRenderer()
@@ -60,7 +66,7 @@ void ShadowMapRenderer::Init()
 
 void ShadowMapRenderer::ComputeCascadeSplitMatrices(/*const glm::mat4& view*/)
 {
-	float alpha = 0.15f;
+	//float alpha = 0.15f;
 	float cameraNear = ms_camera.GetNear();
 	float cameraFar = ms_camera.GetFar();
 
@@ -89,7 +95,7 @@ void ShadowMapRenderer::ComputeCascadeSplitMatrices(/*const glm::mat4& view*/)
 		glm::mat4 view;
 		glm::mat4 proj;
 
-		splitFar = alpha * cameraNear * glm::pow(cameraFar / cameraNear, splitIndex / splitNumbers) + (1.0f - alpha) * (cameraNear + (splitIndex / splitNumbers) * (cameraFar - cameraNear));
+		splitFar = m_splitsAlphaFactor * cameraNear * glm::pow(cameraFar / cameraNear, splitIndex / splitNumbers) + (1.0f - m_splitsAlphaFactor) * (cameraNear + (splitIndex / splitNumbers) * (cameraFar - cameraNear));
 
 		CFrustum frustum(splitNear, splitFar);
 		frustum.Update(ms_camera.GetPos(), ms_camera.GetFrontVector(), ms_camera.GetUpVector(), ms_camera.GetRightVector(), ms_camera.GetFOV()); //in worldspace
@@ -177,6 +183,41 @@ void ShadowMapRenderer::UpdateGraphicInterface()
 	wDesc.push_back(InitUpdateDescriptor(m_splitsDescSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &splitBuffer));
 
 	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
+}
+
+bool ShadowMapRenderer::OnKeyPressed(const KeyInput& key)
+{
+	std::string debugText = "4 - close; T/G increase/decrease alpha. Alpha: ";
+
+	if (key.IsKeyPressed('4'))
+	{
+		m_isDebugMode = !m_isDebugMode;
+		if (m_isDebugMode)
+			m_debugText = CUIManager::GetInstance()->CreateTextItem(debugText + std::to_string(m_splitsAlphaFactor), glm::uvec2(10, 50));
+		else
+			CUIManager::GetInstance()->DestroyTextItem(m_debugText);
+
+		return true;
+	}
+
+	if (!m_isDebugMode)
+		return false;
+
+
+	if (key.IsKeyPressed('T'))
+	{
+		m_splitsAlphaFactor = glm::min(m_splitsAlphaFactor + 0.05f, 0.95f);
+		m_debugText->SetText(debugText + std::to_string(m_splitsAlphaFactor));
+		return true;
+	}
+	else if (key.IsKeyPressed('G'))
+	{
+		m_splitsAlphaFactor = glm::max(m_splitsAlphaFactor - 0.05f, 0.05f);
+		m_debugText->SetText(debugText + std::to_string(m_splitsAlphaFactor));
+		return true;
+	}
+
+	return false;
 }
 
 void ShadowMapRenderer::PreRender()

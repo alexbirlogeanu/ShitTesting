@@ -14,6 +14,8 @@ class Mesh;
 class CTexture;
 class Object;
 class CFrustum;
+class CUIText;
+class keyInput;
 
 struct ShadowSplit
 {
@@ -42,6 +44,8 @@ protected:
 	void ComputeCascadeProjMatrix(const CFrustum& splitFrustum, const glm::mat4& lightViewMatrix, const glm::mat4& lightProjMatrix, glm::mat4& outCroppedProjMatrix);
 
     void UpdateGraphicInterface() override;
+
+	bool OnKeyPressed(const KeyInput& key);
 private:
     glm::mat4                       m_shadowViewProj;
 
@@ -53,6 +57,11 @@ private:
 	DescriptorSetLayout				m_splitDescLayout;
 
 	SplitsArrayType					m_splitProjMatrix;
+	float							m_splitsAlphaFactor;
+
+	//
+	bool							m_isDebugMode;
+	CUIText*						m_debugText;
 };
 
 
