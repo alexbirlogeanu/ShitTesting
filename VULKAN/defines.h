@@ -17,7 +17,7 @@
 
 #define SHADOWW 2 * WIDTH
 #define SHADOWH 2 * HEIGHT
-#define SHADOWSPLITS 2
+#define SHADOWSPLITS 3
 
 #define MAXUIITEMS  36
 

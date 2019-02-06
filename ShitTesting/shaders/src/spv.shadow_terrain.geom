@@ -66,11 +66,11 @@ void main()
 	{
 		float d = GetDepth(i);
 		TryAddNewSplit(GetSplitIndex(d), splitIndexes, numIndexes);
-		//TryAddNewSplit(GetSplitIndex(d - bias), splitIndexes, numIndexes);
+		TryAddNewSplit(GetSplitIndex(d - bias), splitIndexes, numIndexes);
 		TryAddNewSplit(GetSplitIndex(d + bias), splitIndexes, numIndexes);
 	}
 	
-	for (int s = 0; s < 3; ++s)
+	for (int s = 0; s < numIndexes; ++s)
 	{
 		gl_Layer = splitIndexes[s];
 		mat4 PV = Splits[gl_Layer].ProjViewMatrix;
