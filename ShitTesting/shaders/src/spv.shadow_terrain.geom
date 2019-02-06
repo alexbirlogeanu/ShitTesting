@@ -1,6 +1,9 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
+#extension GL_GOOGLE_include_directive : enable
+
+#include "DepthUtils.h.spv"
 
 layout(triangles) in;
 layout(triangle_strip, max_vertices = 9) out;
@@ -24,17 +27,10 @@ layout(set = 0, binding = 0) uniform ShadowParams
 	ShadowSplit		Splits[3]; //max 3 splits
 };
 
-float LiniarizeDepth(float z)
-{
-	float near = 0.01;
-	float far = 75.0f;
-	return (2 * near) / (far + near - z * (far - near));
-}
-
 float GetDepth(int vertexIndex)
 {
 	vec4 hPoint = ViewMatrix * gl_in[vertexIndex].gl_Position;
-	return LiniarizeDepth(hPoint.z / hPoint.w);
+	return LinearizeDepth(hPoint.z / hPoint.w);
 }
 
 int GetSplitIndex(float depth)

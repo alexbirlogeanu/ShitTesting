@@ -21,14 +21,6 @@ layout(set=0, binding=2) uniform sampler2D DepthText;
 layout(location=0) in vec4 uv;
 layout(location=1) in vec4 debug;
 
-/* float Depth()
-{
-	float z = gl_FragCoord.z;
-	float near = 0.01;
-	float far = 75.0f;
-	return (2 * near) / (far + near - z * (far - near));
-} */
-
 void main()
 {
 	color = texture(SunFlare, uv.st);

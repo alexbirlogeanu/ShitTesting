@@ -1,6 +1,9 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
+#extension GL_GOOGLE_include_directive : enable
+
+#include "DepthUtils.h.spv"
 
 layout(location=0) out vec4 ssrOutput;
 layout(location=1) out vec4 debug;
@@ -23,21 +26,6 @@ layout(set=0, binding=4) uniform sampler2D Depth_T;
 
 mat4 InvProjMatrix;
 
-float LiniarizeDepth(float z)
-{
-	float near = 0.01;
-	float far = 75.0f;
-	return (2 * near) / (far + near - z * (far - near));
-}
-
-float InvLiniarizeDepth(float z)
-{
-	float near = 0.01;
-	float far = 75.0f;
-	
-	return (far + near) / (far - near) - (2 * near) / (z * (far - near));
-}
-
 bool OutsideOfScreenSpace(float x)
 {
 	return x < 0.0f || x > 1.0f;
@@ -54,7 +42,7 @@ vec4 GetPointInViewSpace(vec2 coords)
 	vec4 viewSpacePoint = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 	if (any(lessThan(coords, vec2(0.0f, 0.0f))) || any(greaterThan(coords, vec2(1280.0f, 720.0f))))
 		return viewSpacePoint;
-	float depth = InvLiniarizeDepth(texelFetch(Depth_T, ivec2(coords), 0).r);
+	float depth = InverseLinearDepth(texelFetch(Depth_T, ivec2(coords), 0).r);
 	coords /= vec2(1280.0f, 720.0f);
 	coords = coords * 2.0f - 1.0f;
 	viewSpacePoint = InvProjMatrix * vec4(coords, depth, 1.0f);
@@ -87,7 +75,7 @@ bool TraceViewSpaceRay(	vec3 rayOrigin,
 		ndc /= ndc.w;
 		ndc.xy = (ndc.xy + 1.0f) / 2.0f;
 		
-		ndc.z = LiniarizeDepth(ndc.z);
+		ndc.z = LinearizeDepth(ndc.z);
 		float d = texture(Depth_T, ndc.xy).r;
 		
 		if (ndc.z > d)

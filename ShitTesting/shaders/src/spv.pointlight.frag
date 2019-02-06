@@ -1,6 +1,9 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
+#extension GL_GOOGLE_include_directive : enable
+
+#include "DepthUtils.h.spv"
 
 layout (set=0, binding=0) uniform sampler2D albedoText;
 layout (set=0, binding=1) uniform sampler2D specularText; //x = roughness, y = k, z = F0
@@ -93,14 +96,6 @@ vec3 ComputeLightColor(vec3 N, vec3 L, vec3 V, vec3 albedo, vec3 lightIradiance,
 	return color;
 }
 
-float Depth()
-{
-	float z = gl_FragCoord.z;
-	float near = 0.01;
-	float far = 75.0f;
-	return (2 * near) / (far + near - z * (far - near));
-}
-
 void main()
 {
 	ivec2 screenSize = textureSize(albedoText, 0);
@@ -124,7 +119,7 @@ void main()
 	vec3 lightColor = ComputeLightColor(normal, L, V, color, LightRadiance.rgb, attenuation, roughness, metalness);
 	
 	out_color = vec4(lightColor, 1.0f);
-	gl_FragDepth = Depth();
+	gl_FragDepth = LinearizeDepth(gl_FragCoord.z);
 	
 	
 }

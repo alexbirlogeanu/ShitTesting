@@ -33,7 +33,6 @@
 	<shader shaderfile="spv.hblur.frag" out="hblur.frag" />
 	<shader shaderfile="spv.vblur.frag" out="vblur.frag" />
 	<shader shaderfile="spv.gaussblur.frag" out="gaussblur.frag" />
-	<shader shaderfile="spv.lineardepth.frag" out="lineardepth.frag" />
 	<shader shaderfile="spv.fog.frag" out="fog.frag" />
 	<shader shaderfile="spv.sun.vert" out="sun.vert" />
 	<shader shaderfile="spv.sun.frag" out="sun.frag" />

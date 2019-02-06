@@ -1,6 +1,9 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
+#extension GL_GOOGLE_include_directive : enable
+
+#include "DepthUtils.h.spv"
 
 layout(location = 0) in vec4 WorldPosition;
 layout(location = 1) in mat4 InvModelMatrix;
@@ -65,5 +68,5 @@ void main()
 	}
 	//Debug = acumColor;
 	Out = acumColor;
-	gl_FragDepth = Depth();
+	gl_FragDepth = LinearizeDepth(gl_FragCoord.z);
 }

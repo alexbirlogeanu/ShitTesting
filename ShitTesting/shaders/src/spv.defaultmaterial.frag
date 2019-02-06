@@ -1,6 +1,9 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
+#extension GL_GOOGLE_include_directive : enable
+
+#include "DepthUtils.h.spv"
 
 layout(location=0) out vec4 albedo;
 layout(location=1) out vec4 out_specular;
@@ -27,14 +30,6 @@ layout(location=1) in vec4 worldPos;
 layout(location=2) in vec2 uv;
 layout(location=3) flat in uint BatchIndex;
 
-float Depth()
-{
-	float z = gl_FragCoord.z;
-	float near = 0.01;
-	float far = 75.0f;
-	return (2 * near) / (far + near - z * (far - near));
-}
-
 void main()
 {
 	MaterialPropertis Properties = materials[BatchIndex];
@@ -43,9 +38,10 @@ void main()
 	
 	vec2 lod = textureQueryLod(BatchTextures[index], uv);
 	albedo = texture(BatchTextures[index], uv, lod.x);
+
 	out_specular = vec4(Properties.Roughness, Properties.K, Properties.F0, 0.0f);
 	out_normal = normal;
 	out_position = worldPos;
 	
-	gl_FragDepth = Depth();
+	gl_FragDepth = LinearizeDepth(gl_FragCoord.z);
 }
