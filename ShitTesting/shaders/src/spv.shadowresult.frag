@@ -86,7 +86,7 @@ float CascadeShadowFactor()
 	float samplesInShadow = 9.0f;
 	vec4 shadowUV;
 	shadowUV.xyw = shadowPos.xyz;
-	float shadowBias = -0.01f;// * tan(acos(clamp(dot(normal, -LightDirection.xyz), 0.01f, 1.0f)));
+	float shadowBias = -0.005f;// * tan(acos(clamp(dot(normal, -LightDirection.xyz), 0.01f, 1.0f)));
 	shadowUV.w += shadowBias;
 	shadowUV.w = LinearizeDepth(shadowUV.w);
 	

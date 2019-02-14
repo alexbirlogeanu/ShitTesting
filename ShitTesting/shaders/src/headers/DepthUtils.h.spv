@@ -6,6 +6,13 @@ float LinearizeDepth(float z)
 	return (2 * near) / (far + near - z * (far - near));
 }
 
+double LinearizeDepth(double z)
+{
+	double near = 0.01;
+	double far = 75.0f;
+	return (2 * near) / (far + near - z * (far - near));
+}
+
 float InverseLinearDepth(float d)
 {
 	float near = 0.01;
