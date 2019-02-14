@@ -19,8 +19,6 @@
 #define SHADOWH 2 * HEIGHT
 #define SHADOWSPLITS 3
 
-#define MAXUIITEMS  36
-
 //window section
 #define WNDCLASSNAME "vulkanWindow"
 #define WNDNAME "Vulkan"

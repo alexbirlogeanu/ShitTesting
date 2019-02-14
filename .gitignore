@@ -12,3 +12,5 @@ ShitTesting/shaders/bin/
 *.log
 /ShitTesting/obj/*.mb
 !/ShitTesting/obj/*.obj
+.vs
+x64
