@@ -294,7 +294,7 @@ void QuadTree::FrustumCulling(const CFrustum& frustum, std::vector<PlantDescript
 		}
 		else if (result == CollisionResult::Inside)
 		{
-			Traverse(currNode, gatherObjects); //gather all the children of the node but dont test with the frustrum. The bb is inside the frustrum so all the children bb is inside
+			Traverse(currNode, gatherObjects); //gather all the children of the node but dont test with the frustrum. The bb is inside the frustrum so all the children bb are inside
 		}
 		//if outside do nothing. children are not visible too
 	}

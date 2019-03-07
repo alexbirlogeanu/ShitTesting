@@ -128,7 +128,7 @@ void ShadowMapRenderer::ComputeCascadeSplitMatrices(/*const glm::mat4& view*/)
 
 void ShadowMapRenderer::ComputeCascadeViewMatrix(const CFrustum& splitFrustrum, const glm::vec3& lightDir, const glm::vec3& lightUp, glm::mat4& outView)
 {
-	const float kLightCameraDist = 7.5f;
+	const float kLightCameraDist = 2.5f;
 	glm::vec3 wpMin = glm::vec3(std::numeric_limits<float>::max());
 	glm::vec3 wpMax = glm::vec3(std::numeric_limits<float>::min());
 
@@ -334,8 +334,8 @@ void CShadowResolveRenderer::Init()
     VkSamplerCreateInfo samplerDepthCreateInfo;
     cleanStructure(samplerDepthCreateInfo);
     samplerDepthCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerDepthCreateInfo.magFilter = VK_FILTER_LINEAR;
-    samplerDepthCreateInfo.minFilter = VK_FILTER_LINEAR;
+    samplerDepthCreateInfo.magFilter = VK_FILTER_NEAREST;
+    samplerDepthCreateInfo.minFilter = VK_FILTER_NEAREST;
     samplerDepthCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
     samplerDepthCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
     samplerDepthCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;

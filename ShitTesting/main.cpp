@@ -1086,9 +1086,37 @@ public:
 	}
 };
 
+class Parent
+{
+public:
+	typedef void (Parent::*Func)(void);
+
+	virtual void Foo()
+	{
+		std::cout << "Parent Foo" << std::endl;
+	}
+};
+
+class Child : public Parent
+{
+public:
+	Child() : i(4) {}
+	virtual void Foo() override
+	{
+		std::cout << "Child Foo" << std::endl;
+	}
+
+	void Poo()
+	{
+		std::cout << "Child " << i << std::endl;
+	}
+	
+	int i;
+};
+
 int main (int argc, char** argv)
 {
-	TestSer t(21.6f, 10, 20);
+	/*TestSer t(21.6f, 10, 20);
 	TestSer t2(13.0f, 2, 0);
 	ComplexTestSer ct;
 
@@ -1113,13 +1141,28 @@ int main (int argc, char** argv)
 	while (!serializer.HasReachedEof())
 	{
 		tloads[i++]->Load(&serializer);
-	}
+	}*/
 
 	
 	//tloads[0].Serialize(&serializer);
 	//tloads[1].Serialize(&serializer);
 	//ComplexTestSer ctload;
 	//ctload.Serialize(&serializer);
+	Parent p;
+	Child c;
+
+	std::vector<std::function<void(void)>> funcs;
+	funcs.push_back(std::bind(&Parent::Foo, &p));
+	funcs.push_back(std::bind(&Child::Poo, &c));
+	funcs.push_back(std::bind(&Child::Foo, &c));
+
+	for (auto f : funcs)
+		f();
+	
+	c.i = 20;
+
+	for (auto f : funcs)
+		f();
 
     return 0;
 }

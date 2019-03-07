@@ -43,6 +43,7 @@
 #include "Material.h"
 #include "Scene.h"
 #include "TestRenderer.h"
+#include "TaskGraph.h"
 
 #include "MemoryManager.h"
 #include "Input.h"
@@ -2977,6 +2978,9 @@ glm::vec4 GetPlaneFrom(glm::vec4 p1, glm::vec4 p2, glm::vec4 p3)
 
 int main(int argc, char* arg[])
 {
+	RenderGraph* graph = new RenderGraph();
+	graph->UnitTest();
+	delete graph;
 	CApplication app;
 
     app.Run();

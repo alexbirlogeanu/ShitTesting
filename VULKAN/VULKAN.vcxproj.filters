@@ -22,20 +22,20 @@
     <Filter Include="Source Files\GraphicsUtils">
       <UniqueIdentifier>{609e546e-a556-470e-abf1-0e8f0b1c8fd8}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\Renderer">
-      <UniqueIdentifier>{e1bdebfa-fbe4-46de-996f-c41bc5c2a83e}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Header Files\GraphicsUtils">
       <UniqueIdentifier>{ce656222-1282-4f47-8d88-9df7648746d0}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Header Files\Renderer">
-      <UniqueIdentifier>{18e3ba23-63bf-42af-8f08-ceaeea634321}</UniqueIdentifier>
     </Filter>
     <Filter Include="Header Files\UI">
       <UniqueIdentifier>{ea05a4c0-5239-4939-978c-8e3a9403c3fa}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\UI">
       <UniqueIdentifier>{25ac016b-7c13-45d1-b5ea-89734b67c5eb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Engine">
+      <UniqueIdentifier>{e1bdebfa-fbe4-46de-996f-c41bc5c2a83e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Engine">
+      <UniqueIdentifier>{18e3ba23-63bf-42af-8f08-ceaeea634321}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -88,31 +88,31 @@
       <Filter>Source Files\GraphicsUtils</Filter>
     </ClCompile>
     <ClCompile Include="3DTexture.cpp">
-      <Filter>Source Files\Renderer</Filter>
+      <Filter>Source Files\Engine</Filter>
     </ClCompile>
     <ClCompile Include="ao.cpp">
-      <Filter>Source Files\Renderer</Filter>
+      <Filter>Source Files\Engine</Filter>
     </ClCompile>
     <ClCompile Include="Fog.cpp">
-      <Filter>Source Files\Renderer</Filter>
+      <Filter>Source Files\Engine</Filter>
     </ClCompile>
     <ClCompile Include="Particles.cpp">
-      <Filter>Source Files\Renderer</Filter>
+      <Filter>Source Files\Engine</Filter>
     </ClCompile>
     <ClCompile Include="PointLightRenderer2.cpp">
-      <Filter>Source Files\Renderer</Filter>
+      <Filter>Source Files\Engine</Filter>
     </ClCompile>
     <ClCompile Include="Renderer.cpp">
-      <Filter>Source Files\Renderer</Filter>
+      <Filter>Source Files\Engine</Filter>
     </ClCompile>
     <ClCompile Include="ScreenSpaceReflectionRenderer.cpp">
-      <Filter>Source Files\Renderer</Filter>
+      <Filter>Source Files\Engine</Filter>
     </ClCompile>
     <ClCompile Include="ShadowRenderer.cpp">
-      <Filter>Source Files\Renderer</Filter>
+      <Filter>Source Files\Engine</Filter>
     </ClCompile>
     <ClCompile Include="SkyRenderer.cpp">
-      <Filter>Source Files\Renderer</Filter>
+      <Filter>Source Files\Engine</Filter>
     </ClCompile>
     <ClCompile Include="DefaultMaterial.cpp">
       <Filter>Source Files\Materials</Filter>
@@ -121,7 +121,7 @@
       <Filter>Source Files\Materials</Filter>
     </ClCompile>
     <ClCompile Include="TerrainRenderer.cpp">
-      <Filter>Source Files\Renderer</Filter>
+      <Filter>Source Files\Engine</Filter>
     </ClCompile>
     <ClCompile Include="Input.cpp">
       <Filter>Source Files</Filter>
@@ -136,7 +136,7 @@
       <Filter>Source Files\GraphicsUtils</Filter>
     </ClCompile>
     <ClCompile Include="VegetationRenderer.cpp">
-      <Filter>Source Files\Renderer</Filter>
+      <Filter>Source Files\Engine</Filter>
     </ClCompile>
     <ClCompile Include="Scene.cpp">
       <Filter>Source Files\GraphicsUtils</Filter>
@@ -145,7 +145,13 @@
       <Filter>Source Files\GraphicsUtils</Filter>
     </ClCompile>
     <ClCompile Include="TestRenderer.cpp">
-      <Filter>Source Files\Renderer</Filter>
+      <Filter>Source Files\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="TaskGraph.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GraphicEngine.cpp">
+      <Filter>Source Files\Engine</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -213,31 +219,31 @@
       <Filter>Header Files\GraphicsUtils</Filter>
     </ClInclude>
     <ClInclude Include="3DTexture.h">
-      <Filter>Header Files\Renderer</Filter>
+      <Filter>Header Files\Engine</Filter>
     </ClInclude>
     <ClInclude Include="ao.h">
-      <Filter>Header Files\Renderer</Filter>
+      <Filter>Header Files\Engine</Filter>
     </ClInclude>
     <ClInclude Include="Fog.h">
-      <Filter>Header Files\Renderer</Filter>
+      <Filter>Header Files\Engine</Filter>
     </ClInclude>
     <ClInclude Include="Particles.h">
-      <Filter>Header Files\Renderer</Filter>
+      <Filter>Header Files\Engine</Filter>
     </ClInclude>
     <ClInclude Include="PointLightRenderer2.h">
-      <Filter>Header Files\Renderer</Filter>
+      <Filter>Header Files\Engine</Filter>
     </ClInclude>
     <ClInclude Include="Renderer.h">
-      <Filter>Header Files\Renderer</Filter>
+      <Filter>Header Files\Engine</Filter>
     </ClInclude>
     <ClInclude Include="ScreenSpaceReflectionRenderer.h">
-      <Filter>Header Files\Renderer</Filter>
+      <Filter>Header Files\Engine</Filter>
     </ClInclude>
     <ClInclude Include="ShadowRenderer.h">
-      <Filter>Header Files\Renderer</Filter>
+      <Filter>Header Files\Engine</Filter>
     </ClInclude>
     <ClInclude Include="SkyRenderer.h">
-      <Filter>Header Files\Renderer</Filter>
+      <Filter>Header Files\Engine</Filter>
     </ClInclude>
     <ClInclude Include="DefaultMaterial.h">
       <Filter>Header Files\Material</Filter>
@@ -246,7 +252,7 @@
       <Filter>Header Files\Material</Filter>
     </ClInclude>
     <ClInclude Include="TerrainRenderer.h">
-      <Filter>Header Files\Renderer</Filter>
+      <Filter>Header Files\Engine</Filter>
     </ClInclude>
     <ClInclude Include="Input.h">
       <Filter>Header Files</Filter>
@@ -264,7 +270,7 @@
       <Filter>Header Files\UI</Filter>
     </ClInclude>
     <ClInclude Include="VegetationRenderer.h">
-      <Filter>Header Files\Renderer</Filter>
+      <Filter>Header Files\Engine</Filter>
     </ClInclude>
     <ClInclude Include="Scene.h">
       <Filter>Header Files\GraphicsUtils</Filter>
@@ -273,7 +279,13 @@
       <Filter>Header Files\GraphicsUtils</Filter>
     </ClInclude>
     <ClInclude Include="TestRenderer.h">
-      <Filter>Header Files\Renderer</Filter>
+      <Filter>Header Files\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="TaskGraph.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GraphicEngine.h">
+      <Filter>Header Files\Engine</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

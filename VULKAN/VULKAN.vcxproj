@@ -21,6 +21,7 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{0166246E-BEC4-4FB2-A594-140205F89D7C}</ProjectGuid>
     <RootNamespace>VULKAN</RootNamespace>
+    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -134,6 +135,7 @@
     <ClInclude Include="DescriptorsUtils.h" />
     <ClInclude Include="Font.h" />
     <ClInclude Include="Geometry.h" />
+    <ClInclude Include="GraphicEngine.h" />
     <ClInclude Include="Input.h" />
     <ClInclude Include="Material.h" />
     <ClInclude Include="MemoryManager.h" />
@@ -159,6 +161,7 @@
     <ClInclude Include="Renderer.h" />
     <ClInclude Include="ShadowRenderer.h" />
     <ClInclude Include="SVertex.h" />
+    <ClInclude Include="TaskGraph.h" />
     <ClInclude Include="TerrainRenderer.h" />
     <ClInclude Include="TestRenderer.h" />
     <ClInclude Include="Texture.h" />
@@ -178,6 +181,7 @@
     <ClCompile Include="DescriptorsUtils.cpp" />
     <ClCompile Include="Font.cpp" />
     <ClCompile Include="Geometry.cpp" />
+    <ClCompile Include="GraphicEngine.cpp" />
     <ClCompile Include="Input.cpp" />
     <ClCompile Include="Material.cpp" />
     <ClCompile Include="MemoryManager.cpp" />
@@ -198,6 +202,7 @@
     <ClCompile Include="PickManager.cpp" />
     <ClCompile Include="Renderer.cpp" />
     <ClCompile Include="ShadowRenderer.cpp" />
+    <ClCompile Include="TaskGraph.cpp" />
     <ClCompile Include="TerrainRenderer.cpp" />
     <ClCompile Include="TestRenderer.cpp" />
     <ClCompile Include="Texture.cpp" />
