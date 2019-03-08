@@ -3,6 +3,26 @@
 #include "Utils.h"
 #include "MemoryManager.h"
 
+AttachmentInfo::AttachmentInfo(const std::string& st, ImageHandle* img)
+	: m_identifier(st)
+	, m_image(img)
+{
+
+}
+
+AttachmentInfo::~AttachmentInfo()
+{
+	MemoryManager::GetInstance()->FreeHandle(m_image);
+}
+
+VkFormat AttachmentInfo::GetFormat() const
+{
+	return m_image->GetFormat();
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+//GraphicEngine
+//////////////////////////////////////////////////////////////////////////////////////////////
 GraphicEngine::GraphicEngine()
 {
 
@@ -10,7 +30,8 @@ GraphicEngine::GraphicEngine()
 
 GraphicEngine::~GraphicEngine()
 {
-
+	for (auto& att : m_framebufferAttachments)
+		att.second->Destroy();
 }
 
 void GraphicEngine::Init()
@@ -18,7 +39,7 @@ void GraphicEngine::Init()
 	CreateFramebufferAttachments();
 }
 
-ImageHandle* GraphicEngine::GetAttachment(const std::string& name)
+AttachmentInfo* GraphicEngine::GetAttachment(const std::string& name)
 {
 	static auto& attachments = GetInstance()->m_framebufferAttachments;
 	auto it = attachments.find(name);
@@ -34,8 +55,7 @@ void GraphicEngine::CreateFramebufferAttachments()
 	auto createAttachment = [&] (const std::string& name, const VkImageCreateInfo& info)
 	{
 		ImageHandle* img = MemoryManager::GetInstance()->CreateImage(EMemoryContextType::Framebuffers, info, name + "Att");
-		m_framebufferAttachments.emplace(name, img);
-
+		m_framebufferAttachments.emplace(name, new AttachmentInfo(name, img));
 	};
 
 	//GBuffer creation
@@ -52,8 +72,16 @@ void GraphicEngine::CreateFramebufferAttachments()
 	createAttachment("ShadowResolveDebug", GetAttachmentCreateImageInfo(VK_FORMAT_R16G16B16A16_SFLOAT, defaultDimensions, 1, VK_IMAGE_USAGE_SAMPLED_BIT));
 	createAttachment("ShadowResolveBlur", GetAttachmentCreateImageInfo(VK_FORMAT_R32_SFLOAT, defaultDimensions, 1, VK_IMAGE_USAGE_SAMPLED_BIT));
 
-	//OUTPUT attachment
+	//AO 
+	createAttachment("AOFinal", GetAttachmentCreateImageInfo(VK_FORMAT_R16_SFLOAT, defaultDimensions, 1, VK_IMAGE_USAGE_SAMPLED_BIT));
+	createAttachment("AODebug", GetAttachmentCreateImageInfo(VK_FORMAT_R16G16B16A16_SFLOAT, defaultDimensions, 1, VK_IMAGE_USAGE_SAMPLED_BIT)); //debug
+	createAttachment("AOBlurAux", GetAttachmentCreateImageInfo(VK_FORMAT_R16_SFLOAT, defaultDimensions, 1, VK_IMAGE_USAGE_SAMPLED_BIT));
 
+	//lighting
+	createAttachment("DirectionalLightingFinal", GetAttachmentCreateImageInfo(VK_FORMAT_R16G16B16A16_SFLOAT, defaultDimensions, 1, VK_IMAGE_USAGE_SAMPLED_BIT));
+
+	//OUTPUT attachment
+	createAttachment("FinalColorImage", GetAttachmentCreateImageInfo(VK_FORMAT_R16G16B16A16_SFLOAT, defaultDimensions, 1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
 }
 
 VkImageCreateInfo  GraphicEngine::GetAttachmentCreateImageInfo(VkFormat format, VkExtent3D dimensions, uint32_t layers, VkImageUsageFlags additionalUsage)

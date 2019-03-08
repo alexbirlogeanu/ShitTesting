@@ -136,6 +136,7 @@
     <ClInclude Include="Font.h" />
     <ClInclude Include="Geometry.h" />
     <ClInclude Include="GraphicEngine.h" />
+    <ClInclude Include="RenderTaskGraph.h" />
     <ClInclude Include="Input.h" />
     <ClInclude Include="Material.h" />
     <ClInclude Include="MemoryManager.h" />
@@ -189,6 +190,7 @@
     <ClCompile Include="NormalMapMaterial.cpp" />
     <ClCompile Include="Object.cpp" />
     <ClCompile Include="PointLightRenderer2.cpp" />
+    <ClCompile Include="RenderTaskGraph.cpp" />
     <ClCompile Include="ResourceLoader.cpp" />
     <ClCompile Include="Scene.cpp" />
     <ClCompile Include="ScreenSpaceReflectionRenderer.cpp" />

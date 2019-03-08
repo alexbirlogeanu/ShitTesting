@@ -10,11 +10,6 @@
 #include <algorithm>
 #include <iostream>
 
-#define HEAP_ONLY(CLASSNAME)	public: \
-								void Destroy() { delete this; } \
-								protected: \
-								virtual ~##CLASSNAME();
- 
 class Task
 {
 	HEAP_ONLY(Task);
@@ -26,68 +21,73 @@ protected:
 	std::function<void(void)> m_task;
 };
 
-
-////////////////////////////////////////////////////////////////////
-//TaskGroup<T>
-////////////////////////////////////////////////////////////////////
-
-template<class TaskType>
-class TaskGroup
+template<class T>
+class Base
 {
-	HEAP_ONLY(TaskGroup);
 public:
-	TaskGroup(const std::string& groupName);
-	
-	void AddDependencies(const std::vector<TaskGroup<TaskType>*> deps);
-	virtual void AddTask(TaskType* task);
-
-	const std::unordered_set<TaskGroup<TaskType>*>& GetDependecies() const { return m_dependencies; }
-	const std::string& GetName() const { return m_groupName; }
-	virtual void Execute();
-
-	virtual bool PrecedeTask(TaskType* task) { TRAP(false && "This method should be implemented"); return false; };
-	virtual void AddExternalDependecyToTask(TaskType* task) { TRAP(false && "This method should be implemented"); };
-protected:
-	std::unordered_set<TaskGroup<TaskType>*>		m_dependencies;
-	std::vector<TaskType*>							m_tasks;
-
-	std::string					m_groupName;
+	T* GetThis() { return this; }
 };
 
 ////////////////////////////////////////////////////////////////////
-//TaskGroup template definition
+//TaskGroup<T, Derived>
 ////////////////////////////////////////////////////////////////////
 
-template<class TaskType>
-TaskGroup<TaskType>::TaskGroup(const std::string& groupName)
+template<class TaskType, class Derived>
+class TaskGroupBase
+{
+	HEAP_ONLY(TaskGroupBase);
+public:
+	TaskGroupBase(const std::string& groupName);
+	
+	void AddDependencies(const std::vector<Derived*> deps);
+	virtual void AddTask(TaskType* task);
+
+	const std::unordered_set<Derived*>& GetDependecies() const { return m_dependencies; }
+	const std::string& GetName() const { return m_groupName; }
+	virtual void Execute();
+
+protected:
+	std::unordered_set<Derived*>					m_dependencies;
+	std::vector<TaskType*>							m_tasks;
+
+	std::string										m_groupName;
+};
+
+
+////////////////////////////////////////////////////////////////////
+//TaskGroupBase template definition
+////////////////////////////////////////////////////////////////////
+
+template<class TaskType, class Derived>
+TaskGroupBase<TaskType, Derived>::TaskGroupBase(const std::string& groupName)
 	: m_groupName(groupName)
 {
 
 }
 
-template<class TaskType>
-TaskGroup<TaskType>::~TaskGroup()
+template<class TaskType, class Derived>
+TaskGroupBase<TaskType, Derived>::~TaskGroupBase()
 {
 	for (auto task : m_tasks)
 		task->Destroy();
 }
 
-template<class TaskType>
-void TaskGroup<TaskType>::AddDependencies(const std::vector<TaskGroup*> deps)
+template<class TaskType, class Derived>
+void TaskGroupBase<TaskType, Derived>::AddDependencies(const std::vector<Derived*> deps)
 {
 	//TODO check if some deps are already in the vector / set
 	std::copy(deps.begin(), deps.end(), std::inserter(m_dependencies, m_dependencies.begin()));
 }
 
-template<class TaskType>
-void TaskGroup<TaskType>::AddTask(TaskType* task)
+template<class TaskType, class Derived>
+void TaskGroupBase<TaskType, Derived>::AddTask(TaskType* task)
 {
 	//TODO check if some deps are already in the vector / set
 	m_tasks.push_back(task);
 }
 
-template<class TaskType>
-void TaskGroup<TaskType>::Execute()
+template<class TaskType, class Derived>
+void TaskGroupBase<TaskType, Derived>::Execute()
 {
 	std::cout << "Executing " << m_groupName << " ..." << std::endl;
 	for (auto& task : m_tasks)
@@ -236,79 +236,3 @@ void TaskGraph<T>::TopologicalSort()
 
 	std::reverse(m_sortedTaskGroups.begin(), m_sortedTaskGroups.end());
 }
-
-/////////////////////////////////////
-//Render task attempt
-//////////////////////////////////////
-
-class RenderTask : public Task
-{
-public:
-	RenderTask(std::vector<std::string>& inAttachments,
-		std::vector<std::string>& outAttachments,
-		const std::function<void(void)>& exec);
-
-	RenderTask(std::vector<std::string> inAttachments,
-		std::vector<std::string> outAttachments,
-		const std::function<void(void)>& exec);
-
-	const std::vector<std::string>& GetInAttachments() const { return m_inAttachments; }
-	const std::vector<std::string>& GetOutAttachments() const { return m_outAttachments; }
-	//TODO debug value
-	int TaskIndex;
-
-private:
-	//TODO! The type for attachments (now string) is a placeholder type. This should be changed
-	std::vector<std::string>		m_inAttachments; //could be empty
-	std::vector<std::string>		m_outAttachments; //should not be empty. Every render task will write at least one framebuffer attachment
-
-	std::function<void(int)>		m_prepareFunc;
-};
-
-/////////////////////////////////////
-//Render task group
-//////////////////////////////////////
-
-class RenderTaskGroup : public TaskGroup<RenderTask>
-{
-public:
-	RenderTaskGroup(const std::string& groupName);
-	void Init();
-	void PostInit();
-
-private:
-	//in this method, the inputs and outputs will be defined based on the task list. So, this method should be called only when all the tasks that is wanted to be executed by the group, will be inserted
-	void DefineGroupIO();
-	//in this method we detect the task dependecies that will be translate later in subpass dependencies for render pass creation. Task will be executed in the order in which they were added to the task group. A task it's equivalent with a subpass in a render pass
-	void DetectTaskDependecies();
-
-	bool PrecedeTask(RenderTask* task) override;
-	void AddExternalDependecyToTask(RenderTask* task) override;
-
-public: //TODO change private
-	//TODO! The type for attachments (now string) is a placeholder type. This should be changed
-	std::vector<std::string> m_Inputs;
-	std::vector<std::string> m_Outputs;
-
-	//TODO Add render pass that will be created in the init method
-	//TODO Add a finish event
-};
-
-/////////////////////////////////////
-//Render graph attempt
-//////////////////////////////////////
-
-class RenderGraph : TaskGraph<RenderTaskGroup>
-{
-public:
-	void Prepare();
-	void UnitTest();
-};
-
-//=========================TODO delete
-
-class TestTaskGraph : public TaskGraph<TaskGroup<Task>>
-{
-public:
-	void UnitTest();
-};

@@ -9,6 +9,11 @@
     }while(0);
 
 
+#define HEAP_ONLY(CLASSNAME)	public: \
+								void Destroy() { delete this; } \
+								protected: \
+								virtual ~##CLASSNAME();
+
 #define VULKAN_ASSERT(func) { VkResult res = func; TRAP(res >= VK_SUCCESS); }
 #define cleanStructure(var) memset(&var, 0, sizeof(var))
 
