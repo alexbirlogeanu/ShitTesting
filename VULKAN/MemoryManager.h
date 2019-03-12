@@ -151,10 +151,11 @@ public:
 	VkImageMemoryBarrier CreateMemoryBarrier(VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcMask, VkAccessFlags dstMask, VkImageAspectFlags aspectFlags, unsigned int layersCount = VK_REMAINING_ARRAY_LAYERS);
 	VkImageMemoryBarrier CreateMemoryBarrierForMips(uint32_t mipLevel, VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcMask, VkAccessFlags dstMask, VkImageAspectFlags aspectFlags, uint32_t mipCount = 1);
 
-	const VkImageView& GetView() const { return m_view; };
-	const VkImageView& GetLayerView(uint32_t layer) const;
-	VkFormat GetFormat() const { return m_format; }
-	const VkExtent3D GetDimensions() const { return m_dimensions; }
+	const VkImageView&	GetView() const { return m_view; };
+	const VkImageView&	GetLayerView(uint32_t layer) const;
+	const VkFormat		GetFormat() const { return m_format; }
+	const VkExtent3D	GetDimensions() const { return m_dimensions; }
+	const uint32_t		GetLayersNumber() const { return m_layers; }
 protected:
 	ImageHandle(VkImage vkHandle, VkDeviceSize size, VkDeviceSize alignment, const VkImageCreateInfo& imgInfo, MemoryContext* context);
 	ImageHandle(ImageHandle* parent, VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize offset); //dont implement yet

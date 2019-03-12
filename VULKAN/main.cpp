@@ -44,6 +44,7 @@
 #include "Scene.h"
 #include "TestRenderer.h"
 #include "RenderTaskGraph.h"
+#include "GraphicEngine.h"
 
 #include "MemoryManager.h"
 #include "Input.h"
@@ -900,7 +901,6 @@ public:
 
     void Run();
     void Render();
-    void SwapBuffers();
 
 	static float GetDeltaTime() { return ms_dt; }
 private:
@@ -1013,15 +1013,13 @@ private:
 	VkRenderPass				m_vegetationRenderPass;
 	VkRenderPass				m_testRenderPass;
 
-    VkQueue                     m_queue;
+    std::vector<VkImage>        m_presentImages;
 
-    VkCommandPool               m_commandPool;
-    VkCommandBuffer             m_mainCommandBuffer;
+    unsigned int                m_currentBuffer;
+	VkQueue						m_queue;
 
-    std::vector<VkImage>            m_presentImages;
-
-    unsigned int                    m_currentBuffer;
-
+	VkCommandPool               m_commandPool;
+	VkCommandBuffer             m_mainCommandBuffer;
     //synchronization objects
     VkFence                     m_aquireImageFence;
     VkFence                     m_renderFence;
@@ -2978,15 +2976,6 @@ glm::vec4 GetPlaneFrom(glm::vec4 p1, glm::vec4 p2, glm::vec4 p3)
 
 int main(int argc, char* arg[])
 {
-	vk::Load();
-	MemoryManager::CreateInstance(); //TODO delete
-
-	GraphicEngine::CreateInstance();
-	GraphicEngine::GetInstance()->Init();
-	RenderGraph* graph = new RenderGraph();
-	graph->UnitTest();
-	delete graph;
-
 	CApplication app;
     app.Run();
     return 0;

@@ -1,5 +1,6 @@
 #pragma once
 #include <intrin.h>
+#include <Windows.h>
 
 #define TRAP(cond) { \
         if(!(cond)) \
@@ -33,3 +34,12 @@
 
 #define BATCH_MAX_TEXTURE 12
 #define DEFAULT_MIPLEVELS 5
+
+#define START_PROFILE_SECTION(section) { \
+										DWORD start = GetTickCount(); \
+										std::string profileSectionName (section);
+
+#define END_PROFILE_SECTION(section)	TRAP(profileSectionName == section && "START_PROFILE and END_PROFILE section doesn't match");\
+										DWORD end = GetTickCount();\
+										std::cout << "For section " << profileSectionName << " time elapsed: " << end - start << "ms..." << std::endl;\
+										}

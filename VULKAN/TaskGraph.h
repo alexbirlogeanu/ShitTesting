@@ -45,9 +45,10 @@ public:
 	const std::unordered_set<Derived*>& GetDependecies() const { return m_dependencies; }
 	const std::string& GetName() const { return m_groupName; }
 	virtual void Execute();
-
+	
 protected:
 	std::unordered_set<Derived*>					m_dependencies;
+	std::unordered_set<Derived*>					m_children;
 	std::vector<TaskType*>							m_tasks;
 
 	std::string										m_groupName;
@@ -77,6 +78,9 @@ void TaskGroupBase<TaskType, Derived>::AddDependencies(const std::vector<Derived
 {
 	//TODO check if some deps are already in the vector / set
 	std::copy(deps.begin(), deps.end(), std::inserter(m_dependencies, m_dependencies.begin()));
+
+	for (auto& dep : deps)
+		dep->m_children.insert((Derived*)this); //THIS IS KINDA STUPID
 }
 
 template<class TaskType, class Derived>
