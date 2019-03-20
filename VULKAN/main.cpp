@@ -18,6 +18,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/component_wise.hpp>
+#include <bitset>
 
 #include "Renderer.h"
 #include "Particles.h"
@@ -25,25 +26,20 @@
 #include "freeimage/FreeImage.h"
 #include "Camera.h"
 #include "Mesh.h"
-#include <bitset>
+
 #include "UI.h"
 #include "Utils.h"
 #include "PickManager.h"
-#include "ao.h"
 #include "Fog.h"
 #include "SkyRenderer.h"
 #include "3DTexture.h"
-#include "ShadowRenderer.h"
 #include "Object.h"
 #include "PointLightRenderer2.h"
 #include "ScreenSpaceReflectionRenderer.h"
-#include "TerrainRenderer.h"
-#include "VegetationRenderer.h"
 #include "Batch.h"
 #include "Material.h"
 #include "Scene.h"
 #include "TestRenderer.h"
-#include "RenderTaskGraph.h"
 #include "GraphicEngine.h"
 
 #include "MemoryManager.h"
@@ -556,13 +552,7 @@ private:
     void CenterCursor();
     void HideCursor(bool hide);
 
-    void SetupDeferredRendering();
-    void SetupAORendering();
-    void SetupDirectionalLightingRendering();
 	void SetupDeferredTileShading();
-    void SetupShadowMapRendering();
-    void SetupShadowResolveRendering();
-    void SetupPostProcessRendering();
     void SetupSunRendering();
     void SetupUIRendering();
     void SetupSkyRendering();
@@ -575,14 +565,10 @@ private:
 	void SetupVegetationRendering();
 	void SetupTestRendering();
 
-    void CreateDeferredRenderPass(const FramebufferDescription& fbDesc);
-    void CreateAORenderPass(const FramebufferDescription& fbDesc);
-    void CreateDirLightingRenderPass(const FramebufferDescription& fbDesc);
+
     void CreatePointLightingRenderPass(const FramebufferDescription& fbDesc);
 	void CreateDeferredTileShadingRenderPass(const FramebufferDescription& fDesc);
-    void CreateShadowRenderPass(const FramebufferDescription& fbDesc);
     void CreateShadowResolveRenderPass(const FramebufferDescription& fbDesc);
-    void CreatePostProcessRenderPass(const FramebufferDescription& fbDesc);
     void CreateSunRenderPass(const FramebufferDescription& fbDesc);
     void CreateUIRenderPass(const FramebufferDescription& fbDesc);
     void CreateSkyRenderPass(const FramebufferDescription& fbDesc);
@@ -591,8 +577,6 @@ private:
     void Create3DTextureRenderPass(const FramebufferDescription& fbDesc);
     void CreateVolumetricRenderPass(const FramebufferDescription& fbDesc);
 	void CreateSSRRenderPass(const FramebufferDescription& fbDesc);
-	void CreateTerrainRenderPass(const FramebufferDescription& fbDesc);
-	void CreateVegetationRenderPass(const FramebufferDescription& fbDesc);
 	void CreateTestRenderPass(const FramebufferDescription& fbDesc);
   
     void CreateQueryPools();
@@ -620,14 +604,8 @@ private:
     HINSTANCE   m_appInstance;
     //rendering context
 
-    VkRenderPass                m_deferredRenderPass;
-    VkRenderPass                m_aoRenderPass;
-    VkRenderPass                m_dirLightRenderPass;
     VkRenderPass                m_pointLightRenderPass;
 	VkRenderPass				m_deferredTileShadingRenderPass;
-    VkRenderPass                m_shadowRenderPass;
-    VkRenderPass                m_shadowResolveRenderPass;
-    VkRenderPass                m_postProcessPass;
     VkRenderPass                m_sunRenderPass;
     VkRenderPass                m_uiRenderPass;
     VkRenderPass                m_skyRenderPass;
@@ -636,8 +614,6 @@ private:
     VkRenderPass                m_3DtextureRenderPass;
     VkRenderPass                m_volumetricRenderPass;
 	VkRenderPass				m_ssrRenderPass;
-	VkRenderPass				m_terrainRenderPass;
-	VkRenderPass				m_vegetationRenderPass;
 	VkRenderPass				m_testRenderPass;
 
     //CCubeMapTexture*            m_skyTextureCube;
@@ -655,7 +631,6 @@ private:
     ObjectRenderer*             m_objectRenderer;
 	PointLightRenderer2*		m_pointLightRenderer2;
     CParticlesRenderer*         m_particlesRenderer;
-    CShadowResolveRenderer*     m_shadowResolveRenderer;
     CSkyRenderer*               m_skyRenderer;
     CFogRenderer*               m_fogRenderer;
     C3DTextureRenderer*         m_3dTextureRenderer;
@@ -690,30 +665,20 @@ float CApplication::ms_dt = 0.0f;
 CApplication::CApplication()
 	: m_windowClass(WNDCLASSNAME)
 	, m_windowName(WNDNAME)
-	, m_deferredRenderPass(VK_NULL_HANDLE)
-	, m_aoRenderPass(VK_NULL_HANDLE)
-	, m_dirLightRenderPass(VK_NULL_HANDLE)
 	, m_pointLightRenderPass(VK_NULL_HANDLE)
 	, m_deferredTileShadingRenderPass(VK_NULL_HANDLE)
-	, m_shadowRenderPass(VK_NULL_HANDLE)
-	, m_shadowResolveRenderPass(VK_NULL_HANDLE)
-	, m_postProcessPass(VK_NULL_HANDLE)
 	, m_sunRenderPass(VK_NULL_HANDLE)
 	, m_uiRenderPass(VK_NULL_HANDLE)
 	, m_fogRenderPass(VK_NULL_HANDLE)
 	, m_3DtextureRenderPass(VK_NULL_HANDLE)
 	, m_volumetricRenderPass(VK_NULL_HANDLE)
 	, m_ssrRenderPass(VK_NULL_HANDLE)
-	, m_terrainRenderPass(VK_NULL_HANDLE)
-	, m_vegetationRenderPass(VK_NULL_HANDLE)
-	//, m_skyTextureCube(nullptr)
 	, m_skyTexture2D(nullptr)
 	, m_sunTexture(nullptr)
 	, m_smokeTexture(nullptr)
 	, m_pointLightRenderer2(nullptr)
 	, m_particlesRenderer(nullptr)
 	, m_objectRenderer(nullptr)
-	, m_shadowResolveRenderer(nullptr)
 	, m_skyRenderer(nullptr)
 	, m_fogRenderer(nullptr)
 	, m_3dTextureRenderer(nullptr)
@@ -896,37 +861,6 @@ void CApplication::HideCursor(bool hide)
 }
 
 
-void CApplication::SetupDeferredRendering()
-{
-    FramebufferDescription fbDesc;
-    fbDesc.Begin(GBuffer_Count);
-
-    fbDesc.AddColorAttachmentDesc(GBuffer_Albedo, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "Albedo");
-    fbDesc.AddColorAttachmentDesc(GBuffer_Specular, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "Specular");
-    fbDesc.AddColorAttachmentDesc(GBuffer_Normals, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "Normals");
-    fbDesc.AddColorAttachmentDesc(GBuffer_Position, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "Positions");
-    fbDesc.AddColorAttachmentDesc(GBuffer_Debug, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, "DefferedDebug");
-    fbDesc.AddColorAttachmentDesc(GBuffer_Final, OUT_FORMAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, "DefferedFinal");
-
-    fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "Main");
-    fbDesc.End();
-
-    CreateDeferredRenderPass(fbDesc);
-
-    m_objectRenderer = new ObjectRenderer(m_deferredRenderPass);
-    m_objectRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
-    m_objectRenderer->Init();
-
-}
-
-void CApplication::SetupAORendering()
-{
-}
-
-void CApplication::SetupDirectionalLightingRendering()
-{
-};
-
 void CApplication::SetupDeferredTileShading()
 {
 	FramebufferDescription fbDesc;
@@ -941,103 +875,6 @@ void CApplication::SetupDeferredTileShading()
 	m_pointLightRenderer2->Init();
 	m_pointLightRenderer2->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
 	m_pointLightRenderer2->InitializeLightGrid();
-}
-
-void CApplication::CreateDeferredRenderPass(const FramebufferDescription& fbDesc)
-{
-    TRAP(fbDesc.m_depthAttachments.IsValid());
-    unsigned int size = fbDesc.m_numColors + 1;
-    unsigned int depthIndex = size - 1;
-
-    const std::vector<FBAttachment>& colors = fbDesc.m_colorAttachments;
-    TRAP(colors.size() == GBuffer_Count);
-
-    std::vector<VkAttachmentDescription> ad;
-    ad.resize(size);
-    AddAttachementDesc(ad[GBuffer_Final], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, colors[GBuffer_Final].format);
-    AddAttachementDesc(ad[GBuffer_Albedo], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colors[GBuffer_Albedo].format);
-    AddAttachementDesc(ad[GBuffer_Specular], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colors[GBuffer_Specular].format);
-    AddAttachementDesc(ad[GBuffer_Normals], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colors[GBuffer_Normals].format);
-    AddAttachementDesc(ad[GBuffer_Position], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colors[GBuffer_Position].format);
-    AddAttachementDesc(ad[GBuffer_Debug], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, colors[GBuffer_Debug].format);
-    AddAttachementDesc(ad[depthIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format); //Depth
-
-    std::vector<VkAttachmentReference> attachment_ref;
-    attachment_ref.resize(size);
-    
-    attachment_ref[GBuffer_Final] = CreateAttachmentReference(GBuffer_Final, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    attachment_ref[GBuffer_Albedo] = CreateAttachmentReference(GBuffer_Albedo, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    attachment_ref[GBuffer_Specular] = CreateAttachmentReference(GBuffer_Specular, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    attachment_ref[GBuffer_Normals] = CreateAttachmentReference(GBuffer_Normals, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    attachment_ref[GBuffer_Position] = CreateAttachmentReference(GBuffer_Position, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    attachment_ref[depthIndex] = CreateAttachmentReference(depthIndex, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-    attachment_ref[GBuffer_Debug] = CreateAttachmentReference(GBuffer_Debug, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-
-    std::vector<VkAttachmentReference> defAtts (&attachment_ref[GBuffer_Albedo], &attachment_ref[GBuffer_Albedo] + GBuffer_InputCnt) ;
-    std::vector<VkSubpassDescription> sd;
-    sd.resize(1);
-    sd[0] = CreateSubpassDesc(defAtts.data(), (uint32_t)defAtts.size(), &attachment_ref[depthIndex]);
-
-    VkRenderPassCreateInfo rpci;
-    cleanStructure(rpci);
-    rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rpci.pNext = nullptr;
-    rpci.flags = 0;
-    rpci.attachmentCount = (uint32_t)ad.size(); 
-    rpci.pAttachments = ad.data();
-    rpci.subpassCount = (uint32_t)sd.size();
-    rpci.pSubpasses = sd.data();
-    rpci.dependencyCount = 0;
-    rpci.pDependencies =  nullptr; 
-
-    VULKAN_ASSERT(vk::CreateRenderPass(vk::g_vulkanContext.m_device, &rpci, nullptr, &m_deferredRenderPass));
-}
-
-void CApplication::CreateAORenderPass(const FramebufferDescription& fbDesc)
-{
-  
-}
-
-
-void CApplication::CreateDirLightingRenderPass(const FramebufferDescription& fbDesc)
-{
-    std::vector<VkAttachmentDescription> ad;
-    ad.resize(EDirLightBuffers_Count);
-
-    AddAttachementDesc(ad[EDirLightBuffers_Final], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[EDirLightBuffers_Final].format, VK_ATTACHMENT_LOAD_OP_LOAD);
-    AddAttachementDesc(ad[EDirLightBuffers_Debug], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[EDirLightBuffers_Debug].format);
-
-    std::vector<VkAttachmentReference> attachment_ref;
-    attachment_ref.resize(EDirLightBuffers_Count);
-
-    attachment_ref[EDirLightBuffers_Final] = CreateAttachmentReference(EDirLightBuffers_Final, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    attachment_ref[EDirLightBuffers_Debug] = CreateAttachmentReference(EDirLightBuffers_Debug, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-
-    std::vector<VkAttachmentReference> dirLightAtt;
-    dirLightAtt.reserve(2);
-    dirLightAtt.push_back(attachment_ref[EDirLightBuffers_Final]);
-    dirLightAtt.push_back(attachment_ref[EDirLightBuffers_Debug]);
-
-    std::vector<VkSubpassDescription> sd;
-    sd.resize(ELightSubpass_DirCount);
-    sd[ELightSubpass_Directional] = CreateSubpassDesc(dirLightAtt.data(), (uint32_t)dirLightAtt.size());
-    
-    std::vector<VkSubpassDependency> subDeps;
-	subDeps.push_back(CreateSubpassDependency(VK_SUBPASS_EXTERNAL, ELightSubpass_Directional, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT));
-
-    VkRenderPassCreateInfo rpci;
-    cleanStructure(rpci);
-    rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rpci.pNext = nullptr;
-    rpci.flags = 0;
-    rpci.attachmentCount = (uint32_t)ad.size(); 
-    rpci.pAttachments = ad.data();
-    rpci.subpassCount = (uint32_t)sd.size();
-    rpci.pSubpasses = sd.data();
-    rpci.dependencyCount = (uint32_t)subDeps.size();
-    rpci.pDependencies =  subDeps.data();
-
-    VULKAN_ASSERT(vk::CreateRenderPass(vk::g_vulkanContext.m_device, &rpci, nullptr, &m_dirLightRenderPass));
 }
 
 void CApplication::CreatePointLightingRenderPass(const FramebufferDescription& fbDesc)
@@ -1116,28 +953,6 @@ void CApplication::CreateDeferredTileShadingRenderPass(const FramebufferDescript
 	NewRenderPass(&m_deferredTileShadingRenderPass, ad, sd, subDeps);
 }
 
-void CApplication::SetupShadowMapRendering()
-{
-}
-
- void CApplication::SetupShadowResolveRendering()
- {
-     FramebufferDescription fbDesc;
-     fbDesc.Begin(3);
-     fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "ShadowResolveFinal");
-     fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "ShadowResolveDebug");
-     fbDesc.AddColorAttachmentDesc(2, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "ShadowResolveBlur");
-     fbDesc.End();
-
-     CreateShadowResolveRenderPass(fbDesc);
-     m_shadowResolveRenderer = new CShadowResolveRenderer(m_shadowResolveRenderPass);
-     m_shadowResolveRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
-     m_shadowResolveRenderer->Init();
- }
-
-void CApplication::SetupPostProcessRendering()
-{
-}
 
 void CApplication::SetupSunRendering()
 {
@@ -1296,30 +1111,6 @@ void CApplication::SetupTestRendering()
 	m_testRenderer->Init();
 }
 
-void CApplication::CreateShadowRenderPass(const FramebufferDescription& fbDesc)
-{
-    TRAP(fbDesc.m_depthAttachments.IsValid());
-    VkAttachmentDescription ad;
-    AddAttachementDesc(ad, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_depthAttachments.format);
-
-    VkAttachmentReference attachment_ref = CreateAttachmentReference(0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-    VkSubpassDescription sd = CreateSubpassDesc(nullptr, 0, &attachment_ref);
-
-    VkRenderPassCreateInfo rpci;
-    cleanStructure(rpci);
-    rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rpci.pNext = nullptr;
-    rpci.flags = 0;
-    rpci.attachmentCount =  1; //depth
-    rpci.pAttachments = &ad;
-    rpci.subpassCount = 1;
-    rpci.pSubpasses = &sd;
-    rpci.dependencyCount = 0;
-    rpci.pDependencies =  nullptr; 
-
-    VULKAN_ASSERT(vk::CreateRenderPass(vk::g_vulkanContext.m_device, &rpci, nullptr, &m_shadowRenderPass));
-}
-
 void CApplication::CreateShadowResolveRenderPass(const FramebufferDescription& fbDesc)
 {
     std::vector<VkAttachmentDescription> ad;
@@ -1362,34 +1153,7 @@ void CApplication::CreateShadowResolveRenderPass(const FramebufferDescription& f
     rpci.dependencyCount = (uint32_t)sub_deps.size();
     rpci.pDependencies =  sub_deps.data(); 
 
-    VULKAN_ASSERT(vk::CreateRenderPass(vk::g_vulkanContext.m_device, &rpci, nullptr, &m_shadowResolveRenderPass));
-}
-
-void CApplication::CreatePostProcessRenderPass(const FramebufferDescription& fbDesc)
-{
-    TRAP(fbDesc.m_colorAttachments.size() == 1);
-    VkAttachmentDescription ad;
-    AddAttachementDesc(ad, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[0].format);
-
-    VkAttachmentReference attachment_ref = CreateAttachmentReference(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    VkSubpassDescription sd = CreateSubpassDesc(&attachment_ref, 1);
-    std::vector<VkSubpassDependency> subpassDeps; 
-    subpassDeps.push_back(CreateSubpassDependency(VK_SUBPASS_EXTERNAL, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
-    
-    VkRenderPassCreateInfo rpci;
-    cleanStructure(rpci);
-    rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rpci.pNext = nullptr;
-    rpci.flags = 0;
-    rpci.attachmentCount =  1;
-    rpci.pAttachments = &ad;
-    rpci.subpassCount = 1;
-    rpci.pSubpasses = &sd;
-    rpci.dependencyCount = (uint32_t)subpassDeps.size();
-    rpci.pDependencies =  subpassDeps.data();
-
-    VULKAN_ASSERT(vk::CreateRenderPass(vk::g_vulkanContext.m_device, &rpci, nullptr, &m_postProcessPass));
+    //VULKAN_ASSERT(vk::CreateRenderPass(vk::g_vulkanContext.m_device, &rpci, nullptr, &m_shadowResolveRenderPass));
 }
 
 void CApplication::CreateSunRenderPass(const FramebufferDescription& fbDesc)
@@ -1656,56 +1420,6 @@ void CApplication::CreateSSRRenderPass(const FramebufferDescription& fbDesc)
 	dependencies.push_back(CreateSubpassDependency(1, 2, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
 
 	NewRenderPass(&m_ssrRenderPass, ad, subpasses, dependencies);
-}
-
-void CApplication::CreateTerrainRenderPass(const FramebufferDescription& fbDesc)
-{
-	std::vector<VkAttachmentDescription> ad;
-	ad.resize(fbDesc.m_colorAttachments.size() + 1);
-	
-	for (uint32_t i = 0; i < fbDesc.m_colorAttachments.size(); ++i)
-		AddAttachementDesc(ad[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[i].format, VK_ATTACHMENT_LOAD_OP_LOAD);
-
-	AddAttachementDesc(ad[fbDesc.m_colorAttachments.size()], VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format, VK_ATTACHMENT_LOAD_OP_LOAD);
-
-	std::vector<VkAttachmentReference> atRef;
-	for (unsigned int i = 0; i < fbDesc.m_colorAttachments.size(); ++i)
-		atRef.push_back(CreateAttachmentReference(i, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
-
-	atRef.push_back(CreateAttachmentReference((uint32_t)fbDesc.m_colorAttachments.size(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL));
-
-	std::vector<VkSubpassDescription> subpasses;
-	subpasses.push_back(CreateSubpassDesc(atRef.data(), (uint32_t)fbDesc.m_colorAttachments.size(), &atRef[fbDesc.m_colorAttachments.size()]));
-
-	std::vector<VkSubpassDependency> dependencies;
-	dependencies.push_back(CreateSubpassDependency(VK_SUBPASS_EXTERNAL, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_DEPENDENCY_BY_REGION_BIT));
-
-	NewRenderPass(&m_terrainRenderPass, ad, subpasses, dependencies);
-}
-
-void CApplication::CreateVegetationRenderPass(const FramebufferDescription& fbDesc)
-{
-	std::vector<VkAttachmentDescription> ad;
-	ad.resize(fbDesc.m_colorAttachments.size() + 1);
-
-	for (uint32_t i = 0; i < fbDesc.m_colorAttachments.size(); ++i)
-		AddAttachementDesc(ad[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[i].format, VK_ATTACHMENT_LOAD_OP_LOAD);
-
-	AddAttachementDesc(ad[fbDesc.m_colorAttachments.size()], VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, fbDesc.m_depthAttachments.format, VK_ATTACHMENT_LOAD_OP_LOAD);
-
-	std::vector<VkAttachmentReference> atRef;
-	for (unsigned int i = 0; i < fbDesc.m_colorAttachments.size(); ++i)
-		atRef.push_back(CreateAttachmentReference(i, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
-
-	atRef.push_back(CreateAttachmentReference((uint32_t)fbDesc.m_colorAttachments.size(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL));
-
-	std::vector<VkSubpassDescription> subpasses;
-	subpasses.push_back(CreateSubpassDesc(atRef.data(), (uint32_t)fbDesc.m_colorAttachments.size(), &atRef[fbDesc.m_colorAttachments.size()]));
-
-	std::vector<VkSubpassDependency> dependencies;
-	dependencies.push_back(CreateSubpassDependency(VK_SUBPASS_EXTERNAL, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_DEPENDENCY_BY_REGION_BIT));
-
-	NewRenderPass(&m_vegetationRenderPass, ad, subpasses, dependencies);
 }
 
 void CApplication::CreateTestRenderPass(const FramebufferDescription& fbDesc)
