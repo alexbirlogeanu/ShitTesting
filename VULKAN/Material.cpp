@@ -22,9 +22,9 @@ MaterialLibrary::~MaterialLibrary()
 		delete entry.second;
 }
 
-void MaterialLibrary::Initialize(CRenderer* renderer)
+void MaterialLibrary::Initialize()
 {
-	///CreateDescriptor layouts
+	//CreateDescriptor layouts
 	m_descriptorLayouts.resize(DescriptorIndex::Count);
 
 	m_descriptorLayouts[DescriptorIndex::Common] = new DescriptorSetLayout();
@@ -36,9 +36,12 @@ void MaterialLibrary::Initialize(CRenderer* renderer)
 
 	for (unsigned int i = 0; i < DescriptorIndex::Count; ++i)
 		m_descriptorLayouts[i]->Construct();
+}
 
+void MaterialLibrary::Setup(VkRenderPass renderPass, uint32_t subpassId)
+{
 	for (auto tmpl : m_materialTemplates)
-		tmpl.second->CreatePipeline(renderer);
+		tmpl.second->CreatePipeline(renderPass, subpassId);
 }
 
 std::vector<VkDescriptorSet> MaterialLibrary::AllocNewDescriptors()
@@ -120,6 +123,24 @@ void MaterialTemplateBase::CreatePipeline(CRenderer* renderer)
 	m_pipeline.CreatePipelineLayout(MaterialLibrary::GetInstance()->GetDescriptorLayouts());
 	m_pipeline.Init(renderer, renderer->GetRenderPass(), 0); //0 is a "magic" number. This means that renderpass has just a subpass and the m_pipelines are used in that subpass
 }
+
+void MaterialTemplateBase::CreatePipeline(VkRenderPass renderPass, uint32_t subpassId)
+{
+	VkPushConstantRange pushConstRange;
+	pushConstRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT;
+	pushConstRange.offset = 0;
+	pushConstRange.size = 256; //max push constant range(can get it from limits)
+
+	m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
+	m_pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), GBuffer_InputCnt);
+	m_pipeline.SetVertexShaderFile(GetVertexShader());
+	m_pipeline.SetFragmentShaderFile(GetFragmentShader());
+	m_pipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
+	m_pipeline.AddPushConstant(pushConstRange);
+	m_pipeline.CreatePipelineLayout(MaterialLibrary::GetInstance()->GetDescriptorLayouts());
+	m_pipeline.Setup(renderPass, subpassId);
+}
+
 
 std::vector<VkDescriptorSet> MaterialTemplateBase::GetNewDescriptorSets()
 {

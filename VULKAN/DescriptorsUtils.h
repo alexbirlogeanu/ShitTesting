@@ -46,7 +46,7 @@ public:
 	bool CanAllocate(const DescriptorSetLayout& layoutType);
 	bool CanAllocate(const std::vector<DescriptorSetLayout*>& layoutsType);
 	VkDescriptorSet AllocateDescriptorSet(const DescriptorSetLayout& layoutType);
-	std::vector<VkDescriptorSet> AllocateDescriptorSet(const std::vector<DescriptorSetLayout>& layoutsTypes);
+	void AllocateDescriptorSet(const std::vector<DescriptorSetLayout>& layoutsTypes, std::vector<VkDescriptorSet>& outDescSets);
 
 	bool FreeDescriptorSet(VkDescriptorSet descSet);
 private:

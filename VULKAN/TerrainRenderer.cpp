@@ -7,6 +7,7 @@
 #include "Scene.h"
 #include "Geometry.h"
 #include "ShadowRenderer.h"
+#include "GraphicEngine.h"
 
 #include "Input.h"
 
@@ -19,14 +20,19 @@ struct TerrainParams
 	glm::vec4 PatchParams; //xy - number of cells that are in terrain texture patch, zw - total number of cells in a terrain grid
 };
 
-struct ShadowTerrainParams
+////////////////////////////////////////////////////////////////////////////////
+//TerrainRenderer
+////////////////////////////////////////////////////////////////////////////////
+
+struct ShadowTerrainParams2
 {
 	glm::ivec4								NSplits;
-	ShadowMapRenderer::SplitsArrayType		Splits;
+	SplitsArrayType							Splits;
 };
 
-TerrainRenderer::TerrainRenderer(VkRenderPass renderPass)
-	: CRenderer(renderPass, "TerrainRenderPass")
+
+TerrainRenderer::TerrainRenderer()
+	: Renderer()
 	, m_grid(nullptr)
 	, m_descSet(VK_NULL_HANDLE)
 	, m_shadowDescSet(VK_NULL_HANDLE)
@@ -43,83 +49,25 @@ TerrainRenderer::TerrainRenderer(VkRenderPass renderPass)
 TerrainRenderer::~TerrainRenderer()
 {
 	VkDevice dev = vk::g_vulkanContext.m_device;
+	MemoryManager::GetInstance()->FreeHandle(m_terrainParamsBuffer);
+	MemoryManager::GetInstance()->FreeHandle(m_shadowSplitsBuffer);
 
+	delete m_grid;
 }
 
-void TerrainRenderer::Init()
+void TerrainRenderer::InitInternal()
 {
 	CreateGrid();
 	LoadTextures();
 
-	CRenderer::Init();
-
 	m_terrainParamsBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(TerrainParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-	m_shadowSplitsBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(ShadowTerrainParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-
-	AllocDescriptorSets(m_descriptorPool, m_descriptorLayout.Get(), &m_descSet);
-	AllocDescriptorSets(m_descriptorPool, m_shadowDescLayout.Get(), &m_shadowDescSet);
-
-	CreatePipeline();
+	m_shadowSplitsBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(ShadowTerrainParams2), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
 	InputManager::GetInstance()->MapMouseButton(InputManager::MouseButtonsCallback(this, &TerrainRenderer::OnMouseInput));
 	InputManager::GetInstance()->MapKeyPressed('2', InputManager::KeyPressedCallback(this, &TerrainRenderer::OnEditEnable));
-
 }
 
-void TerrainRenderer::Render()
-{
-	VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
-
-	StartRenderPass();
-
-	vk::CmdBindPipeline(cmd, m_activePipeline->GetBindPoint(), m_activePipeline->Get());
-	vk::CmdBindDescriptorSets(cmd, m_activePipeline->GetBindPoint(), m_activePipeline->GetLayout(), 0, 1, &m_descSet, 0, nullptr);
-
-	m_grid->Render();
-
-	EndRenderPass();
-}
-
-void TerrainRenderer::RenderShadows()
-{
-	glm::mat4 proj;
-	PerspectiveMatrix(proj);
-	ConvertToProjMatrix(proj);
-	m_pushConstants.ShadowProjViewMatrix = g_commonResources.GetAs<glm::mat4>(EResourceType_ShadowProjViewMat);
-	m_pushConstants.ViewMatrix = proj * ms_camera.GetViewMatrix();
-	VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
-
-	vk::CmdBindPipeline(cmdBuffer, m_shadowPipeline.GetBindPoint(), m_shadowPipeline.Get());
-	vk::CmdPushConstants(cmdBuffer, m_shadowPipeline.GetLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(ShadowPushConstants), &m_pushConstants);
-	vk::CmdBindDescriptorSets(cmdBuffer, m_shadowPipeline.GetBindPoint(), m_shadowPipeline.GetLayout(), 0, 1, &m_shadowDescSet, 0, nullptr);
-
-	m_grid->Render();
-}
-
-void TerrainRenderer::PreRender()
-{
-	glm::mat4 modelMatrix = glm::scale(glm::translate(glm::mat4(1.0f), Scene::TerrainTranslate), glm::vec3(1.0f));
-	m_pushConstants.ModelMatrix = modelMatrix;
-	
-	ShadowTerrainParams* shadowParams = m_shadowSplitsBuffer->GetPtr<ShadowTerrainParams*>();
-	shadowParams->NSplits = glm::ivec4(SHADOWSPLITS);
-	shadowParams->Splits = g_commonResources.GetAs<ShadowMapRenderer::SplitsArrayType>(EResourceType_ShadowMapSplits);
-
-	glm::mat4 projMatrix;
-	PerspectiveMatrix(projMatrix);
-	ConvertToProjMatrix(projMatrix);
-	
-	TerrainParams* params = m_terrainParamsBuffer->GetPtr<TerrainParams*>();
-
-	params->MaterialProp = glm::vec4(0.90, 0.1, 0.5, 0.0f);
-	params->WorldMatrix = modelMatrix;
-	params->ViewProjMatrix = projMatrix * ms_camera.GetViewMatrix();
-
-	params->TesselationParams = m_tesselationParameters;
-	params->PatchParams = m_terrainPatchParameters;
-}
-
-void TerrainRenderer::CreateDescriptorSetLayout()
+void TerrainRenderer::CreateDescriptorSetLayouts()
 {
 	m_descriptorLayout.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1);
 	m_descriptorLayout.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1);
@@ -127,11 +75,68 @@ void TerrainRenderer::CreateDescriptorSetLayout()
 
 	m_descriptorLayout.Construct();
 
+	RegisterDescriptorSetLayout(&m_descriptorLayout);
+
 	m_shadowDescLayout.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_GEOMETRY_BIT, 1);
-	m_shadowDescLayout.Construct(); 
+	m_shadowDescLayout.Construct();
+
+	RegisterDescriptorSetLayout(&m_shadowDescLayout);
 }
 
-void TerrainRenderer::CreatePipeline()
+void TerrainRenderer::AllocateDescriptorSets()
+{
+	m_descSet = m_descriptorPool.AllocateDescriptorSet(m_descriptorLayout);
+	m_shadowDescSet = m_descriptorPool.AllocateDescriptorSet(m_shadowDescLayout);
+}
+
+//void TerrainRenderer::CreatePipeline()
+//{
+//	m_tessellatedPipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+//	m_tessellatedPipeline.SetVertexShaderFile("terrain.vert");
+//	m_tessellatedPipeline.SetFragmentShaderFile("terrain.frag");
+//	m_tessellatedPipeline.SetTesselationControlShaderFile("tesselation.tesc");
+//	m_tessellatedPipeline.SetTesselationEvaluationShaderFile("tesselation.tese");
+//	m_tessellatedPipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_PATCH_LIST);
+//	m_tessellatedPipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
+//	m_tessellatedPipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 4);
+//	m_tessellatedPipeline.SetWireframeSupport(true);
+//	m_tessellatedPipeline.SetDepthTest(true);
+//	m_tessellatedPipeline.SetTesselationPatchSize(3);
+//	m_tessellatedPipeline.SetVertexInputState(Mesh::GetVertexDesc());
+//	m_tessellatedPipeline.CreatePipelineLayout(m_descriptorLayout.Get());
+//	m_tessellatedPipeline.Init(this, m_renderPass, 0);
+//
+//
+//	//add support to create a derivative pipeline from another
+//	m_simplePipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+//	m_simplePipeline.SetVertexShaderFile("terrain_debug.vert");
+//	m_simplePipeline.SetFragmentShaderFile("terrain.frag");
+//	m_simplePipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
+//	m_simplePipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 4);
+//	m_simplePipeline.SetWireframeSupport(true);
+//	m_simplePipeline.SetDepthTest(true);
+//	m_simplePipeline.SetVertexInputState(Mesh::GetVertexDesc());
+//	m_simplePipeline.CreatePipelineLayout(m_descriptorLayout.Get());
+//	m_simplePipeline.Init(this, m_renderPass, 0);
+//
+//	m_activePipeline = &m_tessellatedPipeline;
+//
+//	VkRenderPass shadowRenderPass = g_commonResources.GetAs<VkRenderPass>(EResourceType_ShadowRenderPass);
+//
+//	m_shadowPipeline.SetVertexInputState(Mesh::GetVertexDesc());
+//	m_shadowPipeline.SetViewport(SHADOWW, SHADOWH);
+//	m_shadowPipeline.SetScissor(SHADOWW, SHADOWH);
+//	//m_shadowPipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
+//	m_shadowPipeline.SetVertexShaderFile("shadow_terrain.vert");
+//	m_shadowPipeline.SetGeometryShaderFile("shadow_terrain.geom");
+//	m_shadowPipeline.SetFragmentShaderFile("shadowlineardepth.frag");
+//	m_shadowPipeline.AddPushConstant({ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 0, 256 });
+//
+//	m_shadowPipeline.CreatePipelineLayout(m_shadowDescLayout.Get());
+//	m_shadowPipeline.Init(this, shadowRenderPass, 0);
+//}
+
+void TerrainRenderer::Setup(VkRenderPass renderPass, uint32_t subpassId)
 {
 	m_tessellatedPipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	m_tessellatedPipeline.SetVertexShaderFile("terrain.vert");
@@ -146,8 +151,8 @@ void TerrainRenderer::CreatePipeline()
 	m_tessellatedPipeline.SetTesselationPatchSize(3);
 	m_tessellatedPipeline.SetVertexInputState(Mesh::GetVertexDesc());
 	m_tessellatedPipeline.CreatePipelineLayout(m_descriptorLayout.Get());
-	m_tessellatedPipeline.Init(this, m_renderPass, 0);
-
+	m_tessellatedPipeline.Setup(renderPass, subpassId);
+	RegisterPipeline(&m_tessellatedPipeline);
 
 	//add support to create a derivative pipeline from another
 	m_simplePipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
@@ -159,31 +164,88 @@ void TerrainRenderer::CreatePipeline()
 	m_simplePipeline.SetDepthTest(true);
 	m_simplePipeline.SetVertexInputState(Mesh::GetVertexDesc());
 	m_simplePipeline.CreatePipelineLayout(m_descriptorLayout.Get());
-	m_simplePipeline.Init(this, m_renderPass, 0);
+	m_simplePipeline.Setup(renderPass, subpassId);
+	RegisterPipeline(&m_simplePipeline);
 
 	m_activePipeline = &m_tessellatedPipeline;
-
-	VkRenderPass shadowRenderPass = g_commonResources.GetAs<VkRenderPass>(EResourceType_ShadowRenderPass);
-
-	m_shadowPipeline.SetVertexInputState(Mesh::GetVertexDesc());
-	m_shadowPipeline.SetViewport(SHADOWW, SHADOWH);
-	m_shadowPipeline.SetScissor(SHADOWW, SHADOWH);
-	//m_shadowPipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
-	m_shadowPipeline.SetVertexShaderFile("shadow_terrain.vert");
-	m_shadowPipeline.SetGeometryShaderFile("shadow_terrain.geom");
-	m_shadowPipeline.SetFragmentShaderFile("shadowlineardepth.frag");
-	m_shadowPipeline.AddPushConstant({VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 0, 256});
-
-	m_shadowPipeline.CreatePipelineLayout(m_shadowDescLayout.Get());
-	m_shadowPipeline.Init(this, shadowRenderPass, 0);
 }
+
+void TerrainRenderer::Render()
+{
+	VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
+
+	StartDebugMarker("TerrainPass");
+
+	vk::CmdBindPipeline(cmd, m_activePipeline->GetBindPoint(), m_activePipeline->Get());
+	vk::CmdBindDescriptorSets(cmd, m_activePipeline->GetBindPoint(), m_activePipeline->GetLayout(), 0, 1, &m_descSet, 0, nullptr);
+
+	m_grid->Render();
+
+	EndDebugMarker("TerrainPass");
+}
+
+void TerrainRenderer::SetupShadows(VkRenderPass renderPass, uint32_t subpassId)
+{
+		m_shadowPipeline.SetVertexInputState(Mesh::GetVertexDesc());
+		m_shadowPipeline.SetViewport(SHADOWW, SHADOWH);
+		m_shadowPipeline.SetScissor(SHADOWW, SHADOWH);
+		//m_shadowPipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
+		m_shadowPipeline.SetVertexShaderFile("shadow_terrain.vert");
+		m_shadowPipeline.SetGeometryShaderFile("shadow_terrain.geom");
+		m_shadowPipeline.SetFragmentShaderFile("shadowlineardepth.frag");
+		m_shadowPipeline.AddPushConstant({ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 0, 256 });
+	
+		m_shadowPipeline.CreatePipelineLayout(m_shadowDescLayout.Get());
+		m_shadowPipeline.Setup(renderPass, subpassId);
+		RegisterPipeline(&m_shadowPipeline);
+}
+
+
+void TerrainRenderer::RenderShadows()
+{
+	StartDebugMarker("TerrainShadowPass");
+
+	m_pushConstants.ShadowProjViewMatrix = glm::mat4(1.0f);
+	m_pushConstants.ViewMatrix = GraphicEngine::GetFrameConstants().ProjViewMatrix; //it seems that is ProjView Matrix not only the view matrix
+	VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
+
+	vk::CmdBindPipeline(cmdBuffer, m_shadowPipeline.GetBindPoint(), m_shadowPipeline.Get());
+	vk::CmdPushConstants(cmdBuffer, m_shadowPipeline.GetLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(ShadowPushConstants), &m_pushConstants);
+	vk::CmdBindDescriptorSets(cmdBuffer, m_shadowPipeline.GetBindPoint(), m_shadowPipeline.GetLayout(), 0, 1, &m_shadowDescSet, 0, nullptr);
+
+	m_grid->Render();
+
+	EndDebugMarker("TerrainShadowPass");
+}
+
+void TerrainRenderer::PreRender()
+{
+	const FrameConstants& fc = GraphicEngine::GetFrameConstants();
+
+	glm::mat4 modelMatrix = glm::scale(glm::translate(glm::mat4(1.0f), Scene::TerrainTranslate), glm::vec3(1.0f));
+	m_pushConstants.ModelMatrix = modelMatrix;
+
+	ShadowTerrainParams2* shadowParams = m_shadowSplitsBuffer->GetPtr<ShadowTerrainParams2*>();
+	shadowParams->NSplits = glm::ivec4(fc.NumberOfShadowSplits);
+	shadowParams->Splits = fc.ShadowSplits;
+
+	TerrainParams* params = m_terrainParamsBuffer->GetPtr<TerrainParams*>();
+
+	params->MaterialProp = glm::vec4(0.90, 0.1, 0.5, 0.0f);
+	params->WorldMatrix = modelMatrix;
+	params->ViewProjMatrix = fc.ProjViewMatrix;
+
+	params->TesselationParams = m_tesselationParameters;
+	params->PatchParams = m_terrainPatchParameters;
+}
+
 
 //shit function
 void TerrainRenderer::CreateGrid()
 {
 	SImageData heightMap;
 	Read2DTextureData(heightMap, std::string(TEXTDIR) + "terrain3.png", false);
-	
+
 	const float heightMax = 7.0f;
 	std::vector<SVertex> vertices;
 	std::vector<uint32_t> indices;
@@ -195,7 +257,7 @@ void TerrainRenderer::CreateGrid()
 
 	const float xStride = xLength / xDivision;
 	const float yStride = yLength / yDivision;
-	
+
 	const float xDisplacement = xLength / 2.0f;
 	const float yDisplacement = yLength / 2.0f;
 	vertices.reserve((xDivision + 1) * (yDivision + 1));
@@ -225,14 +287,14 @@ void TerrainRenderer::CreateGrid()
 	//now we compute normals
 	/*To get the normal of a vertex, first have to compute the normal of the adjancent triangles
 
-		the neighbours vertexes are numbered as follows :
-			0
-			|
-		3 - P - 1
-			|
-			2
+	the neighbours vertexes are numbered as follows :
+	0
+	|
+	3 - P - 1
+	|
+	2
 
-		We will get the normals of the triangles that contains pair of vertexes : P - 0, P - 1, P - 2, P - 3\
+	We will get the normals of the triangles that contains pair of vertexes : P - 0, P - 1, P - 2, P - 3\
 	*/
 	{
 		//first compute the normals for all the vertexes with 4 neighbours
@@ -288,7 +350,7 @@ void TerrainRenderer::CreateGrid()
 			SVertex& P = vertices[y * xVerts];
 			const SVertex& P0 = vertices[(y - 1) * xVerts];
 			const SVertex& P1 = vertices[y * xVerts + 1];
-			const SVertex& P2 = vertices[(y + 1) * xVerts ];
+			const SVertex& P2 = vertices[(y + 1) * xVerts];
 
 			P.normal = Geometry::ComputeNormal(P.pos, P1.pos, P0.pos);
 			P.normal += Geometry::ComputeNormal(P.pos, P2.pos, P1.pos);
@@ -345,7 +407,7 @@ void TerrainRenderer::LoadTextures()
 	m_splatterTexture->SetIsSRGB(false);
 	ResourceLoader::GetInstance()->LoadTexture(&m_splatterTexture);
 
-	std::string textFilename[] = {"grass2.png", "rock3.png", "sand.png"};
+	std::string textFilename[] = { "grass2.png", "rock3.png", "sand.png" };
 	for (const auto& fn : textFilename)
 	{
 		CTexture* text = new CTexture(fn);
@@ -427,20 +489,6 @@ bool TerrainRenderer::OnMouseInput(const MouseInput& mouseInput)
 	}
 
 	return true;
-}
-
-void TerrainRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)
-{
-	maxSets = 2;
-	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1);
-	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1);
-	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, (uint32_t)m_terrainTextures.size());
-	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1); //shadow
-}
-
-void TerrainRenderer::UpdateResourceTable()
-{
-
 }
 
 void TerrainRenderer::UpdateGraphicInterface()

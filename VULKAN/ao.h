@@ -7,55 +7,62 @@
 
 #include <vector>
 
-enum ESSAOPass
-{
-    ESSAOPass_Main = 0,
-    ESSAOPass_HBlur,
-    ESSAOPass_VBlur,
-    ESSAOPass_Count
-};
-
 class Mesh;
 class BufferHandle;
-class CAORenderer : public CRenderer
+
+///////////////////////////////////////////////////////////////////
+//AORenderer
+///////////////////////////////////////////////////////////////////
+
+class AORenderer : public Renderer
 {
 public:
-    CAORenderer(VkRenderPass renderPass);
-    virtual ~CAORenderer();
+	AORenderer();
+	virtual ~AORenderer();
 
-    virtual void Init() override;
-    virtual void Render() override;
-	virtual void PreRender() override;
-    //VkImageView GetOuput() { return m_framebuffer->GetColorImageView(0); }
+
+	void PreRender();
+	//VkImageView GetOuput() { return m_framebuffer->GetColorImageView(0); }
+
+
+	void SetupMainPass(VkRenderPass renderPass, uint32_t subpassId);
+	void RenderMain();
+
+	void SetupVBlurPass(VkRenderPass renderPass, uint32_t subpassId);
+	void RenderVBlur();
+
+	void SetupHBlurPass(VkRenderPass renderPass, uint32_t subpassId);
+	void RenderHBlur();
 
 protected:
-    virtual void CreateDescriptorSetLayout() override;
-    void AllocDescriptors();
-    void InitSSAOParams();
-    virtual void UpdateGraphicInterface() override;
+	void InitInternal() override;
+	void CreateDescriptorSetLayouts() override;
+	void UpdateGraphicInterface() override;
+	void AllocateDescriptorSets() override;
+	
+	void InitSSAOParams();
 
-    void UpdateParams();
-    virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets);
-    virtual void UpdateResourceTable() override;
+	void UpdateParams();
 private:
-    //buffers
-    BufferHandle*           m_constParamsBuffer;
-	BufferHandle*           m_varParamsBuffer;
+	//buffers
+	BufferHandle*					m_constParamsBuffer;
+	BufferHandle*					m_varParamsBuffer;
 
-    VkSampler               m_sampler;
+	VkSampler						m_sampler;
 
-    VkDescriptorSetLayout   m_constDescSetLayout;
-    VkDescriptorSetLayout   m_varDescSetLayout;
-    VkDescriptorSetLayout   m_blurDescSetLayout;
-    std::vector<VkDescriptorSet> m_mainPassSets;
-    std::vector<VkDescriptorSet> m_blurPassSets;
+	DescriptorSetLayout				m_constDescSetLayout;
+	DescriptorSetLayout				m_varDescSetLayout;
+	DescriptorSetLayout				m_blurDescSetLayout;
 
-    //containers for const params for ssao (debug purpose mostly)
-    std::vector<glm::vec4>  m_samples;
-    std::vector<glm::vec4>  m_noise;
+	CGraphicPipeline				m_mainPipeline;
+	CGraphicPipeline				m_hblurPipeline;
+	CGraphicPipeline				m_vblurPipeline;
+	Mesh*							m_quad;
 
-    CGraphicPipeline               m_mainPipeline;
-    CGraphicPipeline               m_hblurPipeline;
-    CGraphicPipeline               m_vblurPipeline;
-    Mesh*                   m_quad;
+	std::vector<VkDescriptorSet>	m_mainPassSets;
+	std::vector<VkDescriptorSet>	m_blurPassSets;
+
+	//containers for const params for ssao (debug purpose mostly)
+	std::vector<glm::vec4>			m_samples;
+	std::vector<glm::vec4>			m_noise;
 };

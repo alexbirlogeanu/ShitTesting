@@ -53,16 +53,6 @@
 //#define OUT_FORMAT VK_FORMAT_B8G8R8A8_UNORM
 CCamera     ms_camera;
 
-struct LightShaderParams
-{
-    glm::vec4       dirLight;
-    glm::vec4       cameraPos;
-    glm::vec4       lightIradiance;
-    glm::mat4       pointVPMatrix;
-    glm::mat4       pointModelMatrix;
-    glm::vec4       pointRadius;
-    glm::vec4       pointColor;
-};
 CDirectionalLight directionalLight;
 
 void CleanUp()
@@ -358,187 +348,6 @@ enum EPointLightPassBuffers
 	EPointLightBuffer_Debug,
 	EPointLightBuffer_Depth,
 	EPointLightBuffer_Count
-};
-
-class CLightRenderer : public CRenderer
-{
-public:
-    CLightRenderer(VkRenderPass renderPass)
-        : CRenderer(renderPass, "LightRenderPass")
-        , m_sampler(VK_NULL_HANDLE)
-        , m_shaderUniformBuffer(nullptr)
-        , m_depthSampler(VK_NULL_HANDLE)
-        , m_descriptorSetLayout(VK_NULL_HANDLE)
-        , m_descriptorSet(VK_NULL_HANDLE)
-    {
-
-    }
-    virtual ~CLightRenderer()
-    {
-        VkDevice dev = vk::g_vulkanContext.m_device;
-        vk::DestroySampler(dev, m_sampler, nullptr);
-		MemoryManager::GetInstance()->FreeHandle(m_shaderUniformBuffer);
-        vk::DestroyDescriptorSetLayout(dev, m_descriptorSetLayout, nullptr);
-    }
-
-    virtual void AllocDescriptorSets(VkDescriptorPool descPool)
-    {
-        VkDescriptorSetAllocateInfo descAllocInfo;
-        cleanStructure(descAllocInfo);
-        descAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        descAllocInfo.pNext = nullptr;
-        descAllocInfo.descriptorPool = descPool;
-        descAllocInfo.descriptorSetCount = 1;
-        descAllocInfo.pSetLayouts = &m_descriptorSetLayout;
-
-        VULKAN_ASSERT(vk::AllocateDescriptorSets(vk::g_vulkanContext.m_device, &descAllocInfo, &m_descriptorSet));
-    }
-
-    virtual void Render()
-    {
-        VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
-        StartRenderPass();
-        vk::CmdBindPipeline(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.Get());
-
-        vk::CmdBindDescriptorSets(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, 1, &m_descriptorSet, 0, nullptr);
-
-        vk::CmdDraw(cmdBuffer, 4, 1, 0, 0);
-        EndRenderPass();
-    }
-
-	void PreRender() override
-    {
-        LightShaderParams* newParams = m_shaderUniformBuffer->GetPtr<LightShaderParams*>();
-        newParams->dirLight = directionalLight.GetDirection();
-        newParams->cameraPos = glm::vec4(ms_camera.GetPos(), 1);
-        newParams->lightIradiance = directionalLight.GetLightIradiance();
-        newParams->lightIradiance[3] = directionalLight.GetLightIntensity();
-    }
-
-    virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override
-    {
-        maxSets = 1;
-
-        AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, GBuffer_InputCnt + 2); //shadow map and aomap
-        AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1);
-    }
-
-    virtual void Init() override
-    {
-        CRenderer::Init();
-
-        AllocDescriptorSets(m_descriptorPool);
-        CreateNearestSampler(m_sampler);
-
-        CreateNearestSampler(m_depthSampler);
-
-		m_shaderUniformBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(LightShaderParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-
-        m_pipeline.SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN);
-        m_pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 2);
-        m_pipeline.SetVertexShaderFile("light.vert");
-        m_pipeline.SetFragmentShaderFile("light.frag");
-        m_pipeline.SetDepthTest(false);
-
-        m_pipeline.CreatePipelineLayout(m_descriptorSetLayout);
-        m_pipeline.Init(this, m_renderPass, ELightSubpass_Directional);
-    }
-
-protected:
-    virtual void UpdateGraphicInterface() override
-    {
-		ImageHandle* shadowMap = g_commonResources.GetAs<ImageHandle*>(EResourceType_ResolvedShadowImage);
-		ImageHandle* aoMap = g_commonResources.GetAs<ImageHandle*>(EResourceType_AOBufferImage);
-
-        const unsigned int descSize = GBuffer_InputCnt;
-        VkDescriptorImageInfo imgInfo[descSize];
-        imgInfo[GBuffer_Albedo].sampler = m_sampler;
-		imgInfo[GBuffer_Albedo].imageView = g_commonResources.GetAs<ImageHandle*>(EResourceType_AlbedoImage)->GetView();
-        imgInfo[GBuffer_Albedo].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        imgInfo[GBuffer_Normals].sampler = m_sampler;
-		imgInfo[GBuffer_Normals].imageView = g_commonResources.GetAs<ImageHandle*>(EResourceType_NormalsImage)->GetView();
-        imgInfo[GBuffer_Normals].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        imgInfo[GBuffer_Position].sampler = m_sampler;
-		imgInfo[GBuffer_Position].imageView = g_commonResources.GetAs<ImageHandle*>(EResourceType_PositionsImage)->GetView();
-        imgInfo[GBuffer_Position].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        imgInfo[GBuffer_Specular].sampler = m_sampler;
-		imgInfo[GBuffer_Specular].imageView = g_commonResources.GetAs<ImageHandle*>(EResourceType_SpecularImage)->GetView();
-        imgInfo[GBuffer_Specular].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        std::vector<VkWriteDescriptorSet> writeSets;
-        writeSets.resize(4);
-        cleanStructure(writeSets[0]);
-        writeSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeSets[0].pNext = nullptr;
-        writeSets[0].dstSet = m_descriptorSet;
-        writeSets[0].dstBinding = 0;
-        writeSets[0].dstArrayElement = 0;
-        writeSets[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        writeSets[0].descriptorCount = descSize; //this is a little risky. There is no array of sampler in shader. this just work
-        writeSets[0].pImageInfo = imgInfo;
-
-        VkDescriptorBufferInfo buffInfo = m_shaderUniformBuffer->GetDescriptor();
-        writeSets[1] = InitUpdateDescriptor(m_descriptorSet, GBuffer_InputCnt, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfo);
-
-        VkDescriptorImageInfo shadowMapDesc;
-        shadowMapDesc.sampler = m_depthSampler;
-        shadowMapDesc.imageView = shadowMap->GetView();
-        shadowMapDesc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        writeSets[2] = InitUpdateDescriptor(m_descriptorSet, GBuffer_InputCnt + 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &shadowMapDesc);
-
-        VkDescriptorImageInfo aoMapDesc;
-        aoMapDesc.sampler = m_sampler;
-        aoMapDesc.imageView = aoMap->GetView();
-        aoMapDesc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        writeSets[3] = InitUpdateDescriptor(m_descriptorSet, GBuffer_InputCnt + 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &aoMapDesc);
-
-        vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)writeSets.size(), writeSets.data(), 0, nullptr);
-    }
-
-    virtual void CreateDescriptorSetLayout()
-    {
-        const unsigned int size = GBuffer_InputCnt + 1; //+ uniform buffer
-        std::vector<VkDescriptorSetLayoutBinding> descCnt;
-        descCnt.resize(size);
-        cleanStructure(descCnt[GBuffer_Albedo]); //albedo
-        descCnt[GBuffer_Albedo] = CreateDescriptorBinding(GBuffer_Albedo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-        descCnt[GBuffer_Normals] = CreateDescriptorBinding(GBuffer_Normals, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-        descCnt[GBuffer_Position] = CreateDescriptorBinding(GBuffer_Position, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-        descCnt[GBuffer_Specular] = CreateDescriptorBinding(GBuffer_Specular, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-        descCnt[GBuffer_InputCnt] = CreateDescriptorBinding(GBuffer_InputCnt, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
-
-        VkDescriptorSetLayoutBinding shadowMapDesc = CreateDescriptorBinding(GBuffer_InputCnt + 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-        descCnt.push_back(shadowMapDesc);
-
-        VkDescriptorSetLayoutBinding aoMap = CreateDescriptorBinding( GBuffer_InputCnt + 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-        descCnt.push_back(aoMap);
-
-        VkDescriptorSetLayoutCreateInfo descSetLayout;
-        cleanStructure(descSetLayout);
-        descSetLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        descSetLayout.pNext = nullptr;
-        descSetLayout.flags = 0;
-        descSetLayout.bindingCount = (uint32_t)descCnt.size();
-        descSetLayout.pBindings = descCnt.data();
-
-        VULKAN_ASSERT(vk::CreateDescriptorSetLayout(vk::g_vulkanContext.m_device, &descSetLayout, nullptr, &m_descriptorSetLayout));
-    }
-protected:
-
-    VkSampler                       m_sampler;
-    VkSampler                       m_depthSampler;
-
-    BufferHandle*                   m_shaderUniformBuffer;
-
-    VkDescriptorSetLayout           m_descriptorSetLayout;
-    VkDescriptorSet                 m_descriptorSet;
-
-    CGraphicPipeline                m_pipeline;
 };
 
 class CSkyRenderer : public CRenderer
@@ -908,13 +717,6 @@ private:
     void CenterCursor();
     void HideCursor(bool hide);
 
-    VkImage GetFinalOutput();
-    void TransferToPresentImage();
-    void BeginFrame();
-
-    void CreateSurface();
-    void CreateSwapChains();
-
     void SetupDeferredRendering();
     void SetupAORendering();
     void SetupDirectionalLightingRendering();
@@ -953,20 +755,10 @@ private:
 	void CreateTerrainRenderPass(const FramebufferDescription& fbDesc);
 	void CreateVegetationRenderPass(const FramebufferDescription& fbDesc);
 	void CreateTestRenderPass(const FramebufferDescription& fbDesc);
-
-    void CreateCommandBuffer();
   
     void StartDeferredRender();
-    void RenderShadows();
     void RenderPostProcess();
 
-    void WaitForFinalImageToComplete();
-
-    void StartCommandBuffer();
-    void EndCommandBuffer();
-    //pipeline
-    void GetQueue();
-    void CreateSynchronizationHelpers();
     void CreateQueryPools();
 
     void SetupParticles();
@@ -991,8 +783,7 @@ private:
     HWND        m_windowHandle;
     HINSTANCE   m_appInstance;
     //rendering context
-    VkSurfaceKHR                m_surface;
-    VkSwapchainKHR              m_swapChain;
+
     VkRenderPass                m_deferredRenderPass;
     VkRenderPass                m_aoRenderPass;
     VkRenderPass                m_dirLightRenderPass;
@@ -1013,18 +804,6 @@ private:
 	VkRenderPass				m_vegetationRenderPass;
 	VkRenderPass				m_testRenderPass;
 
-    std::vector<VkImage>        m_presentImages;
-
-    unsigned int                m_currentBuffer;
-	VkQueue						m_queue;
-
-	VkCommandPool               m_commandPool;
-	VkCommandBuffer             m_mainCommandBuffer;
-    //synchronization objects
-    VkFence                     m_aquireImageFence;
-    VkFence                     m_renderFence;
-    VkSemaphore                 m_renderSemaphore;
-
     //CCubeMapTexture*            m_skyTextureCube;
     CTexture*                   m_skyTexture2D;
     CTexture*                   m_sunTexture;
@@ -1038,11 +817,8 @@ private:
     CTexture*                   m_rainTexture;
 
     ObjectRenderer*             m_objectRenderer;
-    CAORenderer*                m_aoRenderer;
-    CLightRenderer*             m_lightRenderer;
 	PointLightRenderer2*		m_pointLightRenderer2;
     CParticlesRenderer*         m_particlesRenderer;
-    ShadowMapRenderer*             m_shadowRenderer;
     CShadowResolveRenderer*     m_shadowResolveRenderer;
     CSkyRenderer*               m_skyRenderer;
     CFogRenderer*               m_fogRenderer;
@@ -1052,8 +828,6 @@ private:
     CSunRenderer*               m_sunRenderer;
     CUIRenderer*                m_uiRenderer;
 	ScreenSpaceReflectionsRenderer*	m_ssrRenderer;
-	TerrainRenderer*			m_terrainRenderer;
-	VegetationRenderer*			m_vegetationRenderer;
 	TestRenderer*				m_testRenderer;
 
     //bool                        m_pickRecorded;
@@ -1097,25 +871,13 @@ CApplication::CApplication()
 	, m_ssrRenderPass(VK_NULL_HANDLE)
 	, m_terrainRenderPass(VK_NULL_HANDLE)
 	, m_vegetationRenderPass(VK_NULL_HANDLE)
-	, m_swapChain(VK_NULL_HANDLE)
-	, m_surface(VK_NULL_HANDLE)
-	, m_queue(VK_NULL_HANDLE)
-	, m_mainCommandBuffer(VK_NULL_HANDLE)
-	, m_commandPool(VK_NULL_HANDLE)
-	, m_aquireImageFence(VK_NULL_HANDLE)
-	, m_renderSemaphore(VK_NULL_HANDLE)
-	, m_renderFence(VK_NULL_HANDLE)
-	, m_currentBuffer(-1)
 	//, m_skyTextureCube(nullptr)
 	, m_skyTexture2D(nullptr)
 	, m_sunTexture(nullptr)
 	, m_smokeTexture(nullptr)
-	, m_lightRenderer(nullptr)
 	, m_pointLightRenderer2(nullptr)
 	, m_particlesRenderer(nullptr)
 	, m_objectRenderer(nullptr)
-	, m_aoRenderer(nullptr)
-	, m_shadowRenderer(nullptr)
 	, m_shadowResolveRenderer(nullptr)
 	, m_skyRenderer(nullptr)
 	, m_fogRenderer(nullptr)
@@ -1125,8 +887,6 @@ CApplication::CApplication()
 	, m_sunRenderer(nullptr)
 	, m_uiRenderer(nullptr)
 	, m_ssrRenderer(nullptr)
-	, m_vegetationRenderer(nullptr)
-	, m_terrainRenderer(nullptr)
     , m_screenshotRequested(false)
     , m_centerCursor(true)
     , m_mouseMoved(true)
@@ -1137,115 +897,39 @@ CApplication::CApplication()
 {
     vk::Load();
     InitWindow();
-    GetQueue();
-    CreateSurface();
-    CreateSwapChains();
 
 	InputManager::CreateInstance();
-	MemoryManager::CreateInstance();
-	MeshManager::CreateInstance();
-	CTextureManager::CreateInstance();
-	ResourceLoader::CreateInstance();
-	BatchManager::CreateInstance();
-	MaterialLibrary::CreateInstance();
-	CUIManager::CreateInstance();
 	Scene::CreateInstance();
 
-    CreateCommandBuffer();
-    CPickManager::CreateInstance();
+	GraphicEngine::CreateInstance();
+	GraphicEngine::GetInstance()->Init(m_windowHandle, m_appInstance);
+	
+	CUIManager::CreateInstance();
+	CPickManager::CreateInstance();
 	ObjectSerializer::CreateInstance();
 	ObjectSerializer::GetInstance()->Load("scene.xml");
 
-	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::UniformBuffers);
-
-    SetupDeferredRendering();
-    SetupAORendering();
-	SetupDirectionalLightingRendering();
-	SetupDeferredTileShading();
-    SetupShadowMapRendering();
-    SetupShadowResolveRendering();
-    SetupPostProcessRendering();
-    SetupSunRendering();
-    SetupUIRendering();
-    SetupSkyRendering();
-    SetupParticleRendering();
-    SetupFogRendering();
-    Setup3DTextureRendering();
-    SetupVolumetricRendering();
-	SetupScreenSpaceReflectionsRendering();
-	SetupTerrainRendering();
-	SetupVegetationRendering();
-	//SetupTestRendering();
-
-    GetPickManager()->Setup();
-
-	MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::UniformBuffers);
-
-    CreateSynchronizationHelpers();
     srand((unsigned int)time(NULL));
 
     FreeImage_Initialise();
+
+	MoveWindow(GetConsoleWindow(), WIDTH, 0, 1920 - WIDTH, HEIGHT, TRUE);
 };
 
 CApplication::~CApplication()
 {
     FreeImage_DeInitialise();
 
-
-	delete m_smokeTexture;
-    delete m_objectRenderer;
-    delete m_aoRenderer;
-    delete m_lightRenderer;
-	delete m_pointLightRenderer2;
-    delete m_particlesRenderer;
-    delete m_uiRenderer;
-	delete m_ssrRenderer;
-    delete m_postProcessRenderer;
-    delete m_sunRenderer;
-    delete m_shadowRenderer;
-    delete m_shadowResolveRenderer;
-    delete m_skyRenderer;
-    delete m_fogRenderer;
-    delete m_3dTextureRenderer;
-    delete m_volumetricRenderer;
-
     VkDevice dev = vk::g_vulkanContext.m_device;
-    vk::DestroySemaphore(dev, m_renderSemaphore, nullptr);
-    vk::DestroyFence(dev, m_renderFence, nullptr);
-    vk::DestroyFence(dev, m_aquireImageFence, nullptr);
 
-    vk::DestroySwapchainKHR(dev, m_swapChain, nullptr);
-    vk::DestroyRenderPass(dev, m_deferredRenderPass, nullptr);
-    vk::DestroyRenderPass(dev, m_aoRenderPass, nullptr);
-    vk::DestroyRenderPass(dev, m_dirLightRenderPass, nullptr);
-    vk::DestroyRenderPass(dev, m_pointLightRenderPass, nullptr);
-	vk::DestroyRenderPass(dev, m_deferredTileShadingRenderPass, nullptr);
-    vk::DestroyRenderPass(dev, m_shadowRenderPass, nullptr);
-    vk::DestroyRenderPass(dev, m_shadowResolveRenderPass, nullptr);
-    vk::DestroyRenderPass(dev, m_postProcessPass, nullptr);
-    vk::DestroyRenderPass(dev, m_sunRenderPass, nullptr);
-    vk::DestroyRenderPass(dev, m_uiRenderPass, nullptr);
-    vk::DestroyRenderPass(dev, m_skyRenderPass, nullptr);
-    vk::DestroyRenderPass(dev, m_particlesRenderPass, nullptr);
-    vk::DestroyRenderPass(dev, m_fogRenderPass, nullptr);
-    vk::DestroyRenderPass(dev, m_3DtextureRenderPass, nullptr);
-    vk::DestroyRenderPass(dev, m_volumetricRenderPass, nullptr);
-	vk::DestroyRenderPass(dev, m_ssrRenderPass, nullptr);
-
-	Scene::DestroyInstance();
 	CUIManager::DestroyInstance();
 	ObjectSerializer::DestroyInstance();
-	MaterialLibrary::DestroyInstance();
-	BatchManager::DestroyInstance();
-	ResourceLoader::DestroyInstance();
-	CTextureManager::DestroyInstance();
-	MeshManager::DestroyInstance();
-	MemoryManager::DestroyInstance();
+
+	GraphicEngine::DestroyInstance();
+	Scene::DestroyInstance();
+	
 	InputManager::DestroyInstance();
-
-    vk::DestroyCommandPool(dev, m_commandPool, nullptr);
-    vk::DestroySurfaceKHR(vk::g_vulkanContext.m_instance, m_surface, nullptr);
-
+	
     CleanUp();
     vk::Unload();
 }
@@ -1254,7 +938,7 @@ CApplication::~CApplication()
 void CApplication::Run()
 {
     bool isRunning = true;
-	MaterialLibrary::GetInstance()->Initialize(m_objectRenderer);
+
     CreateResources();
     CreateQueryPools();
 	RegisterSpecialInputListeners();
@@ -1283,7 +967,8 @@ void CApplication::Run()
 		
 		UpdateCameraRotation();
 		Scene::GetInstance()->Update(ms_dt);
-		ms_camera.Update(); //ugly and i hope so temporary fix
+		//ms_camera.Update(); //ugly and i hope so temporary fix
+		GraphicEngine::GetInstance()->Update(ms_dt);
 
         Render();
 
@@ -1376,209 +1061,6 @@ void CApplication::HideCursor(bool hide)
     }
 }
 
-void CApplication::CreateSurface()
-{
-    VkWin32SurfaceCreateInfoKHR surfCrtInfo;
-    cleanStructure(surfCrtInfo);
-    surfCrtInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-    surfCrtInfo.flags = 0;
-    surfCrtInfo.pNext = nullptr;
-    surfCrtInfo.hinstance = m_appInstance;
-    surfCrtInfo.hwnd = m_windowHandle;
-
-    VkResult result = vk::CreateWin32SurfaceKHR(vk::g_vulkanContext.m_instance, &surfCrtInfo, nullptr, &m_surface);
-    TRAP(result >= VK_SUCCESS);
-    VkBool32 support;
-    vk::GetPhysicalDeviceSurfaceSupportKHR(vk::g_vulkanContext.m_physicalDevice, vk::g_vulkanContext.m_queueFamilyIndex, m_surface, &support);
-    TRAP(support);
-}
-
-
-VkImage CApplication::GetFinalOutput()
-{
-    //return m_objectRenderer->GetFramebuffer()->GetColorImage(GBuffer_DirLight);
-
-    return m_postProcessRenderer->GetFramebuffer()->GetColorImage(0);
-
-}
-
-void CApplication::TransferToPresentImage()
-{
-    BeginMarkerSection("CopyBackBuffer");
-    VkDevice dev = vk::g_vulkanContext.m_device;
-    VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
-
-    VkImage presentImg = m_presentImages[m_currentBuffer];
-    VkImage finalImg = GetFinalOutput();
-
-    VkImageSubresourceLayers subRes;
-    subRes.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    subRes.mipLevel = 0;
-    subRes.baseArrayLayer = 0;
-    subRes.layerCount = 1;
-    
-    VkOffset3D offset;
-    offset.x = offset.y = offset.z = 0;
-
-    VkExtent3D extent;
-    extent.width = WIDTH;
-    extent.height = HEIGHT;
-    extent.depth = 1;
-
-    VkImageCopy imgCopy;
-    imgCopy.srcSubresource = subRes;
-    imgCopy.srcOffset = offset;
-    imgCopy.dstSubresource = subRes;
-    imgCopy.dstOffset = offset;
-    imgCopy.extent = extent;
-
-    VkImageMemoryBarrier preCopyBarrier[2];
-    AddImageBarrier(preCopyBarrier[0], presentImg, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,  VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-    AddImageBarrier(preCopyBarrier[1], finalImg, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,  VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-
-    vk::CmdPipelineBarrier(cmdBuffer,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, 
-        VK_DEPENDENCY_BY_REGION_BIT ,
-        0,
-        nullptr,
-        0,
-        nullptr,
-        2, 
-        preCopyBarrier);
-
-    vk::CmdCopyImage(m_mainCommandBuffer, finalImg, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, presentImg, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &imgCopy);
-
-    VkImageMemoryBarrier prePresentBarrier;
-    cleanStructure(prePresentBarrier);
-    prePresentBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    prePresentBarrier.pNext = NULL;
-    prePresentBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    prePresentBarrier.dstAccessMask =  VK_ACCESS_MEMORY_READ_BIT;
-    prePresentBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    prePresentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    prePresentBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    prePresentBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    prePresentBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    prePresentBarrier.subresourceRange.baseMipLevel = 0;
-    prePresentBarrier.subresourceRange.levelCount = 1;
-    prePresentBarrier.subresourceRange.baseArrayLayer = 0;
-    prePresentBarrier.subresourceRange.layerCount = 1;
-    prePresentBarrier.image = presentImg;
-
-    vk::CmdPipelineBarrier(cmdBuffer,
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_HOST_BIT, 
-        VK_DEPENDENCY_BY_REGION_BIT,
-        0,
-        nullptr,
-        0,
-        nullptr,
-        1, 
-        &prePresentBarrier);
-
-    EndMarkerSection();
-}
-
-void CApplication::BeginFrame()
-{
-    VkDevice dev = vk::g_vulkanContext.m_device;
-    VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
-    VkImage presentImg = m_presentImages[m_currentBuffer];
-
-    VkImageMemoryBarrier beginFrameBarrier;
-    cleanStructure(beginFrameBarrier);
-    beginFrameBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    beginFrameBarrier.pNext = NULL;
-    beginFrameBarrier.srcAccessMask = 0;
-    beginFrameBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    beginFrameBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    beginFrameBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    beginFrameBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    beginFrameBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    beginFrameBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    beginFrameBarrier.subresourceRange.baseMipLevel = 0;
-    beginFrameBarrier.subresourceRange.levelCount = 1;
-    beginFrameBarrier.subresourceRange.baseArrayLayer = 0;
-    beginFrameBarrier.subresourceRange.layerCount = 1;
-    beginFrameBarrier.image = presentImg;
-
-    vk::CmdPipelineBarrier(cmdBuffer,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 
-        VK_PIPELINE_STAGE_TRANSFER_BIT ,
-        VK_DEPENDENCY_BY_REGION_BIT,
-        0,
-        nullptr,
-        0,
-        nullptr,
-        1, 
-        &beginFrameBarrier);
-}
-
-void CApplication::CreateSwapChains()
-{
-    TRAP(m_surface != VK_NULL_HANDLE);
-    vk::SVUlkanContext& context = vk::g_vulkanContext;
-    VkPhysicalDevice physDevice = context.m_physicalDevice;
-
-    uint32_t modesCnt;
-    std::vector<VkPresentModeKHR> presentModes;
-    vk::GetPhysicalDeviceSurfacePresentModesKHR(physDevice, m_surface, &modesCnt, nullptr);
-    presentModes.resize(modesCnt);
-    vk::GetPhysicalDeviceSurfacePresentModesKHR(physDevice, m_surface, &modesCnt, presentModes.data());
-
-    VkResult res;
-
-    unsigned int formatCnt;
-    res = vk::GetPhysicalDeviceSurfaceFormatsKHR(physDevice, m_surface, &formatCnt, nullptr);
-    TRAP(res >= VK_SUCCESS);
-
-    std::vector<VkSurfaceFormatKHR> formats;
-    formats.resize(formatCnt);
-    res = vk::GetPhysicalDeviceSurfaceFormatsKHR(physDevice, m_surface, &formatCnt, formats.data());
-    TRAP(res >= VK_SUCCESS);
-    VkSurfaceFormatKHR formatUsed = formats[1];
-
-    //TRAP(OUT_FORMAT == formatUsed.format);
-
-    VkSurfaceCapabilitiesKHR capabilities;
-    res = vk::GetPhysicalDeviceSurfaceCapabilitiesKHR(physDevice, m_surface, &capabilities);
-    TRAP(res >= VK_SUCCESS);
-    VkExtent2D extent = capabilities.currentExtent;
-
-    VkSwapchainCreateInfoKHR swapChainCrtInfo;
-    swapChainCrtInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swapChainCrtInfo.pNext = nullptr;
-    swapChainCrtInfo.flags = 0;
-    swapChainCrtInfo.surface = m_surface;
-    swapChainCrtInfo.minImageCount = 2;
-    swapChainCrtInfo.imageFormat = formatUsed.format;
-    swapChainCrtInfo.imageColorSpace = formatUsed.colorSpace;
-    swapChainCrtInfo.imageExtent = extent;
-    swapChainCrtInfo.imageArrayLayers = 1;
-    swapChainCrtInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    swapChainCrtInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    swapChainCrtInfo.queueFamilyIndexCount = 1;
-    swapChainCrtInfo.pQueueFamilyIndices = &context.m_queueFamilyIndex;
-    swapChainCrtInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-    swapChainCrtInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swapChainCrtInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
-    swapChainCrtInfo.clipped = VK_TRUE;
-    swapChainCrtInfo.oldSwapchain = VK_NULL_HANDLE;
-
-    res = vk::CreateSwapchainKHR(context.m_device, &swapChainCrtInfo, nullptr, &m_swapChain);
-    TRAP(res >= VK_SUCCESS);
-    
-    unsigned int imageCnt;
-    VULKAN_ASSERT(vk::GetSwapchainImagesKHR(vk::g_vulkanContext.m_device, m_swapChain, &imageCnt, nullptr));
-    TRAP(imageCnt == 2);
-
-    m_presentImages.resize(imageCnt);
-
-    VULKAN_ASSERT(vk::GetSwapchainImagesKHR(vk::g_vulkanContext.m_device, m_swapChain, &imageCnt, m_presentImages.data()));
-}
-
 
 void CApplication::SetupDeferredRendering()
 {
@@ -1605,35 +1087,10 @@ void CApplication::SetupDeferredRendering()
 
 void CApplication::SetupAORendering()
 {
-    FramebufferDescription fbDesc;
-    fbDesc.Begin(3);
-    fbDesc.AddColorAttachmentDesc(0, VK_FORMAT_R16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "AOFinal");
-    fbDesc.AddColorAttachmentDesc(1, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "AODebug"); //debug
-    fbDesc.AddColorAttachmentDesc(2, VK_FORMAT_R16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, "AOBlurAux");
-    fbDesc.End();
-
-    CreateAORenderPass(fbDesc);
-
-    m_aoRenderer = new CAORenderer(m_aoRenderPass);
-    m_aoRenderer->Init();
-    m_aoRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
 }
 
 void CApplication::SetupDirectionalLightingRendering()
 {
-	FramebufferDescription fbDesc;
-	fbDesc.Begin(EDirLightBuffers_Count);
-
-	fbDesc.AddColorAttachmentDesc(EDirLightBuffers_Final, g_commonResources.GetAs<ImageHandle*>(EResourceType_FinalImage));
-	fbDesc.AddColorAttachmentDesc(EDirLightBuffers_Debug, VK_FORMAT_R16G16B16A16_SFLOAT, 0, "DirLightDebug");
-	fbDesc.End();
-
-	CreateDirLightingRenderPass(fbDesc);
-
-	// Lighting passes
-	m_lightRenderer = new CLightRenderer(m_dirLightRenderPass);
-	m_lightRenderer->Init();
-	m_lightRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
 };
 
 void CApplication::SetupDeferredTileShading()
@@ -1704,50 +1161,7 @@ void CApplication::CreateDeferredRenderPass(const FramebufferDescription& fbDesc
 
 void CApplication::CreateAORenderPass(const FramebufferDescription& fbDesc)
 {
-    std::vector<VkAttachmentDescription> ad;
-    ad.resize(3);
-    AddAttachementDesc(ad[0], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, fbDesc.m_colorAttachments[0].format);
-    AddAttachementDesc(ad[1], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[1].format);
-    AddAttachementDesc(ad[2], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, fbDesc.m_colorAttachments[2].format);
-
-
-    std::vector<VkAttachmentReference> attRef;
-    attRef.push_back(CreateAttachmentReference(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
-    attRef.push_back(CreateAttachmentReference(1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
-
-    VkAttachmentReference blurRef = CreateAttachmentReference(2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-
-    std::vector<VkSubpassDescription> sd;
-    sd.resize(ESSAOPass_Count);
-    sd[ESSAOPass_Main] = CreateSubpassDesc(attRef.data(), (uint32_t)attRef.size());
-    sd[ESSAOPass_HBlur] = CreateSubpassDesc(&blurRef, 1);
-    sd[ESSAOPass_VBlur] = CreateSubpassDesc(&attRef[0], 1);
-
-    std::vector<VkSubpassDependency> subDeps;
-    //subDeps.resize(4);
-    subDeps.push_back(CreateSubpassDependency(VK_SUBPASS_EXTERNAL, ESSAOPass_Main, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-       VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,  VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
-
-    subDeps.push_back(CreateSubpassDependency(ESSAOPass_Main, ESSAOPass_HBlur, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,  VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
-
-    subDeps.push_back(CreateSubpassDependency(ESSAOPass_HBlur, ESSAOPass_VBlur, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,  VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
-
-    subDeps.push_back(CreateSubpassDependency(ESSAOPass_Main, ESSAOPass_VBlur, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,  VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
-
-    VkRenderPassCreateInfo rpci;
-    cleanStructure(rpci);
-    rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rpci.attachmentCount = (uint32_t)ad.size();
-    rpci.pAttachments = ad.data();
-    rpci.subpassCount = (uint32_t)sd.size();
-    rpci.pSubpasses = sd.data();
-    rpci.dependencyCount = (uint32_t)subDeps.size();
-    rpci.pDependencies = subDeps.data();
-
-    VULKAN_ASSERT(vk::CreateRenderPass(vk::g_vulkanContext.m_device, &rpci, nullptr, &m_aoRenderPass));
+  
 }
 
 
@@ -1870,16 +1284,6 @@ void CApplication::CreateDeferredTileShadingRenderPass(const FramebufferDescript
 
 void CApplication::SetupShadowMapRendering()
 {
-    FramebufferDescription fbDesc;
-    fbDesc.Begin(0);
-    fbDesc.AddDepthAttachmentDesc(VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "ShadowMap", SHADOWSPLITS);
-    fbDesc.End();
-
-    CreateShadowRenderPass(fbDesc);
-    m_shadowRenderer = new ShadowMapRenderer(m_shadowRenderPass);
-    m_shadowRenderer->Init();
-
-	m_shadowRenderer->CreateFramebuffer(fbDesc, SHADOWW, SHADOWH, SHADOWSPLITS);
 }
 
  void CApplication::SetupShadowResolveRendering()
@@ -2051,38 +1455,10 @@ void CApplication::SetupParticleRendering()
 
  void CApplication::SetupTerrainRendering()
  {
-	 FramebufferDescription fbDesc;
-	 fbDesc.Begin(4);
-	 fbDesc.AddColorAttachmentDesc(0, g_commonResources.GetAs<ImageHandle*>(EResourceType_AlbedoImage));
-	 fbDesc.AddColorAttachmentDesc(1, g_commonResources.GetAs<ImageHandle*>(EResourceType_SpecularImage));
-	 fbDesc.AddColorAttachmentDesc(2, g_commonResources.GetAs<ImageHandle*>(EResourceType_NormalsImage));
-	 fbDesc.AddColorAttachmentDesc(3, g_commonResources.GetAs<ImageHandle*>(EResourceType_PositionsImage));
-	 fbDesc.AddDepthAttachmentDesc(g_commonResources.GetAs<ImageHandle*>(EResourceType_DepthBufferImage));
-	 fbDesc.End();
-
-	 CreateTerrainRenderPass(fbDesc);
-	 
-	 m_terrainRenderer = new TerrainRenderer(m_terrainRenderPass);
-	 m_terrainRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
-	 m_terrainRenderer->Init();
  }
 
 void CApplication::SetupVegetationRendering()
 {
-	FramebufferDescription fbDesc;
-	fbDesc.Begin(4);
-	fbDesc.AddColorAttachmentDesc(0, g_commonResources.GetAs<ImageHandle*>(EResourceType_AlbedoImage));
-	fbDesc.AddColorAttachmentDesc(1, g_commonResources.GetAs<ImageHandle*>(EResourceType_SpecularImage));
-	fbDesc.AddColorAttachmentDesc(2, g_commonResources.GetAs<ImageHandle*>(EResourceType_NormalsImage));
-	fbDesc.AddColorAttachmentDesc(3, g_commonResources.GetAs<ImageHandle*>(EResourceType_PositionsImage));
-	fbDesc.AddDepthAttachmentDesc(g_commonResources.GetAs<ImageHandle*>(EResourceType_DepthBufferImage));
-	fbDesc.End();
-
-	CreateVegetationRenderPass(fbDesc);
-
-	m_vegetationRenderer = new VegetationRenderer(m_vegetationRenderPass);
-	m_vegetationRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
-	m_vegetationRenderer->Init();
 }
 
 void CApplication::SetupTestRendering()
@@ -2523,58 +1899,6 @@ void CApplication::CreateTestRenderPass(const FramebufferDescription& fbDesc)
 	NewRenderPass(&m_testRenderPass, { depth }, { subpass });
 }
 
-void CApplication::CreateCommandBuffer()
-{
-    VkCommandPoolCreateInfo cmdPoolCi;
-    cleanStructure(cmdPoolCi);
-    cmdPoolCi.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    cmdPoolCi.pNext = nullptr;
-    cmdPoolCi.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    cmdPoolCi.queueFamilyIndex = vk::g_vulkanContext.m_queueFamilyIndex;
-
-    VULKAN_ASSERT(vk::CreateCommandPool(vk::g_vulkanContext.m_device, &cmdPoolCi, nullptr, &m_commandPool));
-
-    VkCommandBufferAllocateInfo cmdAlocInfo;
-    cleanStructure(cmdAlocInfo);
-    cmdAlocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    cmdAlocInfo.pNext = nullptr;
-    cmdAlocInfo.commandPool = m_commandPool;
-    cmdAlocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    cmdAlocInfo.commandBufferCount = 1;
-
-    VULKAN_ASSERT(vk::AllocateCommandBuffers(vk::g_vulkanContext.m_device, &cmdAlocInfo, &m_mainCommandBuffer));
-
-    vk::g_vulkanContext.m_mainCommandBuffer = m_mainCommandBuffer;
-}
-
-void CApplication::GetQueue()
-{
-    vk::GetDeviceQueue(vk::g_vulkanContext.m_device, vk::g_vulkanContext.m_queueFamilyIndex, 0, &m_queue);
-    TRAP(m_queue != VK_NULL_HANDLE);
-
-    vk::g_vulkanContext.m_graphicQueue = m_queue;
-}
-
-void CApplication::CreateSynchronizationHelpers()
-{
-    VkFenceCreateInfo fenceCreateInfo;
-    cleanStructure(fenceCreateInfo);
-    fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fenceCreateInfo.pNext = nullptr;
-    fenceCreateInfo.flags = 0;
-
-    VULKAN_ASSERT(vk::CreateFence(vk::g_vulkanContext.m_device, &fenceCreateInfo, nullptr, &m_aquireImageFence));
-    VULKAN_ASSERT(vk::CreateFence(vk::g_vulkanContext.m_device, &fenceCreateInfo, nullptr, &m_renderFence));
-
-    VkSemaphoreCreateInfo semaphoreCreateInfo;
-    cleanStructure(semaphoreCreateInfo);
-    semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    semaphoreCreateInfo.pNext = nullptr;
-    semaphoreCreateInfo.flags = 0;
-
-    VULKAN_ASSERT(vk::CreateSemaphore(vk::g_vulkanContext.m_device, &semaphoreCreateInfo, nullptr, &m_renderSemaphore));
-}
-
 void CApplication::CreateQueryPools()
 {
     //VkDevice device = vk::g_vulkanContext.m_device;
@@ -2648,12 +1972,6 @@ void CApplication::SetupParticles()
 
 void CApplication::RegisterSpecialInputListeners()
 {
-	std::vector<WPARAM> cameraKeys{ 'A', 'S', 'D', 'W', VK_SPACE };
-	InputManager::GetInstance()->MapKeysPressed(cameraKeys, InputManager::KeyPressedCallback(&ms_camera, &CCamera::OnCameraKeyPressed));
-
-	std::vector<WPARAM> dirLightKeys{ VK_UP, VK_DOWN, VK_RIGHT, VK_LEFT, 'P', VK_OEM_PLUS, VK_OEM_MINUS };
-	InputManager::GetInstance()->MapKeysPressed(dirLightKeys, InputManager::KeyPressedCallback(&directionalLight, &CDirectionalLight::OnKeyboardPressed));
-	InputManager::GetInstance()->MapMouseButton(InputManager::MouseButtonsCallback(&directionalLight, &CDirectionalLight::OnMouseEvent));
 }
 
 void CApplication::CreateResources()
@@ -2666,11 +1984,11 @@ void CApplication::CreateResources()
     Read2DTextureData(sun, std::string(TEXTDIR) + "sun2.png", false);
     m_sunTexture = new CTexture(sun, true);
 
-    CRenderer::UpdateAll();
+    //CRenderer::UpdateAll();
 
-    CUIManager::GetInstance()->SetupRenderer(m_uiRenderer);
+    //CUIManager::GetInstance()->SetupRenderer(m_uiRenderer);
 
-    m_particlesRenderer->RegisterDebugManager();
+    /*m_particlesRenderer->RegisterDebugManager();
 
     m_sunRenderer->SetSunTexture(m_sunTexture);
     m_sunRenderer->CreateEditInfo();
@@ -2679,13 +1997,13 @@ void CApplication::CreateResources()
     m_skyRenderer->SetSkyImageView();
 
     GetPickManager()->CreateDebug();
-    directionalLight.CreateDebug();
+    directionalLight.CreateDebug();*/
     //SetupParticles();
 
     //SetupPointLights();
 }
 
-void CApplication::UpdateCameraRotation()
+void CApplication::UpdateCameraRotation() //this function need to be addressed
 {
     if(!m_centerCursor)
         return;
@@ -2709,7 +2027,7 @@ void CApplication::UpdateCameraRotation()
         m_normMouseDX = (float)dx / (float)centerx;
         m_normMouseDY = (float)dy / float(centery);
 
-        ms_camera.Rotate(m_normMouseDX, m_normMouseDY);
+        GraphicEngine::GetActiveCamera().Rotate(m_normMouseDX, m_normMouseDY);
         CenterCursor();
     }
 }
@@ -2731,89 +2049,9 @@ LRESULT CApplication::WindowProc(
 
 void CApplication::Render()
 {
-    //PULA
-    vk::AcquireNextImageKHR(vk::g_vulkanContext.m_device, m_swapChain, 0, VK_NULL_HANDLE, m_aquireImageFence, &m_currentBuffer);
-    vk::WaitForFences(vk::g_vulkanContext.m_device, 1, &m_aquireImageFence,VK_TRUE, UINT64_MAX);
-    vk::ResetFences(vk::g_vulkanContext.m_device, 1, &m_aquireImageFence);
-
-	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::UniformBuffers);
-	CRenderer::PrepareAll();
-	BatchManager::GetInstance()->PreRender();
-	MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::UniformBuffers);
-
-    StartCommandBuffer();
-	
-    CTextureManager::GetInstance()->Update();
-	MeshManager::GetInstance()->Update();
-	BatchManager::GetInstance()->Update();
-
-	CRenderer::ComputeAll();
-
-    //BeginFrame();
-    QueryManager::GetInstance().Reset();
-    QueryManager::GetInstance().StartStatistics();
-    RenderShadows();
-
-	//m_testRenderer->Render();
-
-    m_objectRenderer->Render();
-	m_terrainRenderer->Render();//TODO object renderer clear the GBuffer. I have to move it at the start of frame
-	m_vegetationRenderer->Render();
-
-    vk::CmdPipelineBarrier(vk::g_vulkanContext.m_mainCommandBuffer, 
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        0,
-        0, nullptr, 0, nullptr, 0, nullptr); //WHY??
-
-    m_aoRenderer->Render();
-    m_shadowResolveRenderer->Render();
-
-    m_lightRenderer->Render();
-	//m_pointLightRenderer2->Render();
-    m_sunRenderer->Render();
-    m_skyRenderer->Render();
-    m_particlesRenderer->Render();
-
-    m_3dTextureRenderer->Render();
-    m_volumetricRenderer->Render();
-
-    GetPickManager()->Update();
-
-    WaitForFinalImageToComplete();
-
-    RenderPostProcess();
-
-    m_uiRenderer->Render();
-
-    //RenderPostProcess();
-
-    TransferToPresentImage();
-
-    QueryManager::GetInstance().EndStatistics();
-    QueryManager::GetInstance().GetQueries();
-    EndCommandBuffer();
-
-    VkSubmitInfo submitInfo;
-    cleanStructure(submitInfo);
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.pNext = nullptr;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &m_mainCommandBuffer;
-    VULKAN_ASSERT(vk::QueueSubmit(m_queue, 1, &submitInfo, m_renderFence)); 
-
-    vk::WaitForFences(vk::g_vulkanContext.m_device, 1, &m_renderFence, VK_TRUE, UINT64_MAX);
-    vk::ResetFences(vk::g_vulkanContext.m_device, 1, &m_renderFence);
-
-    VkPresentInfoKHR presentInfo;
-    cleanStructure(presentInfo);
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.pNext = nullptr;
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = &m_swapChain;
-    presentInfo.pImageIndices = &m_currentBuffer;
-
-    VULKAN_ASSERT(vk::QueuePresentKHR(m_queue, &presentInfo));
+	GraphicEngine* ge = GraphicEngine::GetInstance();
+	ge->PreRender();
+	ge->Render();
 }
 
 
@@ -2824,24 +2062,6 @@ float RandomFloat()
 
 void CApplication::StartDeferredRender()
 {
-}
-
-void CApplication::RenderShadows()
-{
-    m_shadowRenderer->StartRenderPass();
-    m_shadowRenderer->Render();
-	m_terrainRenderer->RenderShadows();
-    m_shadowRenderer->EndRenderPass();
-}
-
-void CApplication::WaitForFinalImageToComplete()
-{
-	ImageHandle* img = g_commonResources.GetAs<ImageHandle*>(EResourceType_FinalImage);
-	VkImageMemoryBarrier before = img->CreateMemoryBarrier(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-    vk::CmdPipelineBarrier(vk::g_vulkanContext.m_mainCommandBuffer, 
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
-        VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &before);
 }
 
 void CApplication::RenderPostProcess()
@@ -2855,20 +2075,6 @@ void CApplication::RenderPostProcess()
 
     m_postProcessRenderer->Render();
     m_postProcessRenderer->EndRenderPass();
-}
-
-void CApplication::StartCommandBuffer()
-{
-    VkCommandBufferBeginInfo bufferBeginInfo;
-    cleanStructure(bufferBeginInfo);
-    bufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-    vk::BeginCommandBuffer(m_mainCommandBuffer, &bufferBeginInfo);
-}
-
-void CApplication::EndCommandBuffer()
-{
-    vk::EndCommandBuffer(m_mainCommandBuffer);
 }
 
 void CApplication::Reset()

@@ -184,18 +184,16 @@ bool DescriptorPool::FreeDescriptorSet(VkDescriptorSet descSet)
 }
 
 
-std::vector<VkDescriptorSet> DescriptorPool::AllocateDescriptorSet(const std::vector<DescriptorSetLayout>& layoutsTypes)
+void DescriptorPool::AllocateDescriptorSet(const std::vector<DescriptorSetLayout>& layoutsTypes, std::vector<VkDescriptorSet>& outDescSets)
 {
 	std::vector<VkDescriptorSetLayout> vkLayouts;
 	vkLayouts.reserve(layoutsTypes.size());
 	for (auto& layout : layoutsTypes)
 		vkLayouts.push_back(layout.Get());
 
-	std::vector<VkDescriptorSet> newDescSets;
-	newDescSets.resize(vkLayouts.size());
+	outDescSets.resize(vkLayouts.size());
 	for (unsigned int i = 0; i < layoutsTypes.size(); ++i)
 	{
-		newDescSets[i] = AllocateDescriptorSet(layoutsTypes[i]);
+		outDescSets[i] = AllocateDescriptorSet(layoutsTypes[i]);
 	}
-	return newDescSets;
 }

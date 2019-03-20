@@ -9,26 +9,27 @@ class BufferHandle;
 class KeyInput;
 class MouseInput;
 
-class TerrainRenderer : public CRenderer
+class TerrainRenderer : public Renderer
 {
 public:
-	TerrainRenderer(VkRenderPass renderPass);
+	TerrainRenderer();
 	virtual ~TerrainRenderer();
 
-	virtual void Init() override;
-	virtual void Render() override;
-	virtual void RenderShadows() override;
+	void Setup(VkRenderPass renderPass, uint32_t subpassId);
+	void Render();
+	
+	void SetupShadows(VkRenderPass renderPass, uint32_t subpassId);
+	void RenderShadows();
 
-	virtual void PreRender() override;
+	void PreRender();
+	
+protected:
+	void InitInternal() override;
 
-private:
-	virtual void CreateDescriptorSetLayout() override;
-	virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override;
+	void CreateDescriptorSetLayouts() override;
+	void UpdateGraphicInterface() override;
+	void AllocateDescriptorSets() override;
 
-	virtual void UpdateResourceTable() override;
-	virtual void UpdateGraphicInterface() override;
-
-	void CreatePipeline();
 	void CreateGrid();
 	void LoadTextures();
 

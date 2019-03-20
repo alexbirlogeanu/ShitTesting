@@ -19,28 +19,30 @@ struct PlantDescription
 	glm::vec4 Properties; //x - width, y - height of the billboard, z - bend factor used in wind simulation, comes from "simulation", texture index
 };
 
-class VegetationRenderer : public CRenderer
+///////////////////////////////////////////////////////////////////////////
+//VegetationRenderer
+///////////////////////////////////////////////////////////////////////////
+
+class VegetationRenderer : public Renderer
 {
 public:
-	VegetationRenderer(VkRenderPass renderPass);
+	VegetationRenderer();
 	virtual ~VegetationRenderer();
 
-	void Init() override;
-	void Render() override;
-	void PreRender() override;
+	void Render();
+	void PreRender();
+	void Setup(VkRenderPass renderPass, uint32_t subpassId);
 private:
+	void InitInternal() override;
 
-	void CreateDescriptorSetLayout() override;
-	void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override;
-
+	void CreateDescriptorSetLayouts() override;
 	void UpdateGraphicInterface() override;
+	void AllocateDescriptorSets() override;
 
 	void GenerateVegetation();
 	void CreateBuffers();
-	void CreateBuffers2();
 
 	void UpdateTextures();
-	void CopyBuffers();
 
 	void WindVariation();
 
@@ -64,7 +66,7 @@ private:
 
 	DescriptorSetLayout				m_renderDescSetLayout;
 	VkDescriptorSet					m_renderDescSet;
-	
+
 	std::vector<PlantDescription>	m_plants;
 	glm::vec4						m_pushConstant;
 	std::vector<CTexture*>			m_albedoTextures;
@@ -81,7 +83,7 @@ private:
 	float							m_angularSpeed;
 	glm::vec2						m_windAngleLimits; //in degrees
 
-	//debug
+													   //debug
 	bool							m_isDebugMode;
 	CUIText*						m_debugText;
 	CUIText*						m_countVisiblePlantsText;

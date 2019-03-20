@@ -45,7 +45,7 @@ void ObjectSerializer::LoadContent()
 	for (Object* obj : m_objects)
 	{
 		Scene::GetInstance()->AddObject(obj);
-		BatchManager::GetInstance()->AddObject(obj);
+		BatchRenderer::GetInstance()->AddObject(obj);
 	}
 }
 
@@ -53,7 +53,7 @@ void ObjectSerializer::AddObject(Object* obj)
 {
 	m_objects.push_back(obj);
 	Scene::GetInstance()->AddObject(obj);
-	BatchManager::GetInstance()->AddObject(obj);
+	BatchRenderer::GetInstance()->AddObject(obj);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -141,7 +141,7 @@ void ObjectRenderer::Render()
     VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
     StartRenderPass();
 	
-	BatchManager::GetInstance()->RenderAll();
+	BatchRenderer::GetInstance()->RenderAll();
 
     EndRenderPass();
 }

@@ -10,6 +10,7 @@
 #include "Input.h"
 #include "UI.h"
 #include "Geometry.h"
+#include "GraphicEngine.h"
 
 #include <random>
 #include <functional>
@@ -333,13 +334,12 @@ void QuadTree::Traverse(PartitionNode* startNode, std::function<void(PartitionNo
 	}
 }
 
-
-///////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////
 //VegetationRenderer
-//////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////
 
-VegetationRenderer::VegetationRenderer(VkRenderPass renderPass)
-	: CRenderer(renderPass, "VegetationPass")
+VegetationRenderer::VegetationRenderer()
+	: Renderer()
 	, m_staggingBuffer(nullptr)
 	, m_paramsBuffer(nullptr)
 	, m_renderDescSet(VK_NULL_HANDLE)
@@ -364,31 +364,14 @@ VegetationRenderer::~VegetationRenderer()
 
 }
 
-void VegetationRenderer::Init()
+void VegetationRenderer::InitInternal()
 {
-	CRenderer::Init();
-	
 	GenerateVegetation();
-	AllocDescriptorSets(m_descriptorPool, m_renderDescSetLayout.Get(), &m_renderDescSet);
 	//CreateBuffers();
-	CreateBuffers2();
+	CreateBuffers();
 
 	//m_quad = new Mesh("obj\\veg_plane.mb");
 	m_quad = CreateFullscreenQuad();
-
-	TRAP(sizeof(GlobalParams) <= 256);
-	VkPushConstantRange pushRange{ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GlobalParams) };
-
-	m_renderPipeline.SetVertexShaderFile("grass.vert");
-	m_renderPipeline.SetFragmentShaderFile("grass.frag");
-	m_renderPipeline.SetVertexInputState(Mesh::GetVertexDesc());
-	m_renderPipeline.SetDepthTest(true);
-	m_renderPipeline.SetDepthWrite(true);
-	m_renderPipeline.AddPushConstant(pushRange);
-	//m_renderPipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
-	m_renderPipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 4);
-	m_renderPipeline.CreatePipelineLayout(m_renderDescSetLayout.Get());
-	m_renderPipeline.Init(this, m_renderPass, 0);
 
 	//init wind velocity
 	m_globals.WindVelocity = glm::vec4(-1.0f, 0.0f, 1.0f, 0.0f);
@@ -396,13 +379,6 @@ void VegetationRenderer::Init()
 
 void VegetationRenderer::Render()
 {
-	//if (!m_isReady)
-	//{
-	//	CopyBuffers();
-	//	m_isReady = true; //kinda iffy. We know that the data will be on the gpu next frame
-	//	return;
-	//}
-
 	if (m_isReady && m_staggingBuffer)
 	{
 		MemoryManager::GetInstance()->FreeHandle(m_staggingBuffer);
@@ -410,7 +386,6 @@ void VegetationRenderer::Render()
 		UpdateTextures();
 	}
 
-	StartRenderPass();
 	VkCommandBuffer cmdBuff = vk::g_vulkanContext.m_mainCommandBuffer;
 
 	vk::CmdBindPipeline(cmdBuff, m_renderPipeline.GetBindPoint(), m_renderPipeline.Get());
@@ -418,20 +393,15 @@ void VegetationRenderer::Render()
 	vk::CmdPushConstants(cmdBuff, m_renderPipeline.GetLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GlobalParams), &m_globals);
 
 	m_quad->Render(-1, (uint32_t)m_visibleInstances);
-
-	EndRenderPass();
 }
 
 void VegetationRenderer::PreRender()
 {
 	m_elapsedTime += GetDeltaTime();
 
-	glm::mat4 proj;
-	PerspectiveMatrix(proj);
-	ConvertToProjMatrix(proj);
 	WindVariation();
 
-	m_globals.ProjViewMatrix = proj * ms_camera.GetViewMatrix();
+	m_globals.ProjViewMatrix = GraphicEngine::GetFrameConstants().ProjViewMatrix;
 	m_globals.CameraPosition = glm::vec4(ms_camera.GetPos(), 1.0f);
 	m_globals.LightDirection = glm::vec4(directionalLight.GetDirection());
 
@@ -450,12 +420,32 @@ void VegetationRenderer::PreRender()
 
 }
 
+void VegetationRenderer::Setup(VkRenderPass renderPass, uint32_t subpassId)
+{
+
+	TRAP(sizeof(GlobalParams) <= 256);
+	VkPushConstantRange pushRange{ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GlobalParams) };
+
+	m_renderPipeline.SetVertexShaderFile("grass.vert");
+	m_renderPipeline.SetFragmentShaderFile("grass.frag");
+	m_renderPipeline.SetVertexInputState(Mesh::GetVertexDesc());
+	m_renderPipeline.SetDepthTest(true);
+	m_renderPipeline.SetDepthWrite(true);
+	m_renderPipeline.AddPushConstant(pushRange);
+	//m_renderPipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
+	m_renderPipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 4);
+	m_renderPipeline.CreatePipelineLayout(m_renderDescSetLayout.Get());
+	m_renderPipeline.Setup(renderPass, subpassId);
+	RegisterPipeline(&m_renderPipeline);
+
+}
+
 void VegetationRenderer::UpdateTextures()
 {
 	std::vector<VkWriteDescriptorSet> wDesc;
 	std::vector<VkDescriptorImageInfo> colorInfos;
 
-	auto fillTextures = [&](const std::vector<CTexture*>& textures, uint32_t bindingIndex, std::vector<VkDescriptorImageInfo>& imageInfos){
+	auto fillTextures = [&](const std::vector<CTexture*>& textures, uint32_t bindingIndex, std::vector<VkDescriptorImageInfo>& imageInfos) {
 
 		for (auto t : textures)
 			imageInfos.push_back(t->GetTextureDescriptor());
@@ -474,20 +464,13 @@ void VegetationRenderer::UpdateTextures()
 	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
 }
 
-void VegetationRenderer::CreateDescriptorSetLayout()
+void VegetationRenderer::CreateDescriptorSetLayouts()
 {
 	m_renderDescSetLayout.AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
 	m_renderDescSetLayout.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, m_maxTextures);
 
 	m_renderDescSetLayout.Construct();
-}
-
-void VegetationRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)
-{
-	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, m_maxTextures);
-	AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2);
-
-	maxSets = 2;
+	RegisterDescriptorSetLayout(&m_renderDescSetLayout);
 }
 
 void VegetationRenderer::UpdateGraphicInterface()
@@ -500,6 +483,11 @@ void VegetationRenderer::UpdateGraphicInterface()
 	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
 
 	UpdateTextures();
+}
+
+void VegetationRenderer::AllocateDescriptorSets()
+{
+	m_renderDescSet = m_descriptorPool.AllocateDescriptorSet(m_renderDescSetLayout);
 }
 
 void VegetationRenderer::GenerateVegetation()
@@ -547,7 +535,7 @@ void VegetationRenderer::GenerateVegetation()
 	std::mt19937 generator(seed);
 	std::uniform_int_distribution<uint32_t> textureIndexDistr(0, m_albedoTextures.size() - 1);
 	std::uniform_real_distribution<float> bendFactorDistr(0.05f, 0.15f);
-	
+
 	for (auto p : plantsPosition)
 	{
 		uint32_t index = textureIndexDistr(generator);
@@ -564,45 +552,7 @@ void VegetationRenderer::GenerateVegetation()
 
 }
 
-void VegetationRenderer::CopyBuffers()
-{
-	TRAP(m_staggingBuffer && m_paramsBuffer);
-
-	StartDebugMarker("VegetationCopyBuffers");
-	VkBufferCopy region;
-	region.srcOffset = m_staggingBuffer->GetOffset();
-	region.dstOffset = m_paramsBuffer->GetOffset();
-	region.size = m_staggingBuffer->GetSize();
-
-	vk::CmdCopyBuffer(vk::g_vulkanContext.m_mainCommandBuffer, m_staggingBuffer->Get(), m_paramsBuffer->Get(), 1, &region);
-
-	EndDebugMarker("VegetationCopyBuffers");
-}
-
 void VegetationRenderer::CreateBuffers()
-{
-	TRAP(!m_plants.empty() && "Heeey maybe put some plants you dumb fuck");
-
-	if (m_plants.empty())
-		return;
-
-	VkDeviceSize totalSize = m_plants.size() * sizeof(PlantDescription);
-	m_staggingBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::StagginBuffer, totalSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-	m_paramsBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::DeviceLocalBuffer, totalSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-
-	bool wasMemMapped = MemoryManager::GetInstance()->IsMemoryMapped(EMemoryContextType::StagginBuffer);
-	if (!wasMemMapped)
-		MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::StagginBuffer);
-
-	PlantDescription* memPtr = m_staggingBuffer->GetPtr<PlantDescription*>();
-	memcpy(memPtr, m_plants.data(), totalSize);
-
-	if (!wasMemMapped)
-		MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::StagginBuffer);
-
-}
-
-void VegetationRenderer::CreateBuffers2()
 {
 	TRAP(!m_plants.empty() && "Heeey maybe put some plants you dumb fuck");
 
@@ -613,7 +563,6 @@ void VegetationRenderer::CreateBuffers2()
 	m_paramsBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, totalSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
 }
-
 
 void VegetationRenderer::WindVariation()
 {

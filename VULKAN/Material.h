@@ -22,11 +22,15 @@ enum DescriptorIndex
 	Count
 };
 
+//TODO! Need a code refactor
 class MaterialLibrary : public Singleton<MaterialLibrary>
 {
 	friend class Singleton<MaterialLibrary>;
 public:
-	void Initialize(CRenderer* renderer); //this should need some thoughts
+	void Initialize();
+
+	void Setup(VkRenderPass renderPass, uint32_t subpassId);
+
 	std::vector<VkDescriptorSet> AllocNewDescriptors();
 
 	std::vector<VkDescriptorSetLayout> GetDescriptorLayouts() const;
@@ -38,7 +42,6 @@ private:
 	std::unordered_map<std::string, MaterialTemplateBase*>		m_materialTemplates;
 	
 	std::vector<DescriptorPool*>								m_descriptorPools;
-
 	std::vector<DescriptorSetLayout*>							m_descriptorLayouts;
 };
 
@@ -53,7 +56,9 @@ public:
 	const std::string& GetFragmentShader() const { return m_fragmentShader; }
 	const std::string& GetName() const { return m_name; }
 
-	void CreatePipeline(CRenderer* renderer);
+	void CreatePipeline(CRenderer* renderer); //TODO delete
+	void CreatePipeline(VkRenderPass renderPass, uint32_t subpassId);
+
 	const CGraphicPipeline& GetPipeline() const { return m_pipeline; }
 
 	std::vector<VkDescriptorSet> GetNewDescriptorSets();

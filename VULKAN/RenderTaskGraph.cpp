@@ -3,6 +3,7 @@
 #include "Utils.h"
 #include "Framebuffer.h"
 #include "GraphicEngine.h"
+#include "Batch.h"
 
 #include <unordered_map>
 
@@ -10,24 +11,42 @@
 //Render task attempt
 //////////////////////////////////////
 
-RenderTask::RenderTask(std::vector<AttachmentInfo*>& inAttachments, 
-	std::vector<AttachmentInfo*>& outAttachments, 
-	const std::function<void(void)>& func)
-	: Task(func)
+RenderTask::RenderTask(const std::vector<AttachmentInfo*>& inAttachments, 
+	const std::vector<AttachmentInfo*>& outAttachments, 
+	const std::function<void(void)>& execFunc,
+	const std::function<void(VkRenderPass, uint32_t)>& setupFunc)
+	: Task(execFunc)
 	, m_inAttachments(inAttachments)
 	, m_outAttachments(outAttachments)
 	, m_parentGroup(nullptr)
+	, m_setup(setupFunc)
 {
 }
 
-RenderTask::RenderTask(std::vector<AttachmentInfo*> inAttachments, 
-	std::vector<AttachmentInfo*> outAttachments, 
-	const std::function<void(void)>& func)
-	: Task(func)
-	, m_inAttachments(inAttachments)
-	, m_outAttachments(outAttachments)
-	, m_parentGroup(nullptr)
+//RenderTask::RenderTask(std::vector<AttachmentInfo*> inAttachments, 
+//	std::vector<AttachmentInfo*> outAttachments, 
+//	const std::function<void(void)>& execFunc,
+//	const std::function<void(VkRenderPass, uint32_t)>& setupFunc)
+//	: Task(execFunc)
+//	, m_inAttachments(inAttachments)
+//	, m_outAttachments(outAttachments)
+//	, m_parentGroup(nullptr)
+//	, m_setup(setupFunc)
+//{
+//}
+
+void RenderTask::Execute()
 {
+	//wait for events if needed
+	if (!m_externalEvents.empty())
+	{
+		vk::CmdWaitEvents(vk::g_vulkanContext.m_mainCommandBuffer, (uint32_t)m_externalEvents.size(), m_externalEvents.data(),
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_HOST_BIT, 
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, nullptr, 0, nullptr, 
+			(uint32_t)m_externalImageBarrier.size(), m_externalImageBarrier.data()); //the srcPipelineStage will not be a constant if a compute task group exists as dependecy TODO
+	}
+
+	Task::Execute();
 }
 
 void RenderTask::SetParent(GPUTaskGroup* parentGroup)
@@ -36,6 +55,41 @@ void RenderTask::SetParent(GPUTaskGroup* parentGroup)
 	m_parentGroup = parentGroup;
 }
 
+void RenderTask::Setup(VkRenderPass renderPass, uint32_t subpassId)
+{
+	if (!m_externalEvents.empty())
+	{
+		TRAP(!m_externalDependeciesMap.empty());
+		for (auto& extDep : m_externalDependeciesMap)
+			m_externalImageBarrier.push_back(extDep.second);
+	}
+
+	if (m_setup)
+		m_setup(renderPass, subpassId);
+}
+
+void RenderTask::AddExternalEvent(VkEvent e)
+{
+	TRAP(e != VK_NULL_HANDLE);
+	TRAP(std::find(m_externalEvents.begin(), m_externalEvents.end(), e) == m_externalEvents.end());
+	m_externalEvents.push_back(e);
+}
+
+void RenderTask::AddExternalDependecies(AttachmentInfo* att, const VkImageMemoryBarrier& barrier)
+{
+	auto& extDep = m_externalDependeciesMap.find(att);
+
+	if (extDep != m_externalDependeciesMap.end())
+	{
+		VkImageMemoryBarrier& regBarrier = extDep->second;
+		TRAP(regBarrier.image == barrier.image);
+		TRAP(regBarrier.oldLayout == barrier.oldLayout && "if this happens i have to rethink this functionality");
+		regBarrier.dstAccessMask |= barrier.dstAccessMask;
+		regBarrier.srcAccessMask |= barrier.srcAccessMask;
+	}
+	else
+		m_externalDependeciesMap.emplace(att, barrier);
+}
 
 /////////////////////////////////////
 //GPU task group
@@ -46,6 +100,11 @@ GPUTaskGroup::GPUTaskGroup(const std::string& groupName)
 	, m_groupDoneEvent(VK_NULL_HANDLE)
 {
 
+}
+
+GPUTaskGroup::~GPUTaskGroup()
+{
+	vk::DestroyEvent(vk::g_vulkanContext.m_device, m_groupDoneEvent, nullptr);
 }
 
 void GPUTaskGroup::DefineGroupIO()
@@ -69,6 +128,10 @@ void GPUTaskGroup::DefineGroupIO()
 void GPUTaskGroup::Init()
 {
 	DefineGroupIO();
+	VkEventCreateInfo evCrtInfo;
+	cleanStructure(evCrtInfo);
+	evCrtInfo.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
+	VULKAN_ASSERT(vk::CreateEvent(vk::g_vulkanContext.m_device, &evCrtInfo, nullptr, &m_groupDoneEvent));
 }
 
 void GPUTaskGroup::PostInit()
@@ -96,7 +159,8 @@ RenderTaskGroup::RenderTaskGroup(const std::string& groupName)
 
 RenderTaskGroup::~RenderTaskGroup()
 {
-	vk::DestroyRenderPass(vk::g_vulkanContext.m_device, m_renderPass, nullptr);
+	VkDevice dev = vk::g_vulkanContext.m_device;
+	vk::DestroyRenderPass(dev, m_renderPass, nullptr);
 	m_framebuffer->Destroy();
 }
 
@@ -110,19 +174,32 @@ void RenderTaskGroup::PostInit()
 {
 	CreateSubpassesDescriptions();
 	DetectTaskDependecies();
+	
 	ConstructRenderPass();
 
 	m_framebuffer = new Framebuffer(m_renderPass, m_Outputs);
+
+	for (unsigned int i = 0; i < m_tasks.size(); ++i)
+		m_tasks[i]->Setup(m_renderPass, i);
 }
 
 void RenderTaskGroup::Execute()
 {
+	VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
+	vk::CmdResetEvent(cmdBuffer, m_groupDoneEvent, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+
 	StartRenderPass();
 
-	for (auto& task : m_tasks)
-		task->Execute();
+	m_tasks[0]->Execute();
+	for (unsigned int i = 1; i < m_tasks.size(); ++i)
+	{
+		vk::CmdNextSubpass(vk::g_vulkanContext.m_mainCommandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+		m_tasks[i]->Execute();
+	}
 
 	EndRenderPass();
+
+	vk::CmdSetEvent(cmdBuffer, m_groupDoneEvent, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT);
 }
 
 void RenderTaskGroup::DetectTaskDependecies()
@@ -149,10 +226,7 @@ void RenderTaskGroup::DetectTaskDependecies()
 
 	std::cout << "Dependecies: " << std::endl;
 
-	for (auto task : m_tasks)
-		for (const auto& out : task->GetOutAttachments())
-			outputList[out].insert(task);
-
+	std::unordered_map<uint32_t, std::unordered_map<uint32_t, VkSubpassDependency>> dependeciesMap; //key of the parent map = srcIndex, key of the value map = dstIndex
 	for (uint32_t i = 0; i < m_tasks.size(); ++i)
 	{
 		auto task = m_tasks[i];
@@ -163,41 +237,76 @@ void RenderTaskGroup::DetectTaskDependecies()
 			{
 				for (auto taskDep : taskDeps->second)
 				{
-					if (taskDep == task) //dont add to dependecies the current task
+					if (taskDep == task)
+					{//dont add to dependecies the current task
+						TRAP(false && "This shouldn't happen");
 						continue;
+					}
 
 					auto secondTaskIt = std::find(m_tasks.begin(), m_tasks.end(), taskDep);
 					TRAP(secondTaskIt != m_tasks.end());
 					uint32_t srcIndex = secondTaskIt - m_tasks.begin();
-					std::cout << "Task " << secondTaskIt - m_tasks.begin() << " -> ";
-					std::cout << "Task " << i << std::endl;
 
-					//Here we create the internal subpass dependecies list
+					if (srcIndex >= i)
+					{
+						TRAP(false && "This shouldn't happen");
+						continue;
+					}
 					VkPipelineStageFlags srcStage = (IsColorFormat(in->GetFormat())) ? VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT : VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 					VkAccessFlags srcAccess = (IsColorFormat(in->GetFormat())) ? VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT : VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-					subpassDeps.push_back(CreateSubpassDependency(srcIndex, i, srcStage, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, srcAccess, VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
+
+					auto taskDepMap = dependeciesMap.find(srcIndex);
+					if (taskDepMap == dependeciesMap.end())
+					{
+						dependeciesMap[srcIndex].emplace(i, CreateSubpassDependency(srcIndex, i, srcStage, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, srcAccess, VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
+						std::cout << "Task " << secondTaskIt - m_tasks.begin() << " -> ";
+						std::cout << "Task " << i << std::endl;
+					}
+					else
+					{
+						//
+						auto& dstDepMap = taskDepMap->second; //for clarity
+						auto dstIt = dstDepMap.find(i);
+
+						if (dstIt != dstDepMap.end())
+						{
+							dstIt->second.srcStageMask |= srcStage;
+							dstIt->second.srcAccessMask |= srcAccess;
+						}
+						else
+						{
+							dstDepMap.emplace(i, CreateSubpassDependency(srcIndex, i, srcStage, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, srcAccess, VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT));
+							std::cout << "Task " << secondTaskIt - m_tasks.begin() << " -> ";
+							std::cout << "Task " << i << std::endl;
+						}
+					}
 				}
 			}
-		}
 
-		task->TaskIndex = i; //debug index;
-		if (task->GetInAttachments().empty())
-			std::cout << "Task " << i << " no deps" << std::endl;
-		else
-		{
-
-			for (const auto& dep : m_dependencies)
+			for (const auto& dep : m_dependencies) //check external dependecies
 			{
-				//we save only one external dependecies per group. We can have every task in a group to depends on the same external group and we only wait just once for the earliest task and not for every task, so we save just once
-				if (dep->PrecedeTask(task))
+				//maybe add here the input to the external inputs list
+				if (dep->m_Outputs.find(in) != dep->m_Outputs.end())
 				{
 					auto groupIt = externalDependeciesMap.find(dep);
 					if (groupIt == externalDependeciesMap.end())
 						externalDependeciesMap.emplace(dep, task);
 				}
-			}
+			}		
 		}
+
+		//add outputs to the output list
+		for (const auto& outs : task->GetOutAttachments())
+			outputList[outs].insert(task);
+
+		task->TaskIndex = i; //debug index;
+		if (task->GetInAttachments().empty())
+			std::cout << "Task " << i << " no deps" << std::endl;
 	}
+
+	for (auto& srcMap : dependeciesMap)
+		for (auto dep : srcMap.second)
+			subpassDeps.push_back(dep.second);
 
 	for (auto depPair : externalDependeciesMap)
 	{
@@ -212,6 +321,7 @@ void RenderTaskGroup::CreateSubpassesDescriptions()
 	std::vector<VkAttachmentDescription>& attDesc = m_renderPassContext.AttachmentDescriptions;
 	std::unordered_map<AttachmentInfo*, VkAttachmentReference> attRef; //keep track of the attachmentInfo -> attachmentReference, because the attachmentInfo are kept in a set and we need to create a vector
 	attDesc.reserve(m_Outputs.size());
+	TRAP(attDesc.empty());
 
 	uint32_t attIndex = 0;
 	//group outputs will be the views that will be found in framebuffers, so the attachments description will be constructed from these 
@@ -220,7 +330,7 @@ void RenderTaskGroup::CreateSubpassesDescriptions()
 		VkImageLayout renderPassLayout = IsColorFormat(out->GetFormat()) ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 		attRef[out] = CreateAttachmentReference(attIndex, renderPassLayout);
 
-		VkImageLayout finalLayout = GetFinalLayout(out, renderPassLayout);
+		VkImageLayout finalLayout = renderPassLayout;//GetFinalLayout(out, renderPassLayout); //maybe we dont need this anymore, layout change will take place in VkCmdWaitEvents()
 		VkAttachmentLoadOp loadOp = out->IsFirstOccurence(this) ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
 		
 		attDesc.push_back(AddAttachementDesc(VK_IMAGE_LAYOUT_UNDEFINED, finalLayout, out->GetFormat(), loadOp));
@@ -238,13 +348,14 @@ void RenderTaskGroup::CreateSubpassesDescriptions()
 			auto outAttRef = attRef.find(outAtt);
 			TRAP(outAttRef != attRef.end() && "Something is wrong. The map is not completed!");
 			if (IsDepthFormat(outAtt->GetFormat()))
+			{
+				TRAP(subpassDesc[i].DepthAttachment.layout == VK_IMAGE_LAYOUT_UNDEFINED && "You can only have one depth attachment and try to put it at the end of attchment list");
 				subpassDesc[i].DepthAttachment = outAttRef->second;
+			}
 			else
 				subpassDesc[i].ColorAttachments.push_back(outAttRef->second);
 		}
 	}
-
-
 }
 
 VkImageLayout RenderTaskGroup::GetFinalLayout(AttachmentInfo* att, VkImageLayout defaultLayout)
@@ -269,6 +380,7 @@ void RenderTaskGroup::ConstructRenderPass()
 		subpassDescriptions.push_back(CreateSubpassDesc(sd.ColorAttachments.data(), sd.ColorAttachments.size(), depthAtt)); //this should be const.
 	}
 
+	TRAP(m_renderPassContext.AttachmentDescriptions.size() == m_Outputs.size());
 	NewRenderPass(&m_renderPass, m_renderPassContext.AttachmentDescriptions, subpassDescriptions, m_renderPassContext.SubpassDependecies);
 }
 
@@ -298,18 +410,24 @@ void RenderTaskGroup::EndRenderPass()
 	EndDebugMarker(m_groupName);
 }
 
-bool RenderTaskGroup::PrecedeTask(RenderTask* task)
-{
-	for (const auto& in : task->GetInAttachments())
-		if (m_Outputs.find(in) != m_Outputs.end())
-			return true;
-
-	return false;
-}
-
 void RenderTaskGroup::AddExternalDependecyToTask(RenderTask* task)
 {
 	std::cout << "External deps: " << GetName() << " -> " << task->TaskIndex << std::endl;
+
+	task->AddExternalEvent(m_groupDoneEvent);
+
+	for (auto& taskIn : task->GetInAttachments())
+		if (m_Outputs.find(taskIn) != m_Outputs.end())
+		{
+			ImageHandle* inHandle = taskIn->GetHandle();
+			VkAccessFlags srcAccess = (IsColorFormat(taskIn->GetFormat())) ? VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT : VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			VkImageAspectFlags imgAspect = 0;
+			imgAspect |= (IsColorFormat(taskIn->GetFormat())) ? VK_IMAGE_ASPECT_COLOR_BIT : 0;
+			imgAspect |= (IsDepthFormat(taskIn->GetFormat())) ? VK_IMAGE_ASPECT_DEPTH_BIT : 0;
+			imgAspect |= (IsStencilFormat(taskIn->GetFormat())) ? VK_IMAGE_ASPECT_STENCIL_BIT : 0;
+
+			task->AddExternalDependecies(taskIn, inHandle->CreateMemoryBarrier(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, srcAccess, VK_ACCESS_SHADER_READ_BIT,imgAspect));
+		}
 }
 
 /////////////////////////////////////
@@ -381,46 +499,5 @@ void PrintString(const std::string& str)
 
 void  RenderGraph::Init()
 {
-	RenderTaskGroup* shadowMap = new RenderTaskGroup("ShadowMap");
-	RenderTaskGroup* gbuffer = new RenderTaskGroup("GBuffer");
-	RenderTaskGroup* preLight = new RenderTaskGroup("PreLighting");
-	RenderTaskGroup* lighting = new RenderTaskGroup("Lighting");
-
-	shadowMap->AddTask(new RenderTask(
-						{},  //ins
-						{ GraphicEngine::GetAttachment("ShadowMap") }, //outs
-						std::bind(&PrintString, "CreateShadowMap")));
-
-
-	gbuffer->AddTask(new RenderTask(
-						{}, //ins
-						{ GraphicEngine::GetAttachment("Albedo"), GraphicEngine::GetAttachment("Normals"), GraphicEngine::GetAttachment("Specular"), GraphicEngine::GetAttachment("Positions"), GraphicEngine::GetAttachment("Depth") }, //outs
-						std::bind(&PrintString, "CreateGBuffer")));
-	
-	preLight->AddTask(new RenderTask(
-						{ GraphicEngine::GetAttachment("ShadowMap") }, //ins
-						{ GraphicEngine::GetAttachment("ShadowResolveFinal"), GraphicEngine::GetAttachment("ShadowResolveBlur"), GraphicEngine::GetAttachment("ShadowResolveBlur") }, //outs
-						std::bind(&PrintString, "ResolveShadows")));
-
-	preLight->AddTask(new RenderTask(
-						{ GraphicEngine::GetAttachment("Depth") }, //ins
-						{ GraphicEngine::GetAttachment("AOFinal"), GraphicEngine::GetAttachment("AODebug"), GraphicEngine::GetAttachment("AOBlurAux") }, //outs
-						std::bind(&PrintString, "AmbientOcclussion")));
-	
-	lighting->AddTask(new RenderTask(
-						{ GraphicEngine::GetAttachment("Albedo"), GraphicEngine::GetAttachment("Normals"), GraphicEngine::GetAttachment("Specular"), GraphicEngine::GetAttachment("Positions"), GraphicEngine::GetAttachment("ShadowResolveFinal"), GraphicEngine::GetAttachment("AOFinal"), GraphicEngine::GetAttachment("Depth") }, //ins
-						{ GraphicEngine::GetAttachment("FinalColorImage"),  GraphicEngine::GetAttachment("DirectionalLightingFinal") }, //outs
-						std::bind(&PrintString, "DirrectionalLight")));
-	
-	lighting->AddTask(new RenderTask(
-						{ GraphicEngine::GetAttachment("Albedo"), GraphicEngine::GetAttachment("Normals"), GraphicEngine::GetAttachment("Specular"), GraphicEngine::GetAttachment("Positions"), GraphicEngine::GetAttachment("FinalColorImage"), GraphicEngine::GetAttachment("ShadowResolveFinal"), GraphicEngine::GetAttachment("AOFinal"), GraphicEngine::GetAttachment("Depth") }, 
-						{ GraphicEngine::GetAttachment("FinalColorImage") }, //this maybe doesnt work
-						std::bind(&PrintString, "DefferedTileRendering")));
-
-	AddTaskGroup(shadowMap);
-	AddTaskGroup(preLight);
-	AddTaskGroup(gbuffer);
-	AddTaskGroup(lighting);
-
 	Prepare();
 }

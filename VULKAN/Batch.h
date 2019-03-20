@@ -16,11 +16,11 @@ class Batch;
 class Material;
 class CTexture;
 
-class BatchManager : public Singleton<BatchManager>
+class BatchRenderer : public Singleton<BatchRenderer>, public Renderer
 {
 public:
-	BatchManager();
-	virtual ~BatchManager();
+	BatchRenderer();
+	virtual ~BatchRenderer();
 
 	void AddObject(Object* obj);
 
@@ -28,14 +28,27 @@ public:
 	Batch* CreateNewBatch(MaterialTemplateBase* materialTemplate);
 
 	void Update();
+	void PreRender();
 
 	void RenderAll();
+	void Setup(VkRenderPass renderPass, uint32_t subpassId);
+
 	void RenderShadows();
-	void PreRender();
-private:
+	void SetupShadows(VkRenderPass renderPass, uint32_t subpassId);
+protected:
+	void InitInternal();
+	void UpdateGraphicInterface();
+	//in this case this is still not good..is awful. This renderer has a separate descriptor pool for the shadow descriptor set, but the rest of the objects descriptor sets come from the descriptor pools of the MaterialLibrary class. will be very confusing in the future. But having this way, we can register the shadow pipeline to be reloaded
+	void CreateDescriptorSetLayouts(); 
+	void AllocateDescriptorSets();
 private:
 	std::vector<Batch*>				m_batches;
 	std::vector<Batch*>				m_inProgressBatches;
+
+	CGraphicPipeline                m_shadowPipeline;
+	BufferHandle*					m_splitsBuffer;
+	VkDescriptorSet					m_splitsDescSet;
+	DescriptorSetLayout				m_splitDescLayout;
 
 	typedef std::unordered_map<MaterialTemplateBase*, std::vector<Batch*>> TBatchMap;
 	TBatchMap						m_batchesCategories;

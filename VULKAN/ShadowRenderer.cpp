@@ -7,268 +7,10 @@
 #include "Batch.h"
 #include "Input.h"
 #include "UI.h"
+#include "GraphicEngine.h"
+#include "Framebuffer.h"
 
 #include <random>
-
-//////////////////////////////////////////////////////////////////////////
-//ShadowMapRenderer
-//////////////////////////////////////////////////////////////////////////
-
-struct ShadowParams
-{
-	glm::ivec4 NSplits;
-	ShadowMapRenderer::SplitsArrayType Splits;
-};
-
-ShadowMapRenderer::ShadowMapRenderer(VkRenderPass renderPass)
-	: CRenderer(renderPass, "ShadowmapRenderPass")
-	, m_splitsBuffer(nullptr)
-	, m_splitsDescSet(VK_NULL_HANDLE)
-	, m_splitsAlphaFactor(0.15f)
-	, m_isDebugMode(false)
-	, m_debugText(nullptr)
-{
-	InputManager::GetInstance()->MapKeysPressed({ '4','T', 'G' }, InputManager::KeyPressedCallback(this, &ShadowMapRenderer::OnKeyPressed));
-}
-
-ShadowMapRenderer::~ShadowMapRenderer()
-{
-	MemoryManager::GetInstance()->FreeHandle(m_splitsBuffer);
-}
-
-void ShadowMapRenderer::Init()
-{
-    CRenderer::Init();
-	g_commonResources.SetAs<VkRenderPass>(&m_renderPass, EResourceType_ShadowRenderPass); //kinda tricky if i forgot that the order of renderers matters.
-
-	m_splitsBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(ShadowParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-
-	AllocDescriptorSets(m_descriptorPool, m_splitDescLayout.Get(), &m_splitsDescSet);
-
-	VkPushConstantRange pushConstRange;
-	pushConstRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT;
-	pushConstRange.offset = 0;
-	pushConstRange.size = 256; //max push constant range(can get it from limits)
-
-    m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
-    m_pipeline.SetViewport(SHADOWW, SHADOWH);
-    m_pipeline.SetScissor(SHADOWW, SHADOWH);
-    m_pipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
-    m_pipeline.SetVertexShaderFile("shadow.vert");
-	m_pipeline.SetGeometryShaderFile("shadow.geom");
-    m_pipeline.SetFragmentShaderFile("shadowlineardepth.frag");
-	m_pipeline.AddPushConstant(pushConstRange);
-
-	std::vector<VkDescriptorSetLayout> layouts{ m_descriptorSetLayout, m_splitDescLayout.Get() };
-    m_pipeline.CreatePipelineLayout(layouts);
-    m_pipeline.Init(this, m_renderPass, 0);
-}
-
-void ShadowMapRenderer::ComputeCascadeSplitMatrices(/*const glm::mat4& view*/)
-{
-	//float alpha = 0.15f;
-	float cameraNear = ms_camera.GetNear();
-	float cameraFar = ms_camera.GetFar();
-
-	float splitNumbers =  float(SHADOWSPLITS);
-	float splitFar = 0;
-	float splitNear = cameraNear;
-
-	auto linearizeDepth = [](float z)
-	{
-		float n = 0.01f;
-		float f = 75.0f;
-		return (2 * n) / (f + n - z * (f - n));
-	};
-
-	glm::vec3 j = glm::vec3(.0f, 1.0f, 0.0f);
-	glm::vec3 lightDir = glm::vec3(directionalLight.GetDirection());
-	glm::vec3 lightRight = glm::normalize(glm::cross(lightDir, j));
-	glm::vec3 lightUp = glm::normalize(glm::cross(lightRight, lightUp));
-
-	glm::mat4  initialProj = glm::ortho(-20.f, 20.1f, -11.f, 11.5f, 0.01f, 20.0f);
-	ConvertToProjMatrix(initialProj);
-
-	for (uint32_t s = 0; s < SHADOWSPLITS; ++s)
-	{
-		float splitIndex = float(s + 1.0f);//for split index we have zi as near plane and zi+1 as far plane
-		glm::mat4 view;
-		glm::mat4 proj;
-
-		splitFar = m_splitsAlphaFactor * cameraNear * glm::pow(cameraFar / cameraNear, splitIndex / splitNumbers) + (1.0f - m_splitsAlphaFactor) * (cameraNear + (splitIndex / splitNumbers) * (cameraFar - cameraNear));
-
-		CFrustum frustum(splitNear, splitFar);
-		frustum.Update(ms_camera.GetPos(), ms_camera.GetFrontVector(), ms_camera.GetUpVector(), ms_camera.GetRightVector(), ms_camera.GetFOV()); //in worldspace
-		
-		ComputeCascadeViewMatrix(frustum, lightDir, lightUp, view);
-		ComputeCascadeProjMatrix(frustum, view, initialProj, proj);
-
-		//I will explain this for the future self, to not make stupid faces while you're trying to understand. its the same as:
-		// projVec4 = ProjMatrix * viewPosVector4; //but we do the multiply only for z component
-		//projVec4.z /= projVec4.w;
-		//and then we bring z from -1, 1 -> 0, 1 because ProjMatrix is the old opengl format with z between -1, 1, vulkan changed that
-		/*
-		expanded fomulae:
-		z = -splitFar * (-(cameraFar + cameraNear) / (cameraFar - cameraNear) - (2 * cameraFar * cameraNear) /(cameraFar - cameraNear);
-		w = (-1) * (-splitFar);
-
-		projZ = z / w;
-		its -splitFar  beacause in Vulkan camera points towards the -z axes
-		*/
-		
-		float projectedZ = ((splitFar * (cameraFar + cameraNear) - 2.0f * (cameraFar * cameraNear)) / (cameraFar - cameraNear)) / splitFar;
-		projectedZ = projectedZ * 0.5f + 0.5f;
-
-		m_splitProjMatrix[s].NearFar = glm::vec4(splitNear, linearizeDepth(projectedZ), 0.0f, 0.0f);
-		m_splitProjMatrix[s].ProjViewMatrix = proj * view;
-
-		splitNear = splitFar;
-	}
-}
-
-void ShadowMapRenderer::ComputeCascadeViewMatrix(const CFrustum& splitFrustrum, const glm::vec3& lightDir, const glm::vec3& lightUp, glm::mat4& outView)
-{
-	const float kLightCameraDist = 2.5f;
-	glm::vec3 wpMin = glm::vec3(std::numeric_limits<float>::max());
-	glm::vec3 wpMax = glm::vec3(std::numeric_limits<float>::min());
-
-	for (unsigned int i = 0; i < CFrustum::FPCount; ++i)
-	{
-		wpMin = glm::min(wpMin, splitFrustrum.GetPoint(i));
-		wpMax = glm::max(wpMax, splitFrustrum.GetPoint(i));
-	}
-
-	BoundingBox3D bb(wpMin, wpMax);
-	glm::vec3 lightCameraEye = bb.GetNegativeVertex(lightDir) - lightDir * kLightCameraDist;
-	//glm::vec3 lightCameraEye = (wpMin + wpMax) / 2.0f - lightDir * kLightCameraDist;
-
-	outView = glm::lookAt(lightCameraEye, lightCameraEye + lightDir, lightUp); //this up vector for me doesnt seem right
-}
-
-void ShadowMapRenderer::ComputeCascadeProjMatrix(const CFrustum& splitFrustum, const glm::mat4& lightViewMatrix, const glm::mat4& lightProjMatrix, glm::mat4& outCroppedProjMatrix)
-{
-	glm::mat4 PV = lightProjMatrix * lightViewMatrix;
-	glm::vec3 minLimits = glm::vec3(std::numeric_limits<float>::max());
-	glm::vec3 maxLimits = glm::vec3(std::numeric_limits<float>::min());
-
-	for (unsigned int i = 0; i < CFrustum::FPCount; ++i)
-	{
-		glm::vec4 lightPos = PV * glm::vec4(splitFrustum.GetPoint(i), 1.0f);
-		minLimits = glm::min(minLimits, glm::vec3(lightPos));
-		maxLimits = glm::max(maxLimits, glm::vec3(lightPos));
-	}
-	minLimits.z = 0.0f; //to capture all the objects of the scene even if they are out of camera
-
-	float scaleX = 2.0f / (maxLimits.x - minLimits.x);
-	float scaleY = 2.0f / (maxLimits.y - minLimits.y);
-	float offsetX = (-0.5f) * (maxLimits.x + minLimits.x) * scaleX;
-	float offsetY = (-0.5f) * (maxLimits.y + minLimits.y) * scaleY;
-	float scaleZ = 1.0f / (maxLimits.z - minLimits.z);
-	float offsetZ = -minLimits.z * scaleZ;
-
-	glm::mat4 C(glm::vec4(scaleX, 0.0f, 0.0f, 0.0f),
-		glm::vec4(0.0f, scaleY, 0.0f, 0.0f),
-		glm::vec4(0.0f, 0.0f, scaleZ, 0.0f),
-		glm::vec4(offsetX, offsetY, offsetZ, 1.0f)
-	);
-
-	outCroppedProjMatrix = C * lightProjMatrix;
-}
-
-void ShadowMapRenderer::UpdateGraphicInterface()
-{
-	VkDescriptorBufferInfo splitBuffer = m_splitsBuffer->GetDescriptor();
-
-	std::vector<VkWriteDescriptorSet> wDesc;
-	wDesc.push_back(InitUpdateDescriptor(m_splitsDescSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &splitBuffer));
-
-	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
-}
-
-bool ShadowMapRenderer::OnKeyPressed(const KeyInput& key)
-{
-	std::string debugText = "4 - close; T/G increase/decrease alpha. Alpha: ";
-
-	if (key.IsKeyPressed('4'))
-	{
-		m_isDebugMode = !m_isDebugMode;
-		if (m_isDebugMode)
-			m_debugText = CUIManager::GetInstance()->CreateTextItem(debugText + std::to_string(m_splitsAlphaFactor), glm::uvec2(10, 50));
-		else
-			CUIManager::GetInstance()->DestroyTextItem(m_debugText);
-
-		return true;
-	}
-
-	if (!m_isDebugMode)
-		return false;
-
-
-	if (key.IsKeyPressed('T'))
-	{
-		m_splitsAlphaFactor = glm::min(m_splitsAlphaFactor + 0.05f, 0.95f);
-		m_debugText->SetText(debugText + std::to_string(m_splitsAlphaFactor));
-		return true;
-	}
-	else if (key.IsKeyPressed('G'))
-	{
-		m_splitsAlphaFactor = glm::max(m_splitsAlphaFactor - 0.05f, 0.05f);
-		m_debugText->SetText(debugText + std::to_string(m_splitsAlphaFactor));
-		return true;
-	}
-
-	return false;
-}
-
-void ShadowMapRenderer::PreRender()
-{
-	ComputeCascadeSplitMatrices();
-
-	m_shadowViewProj = m_splitProjMatrix[0].ProjViewMatrix;
-
-	ShadowParams* params = m_splitsBuffer->GetPtr<ShadowParams*>();
-	params->NSplits = glm::ivec4(SHADOWSPLITS);
-	params->Splits = m_splitProjMatrix;
-}
-
-void ShadowMapRenderer::Render()
-{
-    VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
-
-	vk::CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.Get());
-	vk::CmdBindDescriptorSets(cmd, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 1, 1, &m_splitsDescSet, 0, nullptr);
-
-	BatchManager::GetInstance()->RenderShadows();
-}
-
-void ShadowMapRenderer::PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets)
-{
-    AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1);
-    maxSets = 1;
-}
-
-void ShadowMapRenderer::UpdateResourceTable()
-{
-    UpdateResourceTableForDepth(EResourceType_ShadowMapImage);
-    g_commonResources.SetAs<glm::mat4>(&m_shadowViewProj, EResourceType_ShadowProjViewMat);
-	g_commonResources.SetAs<SplitsArrayType>(&m_splitProjMatrix, EResourceType_ShadowMapSplits);
-
-	TRAP(m_pipeline.IsValid());
-	g_commonResources.SetAs<CGraphicPipeline>(&m_pipeline, EResourceType_ShadowRenderPipeline);
-
-}
-
-void ShadowMapRenderer::CreateDescriptorSetLayout()
-{
-    std::vector<VkDescriptorSetLayoutBinding> descCnt;
-    descCnt.resize(1);
-	descCnt[0] = CreateDescriptorBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-
-    NewDescriptorSetLayout(descCnt, &m_descriptorSetLayout);
-
-	m_splitDescLayout.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_GEOMETRY_BIT, 1);
-	m_splitDescLayout.Construct();
-}
 
 //////////////////////////////////////////////////////////////////////////
 //CShadowResolveRenderer
@@ -279,7 +21,7 @@ struct ShadowResolveParameters
     glm::vec4   CameraPosition; 
     glm::mat4   ShadowProjMatrix;
 	glm::ivec4	NSplits;
-	ShadowMapRenderer::SplitsArrayType Splits;
+	SplitsArrayType Splits;
 };
 
 CShadowResolveRenderer::CShadowResolveRenderer(VkRenderPass renderpass)
@@ -414,7 +156,7 @@ void CShadowResolveRenderer::UpdateShaderParams()
     params->ShadowProjMatrix = shadowProj;
     params->LightDirection = directionalLight.GetDirection();
     params->CameraPosition = glm::vec4(ms_camera.GetPos(), 1.0f);
-	params->Splits = g_commonResources.GetAs<ShadowMapRenderer::SplitsArrayType>(EResourceType_ShadowMapSplits);
+	params->Splits = g_commonResources.GetAs<SplitsArrayType>(EResourceType_ShadowMapSplits);
 	params->NSplits = glm::ivec4(SHADOWSPLITS);
 }
 
@@ -549,4 +291,197 @@ void CShadowResolveRenderer::CreateDistributionTextures() //this textures are no
 
     m_blockerDistrText = CreateDistTexture(blockerDistData, blockSamples);
     m_PCFDistrText = CreateDistTexture(PCFDistData, PCFSamples);
+}
+
+//////////////////////////////////////////////////////////////////
+//ShadowResolveRenderer
+//////////////////////////////////////////////////////////////////
+
+struct ShadowResolveParameters2
+{
+	glm::vec4   LightDirection;
+	glm::vec4   CameraPosition;
+	glm::mat4   ShadowProjMatrix;
+	glm::ivec4	NSplits;
+	SplitsArrayType Splits;
+};
+
+
+ShadowResolveRenderer::ShadowResolveRenderer()
+	: Renderer()
+	, m_quad(nullptr)
+	, m_depthSampler(VK_NULL_HANDLE)
+	, m_descriptorSet(VK_NULL_HANDLE)
+	, m_uniformBuffer(nullptr)
+	, m_linearSampler(VK_NULL_HANDLE)
+	, m_nearSampler(VK_NULL_HANDLE)
+	, m_blockerDistrText(nullptr)
+	, m_PCFDistrText(nullptr)
+{
+
+}
+
+ShadowResolveRenderer::~ShadowResolveRenderer()
+{
+	VkDevice dev = vk::g_vulkanContext.m_device;
+
+	delete m_PCFDistrText;
+	delete m_blockerDistrText;
+
+	MemoryManager::GetInstance()->FreeHandle(m_uniformBuffer);
+
+	vk::DestroySampler(dev, m_depthSampler, nullptr);
+	vk::DestroySampler(dev, m_linearSampler, nullptr);
+	vk::DestroySampler(dev, m_nearSampler, nullptr);
+}
+
+void ShadowResolveRenderer::Setup(VkRenderPass renderPass, uint32_t subpassId)
+{
+	unsigned int width = WIDTH;  //this is not ok
+	unsigned int height = HEIGHT;
+
+	m_pipeline.SetVertexShaderFile("screenquad.vert");
+	m_pipeline.SetFragmentShaderFile("shadowresult.frag");
+	m_pipeline.SetDepthTest(false);
+	m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
+	m_pipeline.AddBlendState(CGraphicPipeline::CreateDefaultBlendState(), 2);
+	m_pipeline.SetViewport(width, height);
+	m_pipeline.SetScissor(width, height);
+	m_pipeline.CreatePipelineLayout(m_descriptorLayout.Get());
+	m_pipeline.Setup(renderPass, subpassId);
+	RegisterPipeline(&m_pipeline);
+}
+
+void ShadowResolveRenderer::Render()
+{
+	StartDebugMarker("ShadowResolve");
+	VkCommandBuffer cmdBuff = vk::g_vulkanContext.m_mainCommandBuffer;
+	vk::CmdBindPipeline(cmdBuff, m_pipeline.GetBindPoint(), m_pipeline.Get());
+	vk::CmdBindDescriptorSets(cmdBuff, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, 1, &m_descriptorSet, 0, nullptr);
+
+	m_quad->Render();
+	EndDebugMarker("ShadowResolve");
+}
+
+void ShadowResolveRenderer::PreRender()
+{
+	UpdateShaderParams();
+}
+
+void ShadowResolveRenderer::CreateDescriptorSetLayouts()
+{
+	std::vector<VkDescriptorSetLayoutBinding> bindings;
+
+	m_descriptorLayout.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
+	m_descriptorLayout.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+	m_descriptorLayout.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+	m_descriptorLayout.AddBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+	m_descriptorLayout.AddBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+	m_descriptorLayout.AddBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+	m_descriptorLayout.AddBinding(6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+	m_descriptorLayout.AddBinding(7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+
+	m_descriptorLayout.Construct();
+
+	RegisterDescriptorSetLayout(&m_descriptorLayout);
+}
+
+void ShadowResolveRenderer::UpdateGraphicInterface()
+{
+	ImageHandle* normalImage = GraphicEngine::GetAttachment("Normals")->GetHandle();
+	ImageHandle* positionImage = GraphicEngine::GetAttachment("Positions")->GetHandle();
+	ImageHandle* shadowMapImage = GraphicEngine::GetAttachment("ShadowMap")->GetHandle();
+	ImageHandle* depthImage = GraphicEngine::GetAttachment("Depth")->GetHandle();
+
+	VkDescriptorImageInfo normalInfo = CreateDescriptorImageInfo(m_nearSampler, normalImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkDescriptorImageInfo posInfo = CreateDescriptorImageInfo(m_nearSampler, positionImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkDescriptorImageInfo shadowhInfo = CreateDescriptorImageInfo(m_depthSampler, shadowMapImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	//VkDescriptorImageInfo shadowhInfo = CreateDescriptorImageInfo(m_depthSampler, shadowMapImage->GetLayerView(0), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+	VkDescriptorBufferInfo constInfo = m_uniformBuffer->GetDescriptor();
+	VkDescriptorImageInfo shadowText = CreateDescriptorImageInfo(m_nearSampler, shadowMapImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkDescriptorImageInfo blockerDistText = CreateDescriptorImageInfo(m_nearSampler, m_blockerDistrText->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkDescriptorImageInfo pcfDistText = CreateDescriptorImageInfo(m_nearSampler, m_PCFDistrText->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	VkDescriptorImageInfo depthText = CreateDescriptorImageInfo(m_nearSampler, depthImage->GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	std::vector<VkWriteDescriptorSet> wDesc;
+	wDesc.push_back(InitUpdateDescriptor(m_descriptorSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &constInfo));
+	wDesc.push_back(InitUpdateDescriptor(m_descriptorSet, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &shadowhInfo));
+	wDesc.push_back(InitUpdateDescriptor(m_descriptorSet, 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &posInfo));
+	wDesc.push_back(InitUpdateDescriptor(m_descriptorSet, 3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &normalInfo));
+	wDesc.push_back(InitUpdateDescriptor(m_descriptorSet, 4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &shadowText));
+	wDesc.push_back(InitUpdateDescriptor(m_descriptorSet, 5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &blockerDistText));
+	wDesc.push_back(InitUpdateDescriptor(m_descriptorSet, 6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &pcfDistText));
+	wDesc.push_back(InitUpdateDescriptor(m_descriptorSet, 7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &depthText));
+
+	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
+}
+
+void ShadowResolveRenderer::AllocateDescriptorSets()
+{
+	m_descriptorSet = m_descriptorPool.AllocateDescriptorSet(m_descriptorLayout);
+}
+
+void ShadowResolveRenderer::InitInternal()
+{
+	CreateLinearSampler(m_linearSampler);
+	CreateNearestSampler(m_nearSampler);
+
+	VkSamplerCreateInfo samplerDepthCreateInfo;
+	cleanStructure(samplerDepthCreateInfo);
+	samplerDepthCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	samplerDepthCreateInfo.magFilter = VK_FILTER_NEAREST;
+	samplerDepthCreateInfo.minFilter = VK_FILTER_NEAREST;
+	samplerDepthCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+	samplerDepthCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+	samplerDepthCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+	samplerDepthCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+	samplerDepthCreateInfo.mipLodBias = 0.0;
+	samplerDepthCreateInfo.anisotropyEnable = VK_FALSE;
+	samplerDepthCreateInfo.maxAnisotropy = 0;
+	samplerDepthCreateInfo.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+	samplerDepthCreateInfo.minLod = 0.0;
+	samplerDepthCreateInfo.maxLod = 0.0;
+	samplerDepthCreateInfo.compareEnable = VK_TRUE;
+	samplerDepthCreateInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+
+	VULKAN_ASSERT(vk::CreateSampler(vk::g_vulkanContext.m_device, &samplerDepthCreateInfo, nullptr, &m_depthSampler));
+
+	m_uniformBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(ShadowResolveParameters), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	m_quad = CreateFullscreenQuad();
+
+	CreateDistributionTextures();
+}
+
+void ShadowResolveRenderer::CreateDistributionTextures()
+{
+	const unsigned int blockSamples = 32;
+	const unsigned int PCFSamples = 64;
+
+	glm::vec2 blockerDistData[blockSamples];
+	glm::vec2 PCFDistData[PCFSamples];
+
+	unsigned int seed = 6914692;
+	std::mt19937 generator(seed);
+	std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+
+	for (unsigned int i = 0; i < blockSamples; ++i)
+		blockerDistData[i] = glm::vec2(distribution(generator), distribution(generator));
+
+	for (unsigned int i = 0; i < PCFSamples; ++i)
+		PCFDistData[i] = glm::vec2(distribution(generator), distribution(generator));
+
+	m_blockerDistrText = CreateDistTexture(blockerDistData, blockSamples);
+	m_PCFDistrText = CreateDistTexture(PCFDistData, PCFSamples);
+}
+
+void ShadowResolveRenderer::UpdateShaderParams()
+{
+	const FrameConstants& fc = GraphicEngine::GetFrameConstants();
+
+	ShadowResolveParameters2* params = m_uniformBuffer->GetPtr<ShadowResolveParameters2*>();
+	params->ShadowProjMatrix = glm::mat4(1.0f); //unused. I think
+	params->LightDirection = fc.DirectionalLightDirection; //unused
+	params->CameraPosition = glm::vec4(ms_camera.GetPos(), 1.0f);
+	params->Splits = fc.ShadowSplits;
+	params->NSplits = glm::ivec4(fc.NumberOfShadowSplits);
 }

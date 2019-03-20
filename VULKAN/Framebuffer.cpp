@@ -40,7 +40,7 @@ const VkImage AttachmentInfo::GetVkImage() const
 //Framebuffer V2
 /////////////////////////////////////////////////////////
 Framebuffer::Framebuffer(const VkRenderPass& renderPass, const std::unordered_set<AttachmentInfo*>& attachments)
-	: m_renderPass(VK_NULL_HANDLE)
+	: m_renderPass(renderPass)
 	, m_framebufferHandle(VK_NULL_HANDLE)
 {
 	//validate + get dimensions

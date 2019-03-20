@@ -6,26 +6,34 @@
 #include "Renderer.h"
 #include "Texture.h"
 #include "Material.h"
+#include "GraphicEngine.h"
 
 #include <iostream>
 #include <unordered_set>
 
-BatchManager::BatchManager()
+
+struct ShadowParams
+{
+	glm::ivec4 NSplits;
+	SplitsArrayType Splits;
+};
+
+BatchRenderer::BatchRenderer()
 {
 }
 
-BatchManager::~BatchManager()
+BatchRenderer::~BatchRenderer()
 {
 
 }
 
 //we need a list of parameters here (we have to know the pipeline, how much uniform memory per batch, or do we use a fixed size. I dont know it seems not too optim)
-Batch* BatchManager::CreateNewBatch(MaterialTemplateBase* materialTemplate)
+Batch* BatchRenderer::CreateNewBatch(MaterialTemplateBase* materialTemplate)
 {
 	return new Batch(materialTemplate);
 }
 
-void BatchManager::Update()
+void BatchRenderer::Update()
 {
 	if (!m_inProgressBatches.empty())
 	{
@@ -62,7 +70,7 @@ void BatchManager::Update()
 	}
 }
 
-void BatchManager::AddObject(Object* obj)
+void BatchRenderer::AddObject(Object* obj)
 {
 	MaterialTemplateBase* materialTemplate = obj->GetObjectMaterial()->GetTemplate();
 	TRAP(materialTemplate);
@@ -96,8 +104,9 @@ void BatchManager::AddObject(Object* obj)
 	}
 }
 
-void BatchManager::RenderAll()
+void BatchRenderer::RenderAll()
 {
+	StartDebugMarker("BatchesSolid");
 	for (auto category : m_batchesCategories)
 	{
 		const CGraphicPipeline& pipeline = category.first->GetPipeline();
@@ -109,22 +118,84 @@ void BatchManager::RenderAll()
 			batch->Render(SubpassIndex::Solid);
 		}
 	}
+	EndDebugMarker("BatchesSolid");
 }
 
-void BatchManager::RenderShadows()
+void BatchRenderer::SetupShadows(VkRenderPass renderPass, uint32_t subpassId)
 {
-	CGraphicPipeline* shadowPipeline = g_commonResources.GetAsPtr<CGraphicPipeline>(EResourceType_ShadowRenderPipeline);
+	VkPushConstantRange pushConstRange;
+	pushConstRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT;
+	pushConstRange.offset = 0;
+	pushConstRange.size = 256; //max push constant range(can get it from limits)
+
+	m_shadowPipeline.SetVertexInputState(Mesh::GetVertexDesc());
+	m_shadowPipeline.SetViewport(SHADOWW, SHADOWH);
+	m_shadowPipeline.SetScissor(SHADOWW, SHADOWH);
+	m_shadowPipeline.SetCullMode(VK_CULL_MODE_BACK_BIT);
+	m_shadowPipeline.SetVertexShaderFile("shadow.vert");
+	m_shadowPipeline.SetGeometryShaderFile("shadow.geom");
+	m_shadowPipeline.SetFragmentShaderFile("shadowlineardepth.frag");
+	m_shadowPipeline.AddPushConstant(pushConstRange);
+
+	const std::vector<VkDescriptorSetLayout>& materialTemplDescSet = MaterialLibrary::GetInstance()->GetDescriptorLayouts();
+	std::vector<VkDescriptorSetLayout> layouts{ materialTemplDescSet[0], m_splitDescLayout.Get() }; //look at this sheet. The first descriptor layout common for shadow pipeline and solid pipeline
+	m_shadowPipeline.CreatePipelineLayout(layouts);
+	m_shadowPipeline.Setup(renderPass, subpassId);
+}
+
+void BatchRenderer::InitInternal()
+{
+	m_splitsBuffer = MemoryManager::GetInstance()->CreateBuffer(EMemoryContextType::UniformBuffers, sizeof(ShadowParams), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+}
+
+void BatchRenderer::UpdateGraphicInterface()
+{
+	VkDescriptorBufferInfo splitBuffer = m_splitsBuffer->GetDescriptor();
+
+	std::vector<VkWriteDescriptorSet> wDesc;
+	wDesc.push_back(InitUpdateDescriptor(m_splitsDescSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &splitBuffer));
+
+	vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDesc.size(), wDesc.data(), 0, nullptr);
+}
+
+void BatchRenderer::CreateDescriptorSetLayouts()
+{
+	m_splitDescLayout.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_GEOMETRY_BIT, 1);
+	m_splitDescLayout.Construct();
+
+	RegisterDescriptorSetLayout(&m_splitDescLayout);
+}
+
+void BatchRenderer::AllocateDescriptorSets()
+{
+	m_splitsDescSet = m_descriptorPool.AllocateDescriptorSet(m_splitDescLayout);
+}
+
+
+void BatchRenderer::RenderShadows()
+{
+	StartDebugMarker("BatchesShadow");
+	VkCommandBuffer cmd = vk::g_vulkanContext.m_mainCommandBuffer;
+
+	vk::CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline.Get());
+	vk::CmdBindDescriptorSets(cmd, m_shadowPipeline.GetBindPoint(), m_shadowPipeline.GetLayout(), 1, 1, &m_splitsDescSet, 0, nullptr);
 
 	for (auto& batch : m_batches)
 	{
-		batch->PrepareRendering(*shadowPipeline, SubpassIndex::ShadowPass);
+		batch->PrepareRendering(m_shadowPipeline, SubpassIndex::ShadowPass);
 		batch->Render(SubpassIndex::ShadowPass);
 	}
-
+	EndDebugMarker("BatchesShadow");
 }
 
-void BatchManager::PreRender()
+void BatchRenderer::PreRender()
 {
+	const FrameConstants& fc = GraphicEngine::GetFrameConstants();
+	//update shadows buffer
+	ShadowParams* params = m_splitsBuffer->GetPtr<ShadowParams*>();
+	params->NSplits = glm::ivec4(fc.NumberOfShadowSplits);
+	params->Splits = fc.ShadowSplits;
+
 	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::IndirectDrawCmdBuffer);
 
 	for (auto& batch : m_batches)
@@ -132,6 +203,11 @@ void BatchManager::PreRender()
 
 	MemoryManager::GetInstance()->UnmapMemoryContext(EMemoryContextType::IndirectDrawCmdBuffer);
 
+}
+
+void BatchRenderer::Setup(VkRenderPass renderPass, uint32_t subpassId)
+{
+	MaterialLibrary::GetInstance()->Setup(renderPass, subpassId);
 }
 
 ////////////////////////////////////////////////////////////////////
@@ -270,7 +346,7 @@ void Batch::UpdateIndirectCmdBuffer(SubpassInfo& subpass)
 
 }
 
-bool Batch::UpdateVisibleObjects(SubpassInfo& subpass)
+bool Batch::UpdateVisibleObjects(SubpassInfo& subpass) //this method will be shit if a large number of objects will be in a batch
 {
 	auto lastVisible = std::stable_partition(m_objects.begin(), m_objects.end(), [&subpass](const Object* obj)
 	{
@@ -399,7 +475,7 @@ void Batch::InitSubpasses()
 		subpass.IndirectCommands = m_indirectCommandBuffer->CreateSubbuffer(indirectCmdSize);
 		subpass.DescriptorSets = m_materialTemplate->GetNewDescriptorSets();
 		subpass.VisibilityMask = mapVisibility((SubpassIndex)i);
-		subpass.VisibleObjects = m_objects; //TODO for now render all the objects
+		subpass.VisibleObjects = m_objects;
 
 		UpdateIndirectCmdBuffer(subpass);
 	}
@@ -524,13 +600,9 @@ void Batch::PreRender()
 
 	}
 
-	glm::mat4 projMatrix;
-	PerspectiveMatrix(projMatrix);
-	ConvertToProjMatrix(projMatrix);
-
-	m_batchParams.ProjViewMatrix = projMatrix * ms_camera.GetViewMatrix();
+	m_batchParams.ProjViewMatrix = GraphicEngine::GetFrameConstants().ProjViewMatrix;
 	m_batchParams.ViewPos = glm::vec4(ms_camera.GetPos(), 1.0f);
-	m_batchParams.ShadowProjViewMatrix = g_commonResources.GetAs<glm::mat4>(EResourceType_ShadowProjViewMat);
+	m_batchParams.ShadowProjViewMatrix = glm::mat4(1.0f);
 }
 
 void Batch::Render(SubpassIndex subpassIndex)

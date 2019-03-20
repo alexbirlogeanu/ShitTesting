@@ -54,7 +54,6 @@ protected:
 	std::string										m_groupName;
 };
 
-
 ////////////////////////////////////////////////////////////////////
 //TaskGroupBase template definition
 ////////////////////////////////////////////////////////////////////
@@ -80,7 +79,7 @@ void TaskGroupBase<TaskType, Derived>::AddDependencies(const std::vector<Derived
 	std::copy(deps.begin(), deps.end(), std::inserter(m_dependencies, m_dependencies.begin()));
 
 	for (auto& dep : deps)
-		dep->m_children.insert((Derived*)this); //THIS IS KINDA STUPID
+		dep->m_children.insert(static_cast<Derived*>(this)); //THIS IS KINDA STUPID
 }
 
 template<class TaskType, class Derived>
@@ -93,10 +92,19 @@ void TaskGroupBase<TaskType, Derived>::AddTask(TaskType* task)
 template<class TaskType, class Derived>
 void TaskGroupBase<TaskType, Derived>::Execute()
 {
-	std::cout << "Executing " << m_groupName << " ..." << std::endl;
+	//std::cout << "Executing " << m_groupName << " ..." << std::endl;
 	for (auto& task : m_tasks)
 		task->Execute();
 }
+
+template <class TaskType>
+class TaskGroup : public TaskGroupBase<TaskType, TaskGroup<TaskType>>
+{
+public:
+	TaskGroup(const std::string& name)
+		: TaskGroupBase<TaskType, TaskGroup<TaskType>>(name)
+	{}
+};
 
 ////////////////////////////////////////////////////////////////////
 //TaskGraph<T>
@@ -220,6 +228,12 @@ void TaskGraph<T>::TopologicalSort()
 	{
 		Node* currNode = traversalStack.back();
 
+		if (currNode->Status == Node::Status::Visited)
+		{
+			traversalStack.pop_back();
+			continue;
+		}
+
 		if (currNode->Status == Node::Status::Processing || currNode->Children.empty())
 		{
 			currNode->Status = Node::Status::Visited;
@@ -239,4 +253,5 @@ void TaskGraph<T>::TopologicalSort()
 	}
 
 	std::reverse(m_sortedTaskGroups.begin(), m_sortedTaskGroups.end());
+	TRAP(m_sortedTaskGroups.size() == m_groups.size());
 }

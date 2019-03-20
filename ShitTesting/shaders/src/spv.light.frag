@@ -2,14 +2,7 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 
-layout (set=0, binding=0) uniform sampler2D albedoText;
-layout (set=0, binding=1) uniform sampler2D specularText; //x = roughness, y = metalness, z = F0
-layout (set=0, binding=2) uniform sampler2D normalText;
-layout (set=0, binding=3) uniform sampler2D worldPosText;
-layout (set=0, binding=5) uniform sampler2D shadowMap;
-layout (set=0, binding=6) uniform sampler2D aoMap;
-
-layout (set=0, binding=4) uniform params
+layout (set=0, binding=0) uniform params
 {
 	vec4 	dirLight;
 	vec4 	cameraPos;
@@ -19,6 +12,14 @@ layout (set=0, binding=4) uniform params
     vec4    pointCenter;
     vec4    pointColor;
 };
+
+layout (set=0, binding=1) uniform sampler2D albedoText;
+layout (set=0, binding=2) uniform sampler2D specularText; //x = roughness, y = metalness, z = F0
+layout (set=0, binding=3) uniform sampler2D normalText;
+layout (set=0, binding=4) uniform sampler2D worldPosText;
+layout (set=0, binding=5) uniform sampler2D shadowMap;
+layout (set=0, binding=6) uniform sampler2D aoMap;
+
 
 layout(location=0) out vec4 out_color;
 layout(location=1) out vec4 debug;

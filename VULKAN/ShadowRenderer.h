@@ -17,53 +17,11 @@ class CFrustum;
 class CUIText;
 class keyInput;
 
-struct ShadowSplit
+struct CShadowSplit
 {
 	glm::mat4 ProjViewMatrix;
 	glm::vec4 NearFar;
 };
-
-class ShadowMapRenderer : public CRenderer //this one have to be refactored. Maybe will not need this anymore
-{
-public:
-	typedef std::array<ShadowSplit, SHADOWSPLITS> SplitsArrayType;
-public:
-    ShadowMapRenderer(VkRenderPass renderPass);
-    virtual ~ShadowMapRenderer();
-
-    void Init() override;
-    void Render() override;
-	void PreRender() override;
-protected:
-    void UpdateResourceTable() override;
-    void CreateDescriptorSetLayout() override;
-    virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override;
-	
-	void ComputeCascadeSplitMatrices();
-	void ComputeCascadeViewMatrix(const CFrustum& splitFrustrum, const glm::vec3& lightDir, const glm::vec3& lightUp, glm::mat4& outView);
-	void ComputeCascadeProjMatrix(const CFrustum& splitFrustum, const glm::mat4& lightViewMatrix, const glm::mat4& lightProjMatrix, glm::mat4& outCroppedProjMatrix);
-
-    void UpdateGraphicInterface() override;
-
-	bool OnKeyPressed(const KeyInput& key);
-private:
-    glm::mat4                       m_shadowViewProj;
-
-    CGraphicPipeline                m_pipeline;
-    VkDescriptorSetLayout           m_descriptorSetLayout;
-
-	BufferHandle*					m_splitsBuffer;
-	VkDescriptorSet					m_splitsDescSet;
-	DescriptorSetLayout				m_splitDescLayout;
-
-	SplitsArrayType					m_splitProjMatrix;
-	float							m_splitsAlphaFactor;
-
-	//
-	bool							m_isDebugMode;
-	CUIText*						m_debugText;
-};
-
 
 class CShadowResolveRenderer : public CRenderer
 {
@@ -110,4 +68,44 @@ private:
     VkDescriptorSet         m_vBlurDescSet;
     VkDescriptorSet         m_hBlurDescSet;
 #endif
+};
+
+//////////////////////////////////////////////////////////////////
+//ShadowResolveRenderer
+//////////////////////////////////////////////////////////////////
+
+class ShadowResolveRenderer : public Renderer
+{
+public:
+	ShadowResolveRenderer();
+	virtual ~ShadowResolveRenderer();
+
+	void Setup(VkRenderPass renderPass, uint32_t subpassId);
+	void Render();
+	void PreRender();
+
+private:
+	void CreateDescriptorSetLayouts() override;
+	void UpdateGraphicInterface() override;
+	void AllocateDescriptorSets() override;
+	void InitInternal() override;
+
+	void CreateDistributionTextures();
+	void UpdateShaderParams();
+private:
+	Mesh*                   m_quad;
+
+	CGraphicPipeline        m_pipeline;
+
+	VkSampler               m_depthSampler;
+	VkSampler               m_linearSampler;
+	VkSampler               m_nearSampler;
+
+	DescriptorSetLayout		m_descriptorLayout;
+	VkDescriptorSet         m_descriptorSet;
+
+	BufferHandle*           m_uniformBuffer;
+
+	CTexture*               m_blockerDistrText;
+	CTexture*               m_PCFDistrText;
 };
