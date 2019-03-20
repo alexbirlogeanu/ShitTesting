@@ -8,11 +8,12 @@
 #include "Input.h"
 #include "Material.h"
 
+#include "ao.h"
 #include "TerrainRenderer.h"
 #include "VegetationRenderer.h"
 #include "ShadowRenderer.h"
-#include "ao.h"
 #include "DirectionalLightRenderer.h"
+#include "PostProcessRenderer.h"
 
 //include managers
 #include "Texture.h"
@@ -231,6 +232,7 @@ void GraphicEngine::InitRenderGraph()
 	RenderTaskGroup* shadowMap = new RenderTaskGroup("ShadowMap");
 	RenderTaskGroup* preLighting = new RenderTaskGroup("PreLighting");
 	RenderTaskGroup* lighting = new RenderTaskGroup("Lighting");
+	RenderTaskGroup* postProcess = new RenderTaskGroup("PostProcess");
 
 	std::vector<AttachmentInfo*> gBufferAttachments = { GraphicEngine::GetAttachment("Albedo"),
 		GraphicEngine::GetAttachment("Specular"),
@@ -243,6 +245,7 @@ void GraphicEngine::InitRenderGraph()
 	ShadowResolveRenderer* shadowResRenderer = static_cast<ShadowResolveRenderer*>(m_renderers["ShadowResolveRenderer"]);
 	AORenderer* aoRenderer = static_cast<AORenderer*>(m_renderers["AORenderer"]);
 	LightRenderer* lightRenderer = static_cast<LightRenderer*>(m_renderers["LightRenderer"]);
+	PostProcessRenderer* postRenderer = static_cast<PostProcessRenderer*>(m_renderers["PostProcessRenderer"]);
 
 	//GBuffer group
 	gbuffer->AddTask(new RenderTask({},
@@ -297,14 +300,21 @@ void GraphicEngine::InitRenderGraph()
 
 	//lighting
 	lighting->AddTask(new RenderTask({ GraphicEngine::GetAttachment("Albedo"), GraphicEngine::GetAttachment("Specular"), GraphicEngine::GetAttachment("Normals"),  GraphicEngine::GetAttachment("Positions"), GraphicEngine::GetAttachment("ShadowResolveFinal"),  GraphicEngine::GetAttachment("AOFinal") },
-	{ GraphicEngine::GetAttachment("FinalColorImage"), GraphicEngine::GetAttachment("DefferedDebug") },
+	{ GraphicEngine::GetAttachment("DirectionalLightingFinal"), GraphicEngine::GetAttachment("DefferedDebug") },
 		std::bind(&LightRenderer::Render, lightRenderer),
 		std::bind(&LightRenderer::Setup, lightRenderer, std::placeholders::_1, std::placeholders::_2)));
+
+	//Post process
+	postProcess->AddTask(new RenderTask({ GraphicEngine::GetAttachment("DirectionalLightingFinal") }, //inputs
+		{ GraphicEngine::GetAttachment("FinalColorImage") },
+		std::bind(&PostProcessRenderer::Render, postRenderer),
+		std::bind(&PostProcessRenderer::Setup, postRenderer, std::placeholders::_1, std::placeholders::_2)));
 
 	m_renderGraph->AddTaskGroup(gbuffer);
 	m_renderGraph->AddTaskGroup(shadowMap);
 	m_renderGraph->AddTaskGroup(preLighting);
 	m_renderGraph->AddTaskGroup(lighting);
+	m_renderGraph->AddTaskGroup(postProcess);
 
 	m_renderGraph->Init();
 }
@@ -323,6 +333,7 @@ void GraphicEngine::InitPreRenderGraph()
 	normalPrio->AddTask(new Task(std::bind(&ShadowResolveRenderer::PreRender, static_cast<ShadowResolveRenderer*>(m_renderers["ShadowResolveRenderer"]))));
 	normalPrio->AddTask(new Task(std::bind(&AORenderer::PreRender, static_cast<AORenderer*>(m_renderers["AORenderer"]))));
 	normalPrio->AddTask(new Task(std::bind(&LightRenderer::PreRender, static_cast<LightRenderer*>(m_renderers["LightRenderer"]))));
+	normalPrio->AddTask(new Task(std::bind(&PostProcessRenderer::UpdateShaderParams, static_cast<PostProcessRenderer*>(m_renderers["PostProcessRenderer"]))));
 
 	normalPrio->AddDependencies({ highPrio });
 
@@ -352,6 +363,7 @@ void GraphicEngine::InitRenderers()
 	m_renderers.emplace("ShadowResolveRenderer", new ShadowResolveRenderer());
 	m_renderers.emplace("AORenderer", new AORenderer());
 	m_renderers.emplace("LightRenderer", new LightRenderer());
+	m_renderers.emplace("PostProcessRenderer", new PostProcessRenderer());
 
 	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::UniformBuffers);
 

@@ -541,167 +541,6 @@ private:
     VkSampler                   m_sampler;
 };
 
-
-struct PostProcessParam
-{
-    glm::vec4       screenCoords; //x = width, y = height, z = 1/width, w = 1/height
-};
-
-class PostProcessRenderer : public CRenderer
-{
-public:
-    PostProcessRenderer(VkRenderPass renderPass)
-        : CRenderer(renderPass, "HDRRenderPass")
-        , m_sampler(VK_NULL_HANDLE)
-        , m_uniformBuffer(VK_NULL_HANDLE)
-        , m_quadMesh(nullptr)
-        , m_descriptorSetLayout(VK_NULL_HANDLE)
-        , m_descriptorSet(VK_NULL_HANDLE)
-        , m_linearSampler(VK_NULL_HANDLE)
-    {
-
-    }
-
-    virtual ~PostProcessRenderer()
-    {
-        VkDevice device = vk::g_vulkanContext.m_device;
-        vk::DestroySampler(device, m_sampler, nullptr);
-
-        vk::UnmapMemory(device, m_uniformMemory);
-        vk::FreeMemory(device, m_uniformMemory, nullptr);
-        vk::DestroyBuffer(device, m_uniformBuffer, nullptr);
-        vk::DestroySampler(device, m_linearSampler, nullptr);
-
-        vk::DestroyDescriptorSetLayout(device, m_descriptorSetLayout, nullptr);
-    }
-
-    virtual void Render()
-    {
-        VkCommandBuffer cmdBuffer = vk::g_vulkanContext.m_mainCommandBuffer;
-        vk::CmdBindPipeline(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.Get());
-        vk::CmdBindDescriptorSets(cmdBuffer, m_pipeline.GetBindPoint(), m_pipeline.GetLayout(), 0, 1, &m_descriptorSet, 0, nullptr);
-
-        m_quadMesh->Render();
-    }
-
-    
-    virtual void UpdateShaderParams()
-    {
-        PostProcessParam params;
-        params.screenCoords.x = WIDTH;
-        params.screenCoords.y = HEIGHT;
-        params.screenCoords.z = 1.0f / WIDTH;
-        params.screenCoords.w = 1.0f / HEIGHT;
-
-        memcpy(m_uniformPtr, &params, sizeof(PostProcessParam));
-    }
-    
-    virtual void Init() override
-    {
-        CRenderer::Init();
-        AllocDescriptorSets(m_descriptorPool, m_descriptorSetLayout, &m_descriptorSet);
-        CreateNearestSampler(m_sampler);
-        CreateLinearSampler(m_linearSampler);
-
-        AllocBufferMemory(m_uniformBuffer, m_uniformMemory, sizeof(PostProcessParam), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-        VULKAN_ASSERT(vk::MapMemory(vk::g_vulkanContext.m_device, m_uniformMemory, 0, sizeof(PostProcessParam), 0, &m_uniformPtr));
-
-        m_quadMesh = CreateFullscreenQuad();
-
-        m_pipeline.SetVertexInputState(Mesh::GetVertexDesc());
-        m_pipeline.SetViewport(WIDTH, HEIGHT);
-        m_pipeline.SetScissor(WIDTH, HEIGHT);
-        m_pipeline.SetVertexShaderFile("screenquad.vert");
-        m_pipeline.SetFragmentShaderFile("hdrgamma.frag");
-        m_pipeline.SetDepthTest(false);
-        m_pipeline.SetDepthWrite(false);
-        VkPipelineColorBlendAttachmentState blendAtt = CGraphicPipeline::CreateDefaultBlendState();
-        m_pipeline.AddBlendState(blendAtt);
-
-        m_pipeline.CreatePipelineLayout(m_descriptorSetLayout);
-        m_pipeline.Init(this, m_renderPass, 0);
-
-        SImageData lutData;
-        ReadLUTTextureData(lutData, std::string(TEXTDIR) + "LUT_Warm.png", true);
-
-        m_lut = new CTexture(lutData, true);
-
-    }
-
-protected:
-
-    virtual void PopulatePoolInfo(std::vector<VkDescriptorPoolSize>& poolSize, unsigned int& maxSets) override
-    {
-        maxSets = 1;
-        AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1);
-        AddDescriptorType(poolSize, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2);
-    }
-
-    virtual void UpdateResourceTable() override
-    {
-        UpdateResourceTableForColor(0, EResourceType_AfterPostProcessImage);
-    }
-
-    virtual void CreateDescriptorSetLayout()
-    {
-        std::vector<VkDescriptorSetLayoutBinding> descCnt;
-        descCnt.reserve(3);
-        descCnt.push_back(CreateDescriptorBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT));
-        descCnt.push_back(CreateDescriptorBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT));
-        descCnt.push_back(CreateDescriptorBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT));
-
-        VkDescriptorSetLayoutCreateInfo descLayoutCrtInfo;
-        cleanStructure(descLayoutCrtInfo);
-        descLayoutCrtInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        descLayoutCrtInfo.pNext = nullptr;
-        descLayoutCrtInfo.flags = 0;
-        descLayoutCrtInfo.bindingCount = (uint32_t)descCnt.size();
-        descLayoutCrtInfo.pBindings = descCnt.data();
-
-        VULKAN_ASSERT(vk::CreateDescriptorSetLayout(vk::g_vulkanContext.m_device, &descLayoutCrtInfo, nullptr, &m_descriptorSetLayout));
-    }
-
-    virtual void UpdateGraphicInterface() override
-    {
-        VkDescriptorImageInfo imgInfo;
-        cleanStructure(imgInfo);
-        imgInfo.sampler = m_sampler;
-		imgInfo.imageView = g_commonResources.GetAs<ImageHandle*>(EResourceType_FinalImage)->GetView();
-        imgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        VkDescriptorBufferInfo buffInfo;
-        cleanStructure(buffInfo);
-        buffInfo.buffer = m_uniformBuffer;
-        buffInfo.offset = 0;
-        buffInfo.range = sizeof(PostProcessParam);
-
-        VkDescriptorImageInfo lutInfo = m_lut->GetTextureDescriptor();
-
-        std::vector<VkWriteDescriptorSet> wDescSet;
-        wDescSet.push_back(InitUpdateDescriptor(m_descriptorSet, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &buffInfo));
-        wDescSet.push_back(InitUpdateDescriptor(m_descriptorSet, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &imgInfo));
-        wDescSet.push_back(InitUpdateDescriptor(m_descriptorSet, 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &lutInfo));
-
-        vk::UpdateDescriptorSets(vk::g_vulkanContext.m_device, (uint32_t)wDescSet.size(), wDescSet.data(), 0, nullptr);
-    }
-private:
-    VkSampler       m_sampler;
-    VkSampler       m_linearSampler;
-
-    VkBuffer        m_uniformBuffer;
-    VkDeviceMemory  m_uniformMemory;
-    void*           m_uniformPtr;
-
-    Mesh*                   m_quadMesh;
-    CGraphicPipeline        m_pipeline;
-
-    VkDescriptorSet m_descriptorSet;
-    VkDescriptorSetLayout m_descriptorSetLayout;
-
-    CTexture*       m_lut;
-};
-
-
 class CApplication
 {
 public:
@@ -756,9 +595,6 @@ private:
 	void CreateVegetationRenderPass(const FramebufferDescription& fbDesc);
 	void CreateTestRenderPass(const FramebufferDescription& fbDesc);
   
-    void StartDeferredRender();
-    void RenderPostProcess();
-
     void CreateQueryPools();
 
     void SetupParticles();
@@ -824,7 +660,6 @@ private:
     CFogRenderer*               m_fogRenderer;
     C3DTextureRenderer*         m_3dTextureRenderer;
     CVolumetricRenderer*        m_volumetricRenderer;
-    PostProcessRenderer*        m_postProcessRenderer;
     CSunRenderer*               m_sunRenderer;
     CUIRenderer*                m_uiRenderer;
 	ScreenSpaceReflectionsRenderer*	m_ssrRenderer;
@@ -883,7 +718,6 @@ CApplication::CApplication()
 	, m_fogRenderer(nullptr)
 	, m_3dTextureRenderer(nullptr)
 	, m_volumetricRenderer(nullptr)
-	, m_postProcessRenderer(nullptr)
 	, m_sunRenderer(nullptr)
 	, m_uiRenderer(nullptr)
 	, m_ssrRenderer(nullptr)
@@ -1303,19 +1137,6 @@ void CApplication::SetupShadowMapRendering()
 
 void CApplication::SetupPostProcessRendering()
 {
-    VkFormat format = VK_FORMAT_B8G8R8A8_UNORM;
-    //VkFormat format = VK_FORMAT_B8G8R8A8_SRGB;
-    FramebufferDescription fbDesc;
-    fbDesc.Begin(1);
-    fbDesc.AddColorAttachmentDesc(0, format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, "PostProcess");
-    fbDesc.End();
-
-    CreatePostProcessRenderPass(fbDesc);
-
-    m_postProcessRenderer = new PostProcessRenderer(m_postProcessPass);
-    m_postProcessRenderer->Init();
-
-    m_postProcessRenderer->CreateFramebuffer(fbDesc, WIDTH, HEIGHT);
 }
 
 void CApplication::SetupSunRendering()
@@ -2058,23 +1879,6 @@ void CApplication::Render()
 float RandomFloat()
 {
     return (float)rand() / (float) RAND_MAX;
-}
-
-void CApplication::StartDeferredRender()
-{
-}
-
-void CApplication::RenderPostProcess()
-{
-    VkCommandBuffer buff = vk::g_vulkanContext.m_mainCommandBuffer;
-
-	m_ssrRenderer->Render();
-
-    m_postProcessRenderer->UpdateShaderParams();
-    m_postProcessRenderer->StartRenderPass();
-
-    m_postProcessRenderer->Render();
-    m_postProcessRenderer->EndRenderPass();
 }
 
 void CApplication::Reset()

@@ -46,7 +46,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v120</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
@@ -139,6 +139,7 @@
     <ClInclude Include="Geometry.h" />
     <ClInclude Include="GraphicEngine.h" />
     <ClInclude Include="Pipeline.h" />
+    <ClInclude Include="PostProcessRenderer.h" />
     <ClInclude Include="RenderTaskGraph.h" />
     <ClInclude Include="Input.h" />
     <ClInclude Include="Material.h" />
@@ -196,6 +197,7 @@
     <ClCompile Include="Object.cpp" />
     <ClCompile Include="Pipeline.cpp" />
     <ClCompile Include="PointLightRenderer2.cpp" />
+    <ClCompile Include="PostProcessRenderer.cpp" />
     <ClCompile Include="RenderTaskGraph.cpp" />
     <ClCompile Include="ResourceLoader.cpp" />
     <ClCompile Include="Scene.cpp" />
