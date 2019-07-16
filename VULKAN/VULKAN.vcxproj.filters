@@ -111,9 +111,6 @@
     <ClCompile Include="ShadowRenderer.cpp">
       <Filter>Source Files\Engine</Filter>
     </ClCompile>
-    <ClCompile Include="SkyRenderer.cpp">
-      <Filter>Source Files\Engine</Filter>
-    </ClCompile>
     <ClCompile Include="DefaultMaterial.cpp">
       <Filter>Source Files\Materials</Filter>
     </ClCompile>
@@ -166,6 +163,12 @@
       <Filter>Source Files\Engine</Filter>
     </ClCompile>
     <ClCompile Include="PostProcessRenderer.cpp">
+      <Filter>Source Files\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="SunRenderer.cpp">
+      <Filter>Source Files\Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="SkyRenderer.cpp">
       <Filter>Source Files\Engine</Filter>
     </ClCompile>
   </ItemGroup>
@@ -254,9 +257,6 @@
     <ClInclude Include="ShadowRenderer.h">
       <Filter>Header Files\Engine</Filter>
     </ClInclude>
-    <ClInclude Include="SkyRenderer.h">
-      <Filter>Header Files\Engine</Filter>
-    </ClInclude>
     <ClInclude Include="DefaultMaterial.h">
       <Filter>Header Files\Material</Filter>
     </ClInclude>
@@ -315,6 +315,12 @@
       <Filter>Header Files\Engine</Filter>
     </ClInclude>
     <ClInclude Include="PostProcessRenderer.h">
+      <Filter>Header Files\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="SunRenderer.h">
+      <Filter>Header Files\Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="SkyRenderer.h">
       <Filter>Header Files\Engine</Filter>
     </ClInclude>
   </ItemGroup>

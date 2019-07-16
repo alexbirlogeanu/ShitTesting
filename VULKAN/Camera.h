@@ -26,7 +26,7 @@ public:
 
     //Getters
     const glm::vec3&    GetPos() const {return m_position; }
-    const glm::mat4&    GetViewMatrix() { return m_viewMatrix; }
+    const glm::mat4&    GetViewMatrix() const { return m_viewMatrix; }
     const CFrustum&		GetFrustum() const { return m_frustrum; }
     glm::vec3           GetFrontVector() const { return m_front; }
     glm::vec3           GetUpVector() const { return m_up; }

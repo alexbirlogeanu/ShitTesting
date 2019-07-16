@@ -11,29 +11,19 @@
 //Render task attempt
 //////////////////////////////////////
 
-RenderTask::RenderTask(const std::vector<AttachmentInfo*>& inAttachments, 
-	const std::vector<AttachmentInfo*>& outAttachments, 
+RenderTask::RenderTask(const std::vector<AttachmentInfo*>& inAttachments,
+	const std::vector<AttachmentInfo*>& outAttachments,
+	const AttachmentInfo* depthAttachment,
 	const std::function<void(void)>& execFunc,
 	const std::function<void(VkRenderPass, uint32_t)>& setupFunc)
 	: Task(execFunc)
 	, m_inAttachments(inAttachments)
 	, m_outAttachments(outAttachments)
 	, m_parentGroup(nullptr)
+	, m_depthAttachment(depthAttachment)
 	, m_setup(setupFunc)
 {
 }
-
-//RenderTask::RenderTask(std::vector<AttachmentInfo*> inAttachments, 
-//	std::vector<AttachmentInfo*> outAttachments, 
-//	const std::function<void(void)>& execFunc,
-//	const std::function<void(VkRenderPass, uint32_t)>& setupFunc)
-//	: Task(execFunc)
-//	, m_inAttachments(inAttachments)
-//	, m_outAttachments(outAttachments)
-//	, m_parentGroup(nullptr)
-//	, m_setup(setupFunc)
-//{
-//}
 
 void RenderTask::Execute()
 {
@@ -111,11 +101,23 @@ void GPUTaskGroup::DefineGroupIO()
 {
 	//std::unordered_set<AttachmentInfo*>	inputs;
 	//std::unordered_set<AttachmentInfo*> outputs;
-	for (auto task : m_tasks)
+	for (int i = 0; i < m_tasks.size(); ++i)
 	{
-		for (const auto& in : task->GetInAttachments())
-			m_Inputs.insert(in);
+		const auto& task = m_tasks[i];
 
+		for (const auto& in : task->GetInAttachments())
+		{
+			bool isExternalOutput = true;
+
+			for (int prev = i - 1; prev >= 0; --prev)
+			{
+				const auto& prevOuts = m_tasks[prev]->GetOutAttachments();
+				isExternalOutput &= std::find(prevOuts.begin(), prevOuts.end(), in) == prevOuts.end();
+			}
+
+			if (isExternalOutput)
+				m_Inputs.insert(in);
+		}
 		for (const auto& out : task->GetOutAttachments())
 			m_Outputs.insert(out);
 
@@ -177,7 +179,7 @@ void RenderTaskGroup::PostInit()
 	
 	ConstructRenderPass();
 
-	m_framebuffer = new Framebuffer(m_renderPass, m_Outputs);
+	m_framebuffer = new Framebuffer(m_renderPass, m_renderPassContext.Attachments);
 
 	for (unsigned int i = 0; i < m_tasks.size(); ++i)
 		m_tasks[i]->Setup(m_renderPass, i);
@@ -319,7 +321,8 @@ void RenderTaskGroup::DetectTaskDependecies()
 void RenderTaskGroup::CreateSubpassesDescriptions()
 {
 	std::vector<VkAttachmentDescription>& attDesc = m_renderPassContext.AttachmentDescriptions;
-	std::unordered_map<AttachmentInfo*, VkAttachmentReference> attRef; //keep track of the attachmentInfo -> attachmentReference, because the attachmentInfo are kept in a set and we need to create a vector
+	std::unordered_map<const AttachmentInfo*, VkAttachmentReference> attRef; //keep track of the attachmentInfo -> attachmentReference, because the attachmentInfo are kept in a set and we need to create a vector
+	std::vector<const AttachmentInfo*>& framebufferAttachements = m_renderPassContext.Attachments;
 	attDesc.reserve(m_Outputs.size());
 	TRAP(attDesc.empty());
 
@@ -334,6 +337,8 @@ void RenderTaskGroup::CreateSubpassesDescriptions()
 		VkAttachmentLoadOp loadOp = out->IsFirstOccurence(this) ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
 		
 		attDesc.push_back(AddAttachementDesc(VK_IMAGE_LAYOUT_UNDEFINED, finalLayout, out->GetFormat(), loadOp));
+		framebufferAttachements.push_back(out);
+
 		++attIndex;
 
 	}
@@ -343,13 +348,27 @@ void RenderTaskGroup::CreateSubpassesDescriptions()
 	for (unsigned int i = 0; i < m_tasks.size(); ++i)
 	{
 		auto& task = m_tasks[i];
+		if (const AttachmentInfo* depthAtt = task->GetDepthAttachment())
+		{
+			if (attRef.find(depthAtt) == attRef.end())
+			{
+				TRAP(IsDepthFormat(depthAtt->GetFormat()));
+				attRef[depthAtt] = CreateAttachmentReference(attIndex, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+				
+				subpassDesc[i].DepthAttachment = attRef[depthAtt];
+				attDesc.push_back(AddAttachementDesc(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, depthAtt->GetFormat(), VK_ATTACHMENT_LOAD_OP_LOAD)); //depth always loads. at the begin of the frame, all depth attachments should be cleared
+				framebufferAttachements.push_back(depthAtt);
+				++attIndex;
+			}
+		}
+
 		for (auto outAtt : task->GetOutAttachments())
 		{
 			auto outAttRef = attRef.find(outAtt);
 			TRAP(outAttRef != attRef.end() && "Something is wrong. The map is not completed!");
 			if (IsDepthFormat(outAtt->GetFormat()))
 			{
-				TRAP(subpassDesc[i].DepthAttachment.layout == VK_IMAGE_LAYOUT_UNDEFINED && "You can only have one depth attachment and try to put it at the end of attchment list");
+				TRAP(subpassDesc[i].DepthAttachment.layout == VK_IMAGE_LAYOUT_UNDEFINED || (outAttRef->first == task->GetDepthAttachment())); //"You can only have one depth attachment and try to put it at the end of attchment list"
 				subpassDesc[i].DepthAttachment = outAttRef->second;
 			}
 			else
@@ -380,7 +399,7 @@ void RenderTaskGroup::ConstructRenderPass()
 		subpassDescriptions.push_back(CreateSubpassDesc(sd.ColorAttachments.data(), sd.ColorAttachments.size(), depthAtt)); //this should be const.
 	}
 
-	TRAP(m_renderPassContext.AttachmentDescriptions.size() == m_Outputs.size());
+	//TRAP(m_renderPassContext.AttachmentDescriptions.size() == totalAttachments);
 	NewRenderPass(&m_renderPass, m_renderPassContext.AttachmentDescriptions, subpassDescriptions, m_renderPassContext.SubpassDependecies);
 }
 

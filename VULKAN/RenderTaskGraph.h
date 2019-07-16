@@ -16,6 +16,7 @@ class RenderTask : public Task
 public:
 	RenderTask(const std::vector<AttachmentInfo*>& inAttachments,
 		const std::vector<AttachmentInfo*>& outAttachments,
+		const AttachmentInfo* depthAttachment,
 		const std::function<void(void)>& exec,
 		const std::function<void(VkRenderPass, uint32_t)>& );
 
@@ -26,6 +27,7 @@ public:
 
 	const std::vector<AttachmentInfo*>& GetInAttachments() const { return m_inAttachments; }
 	const std::vector<AttachmentInfo*>& GetOutAttachments() const { return m_outAttachments; }
+	const AttachmentInfo*				GetDepthAttachment() const { return m_depthAttachment; }
 
 	virtual void Execute() override;
 	//TODO debug value
@@ -39,6 +41,7 @@ public:
 private:
 	std::vector<AttachmentInfo*>				m_inAttachments; //could be empty
 	std::vector<AttachmentInfo*>				m_outAttachments; //should not be empty. Every render task will write at least one framebuffer attachment
+	const AttachmentInfo*						m_depthAttachment;
 
 	std::function<void(VkRenderPass, uint32_t)>	m_setup;
 	GPUTaskGroup*								m_parentGroup;
@@ -53,7 +56,7 @@ class ComputeTask : public RenderTask
 {
 public:
 	ComputeTask(const std::function<void(void)>& exec)
-		: RenderTask({}, {}, exec, nullptr)
+		: RenderTask({}, {}, nullptr, exec, nullptr)
 	{
 	}
 };
@@ -132,6 +135,7 @@ private:
 		std::vector<VkAttachmentDescription>							AttachmentDescriptions;
 		std::vector<SubpassDescription>									SubpassDescriptions;
 		std::vector<VkSubpassDependency>								SubpassDependecies;
+		std::vector<const AttachmentInfo*>								Attachments;
 	};
 
 public: //TODO change private

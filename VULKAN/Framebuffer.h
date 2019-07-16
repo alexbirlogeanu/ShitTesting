@@ -48,7 +48,7 @@ class Framebuffer
 {
 	HEAP_ONLY(Framebuffer);
 public:
-	Framebuffer(const VkRenderPass& renderPass, const std::unordered_set<AttachmentInfo*>& attachments);
+	Framebuffer(const VkRenderPass& renderPass, const std::vector<const AttachmentInfo*>& attachments);
 
 	//getters
 	const std::vector<VkClearValue>&	GetClearColors() const { return m_clearColors; }
@@ -59,7 +59,7 @@ private:
 	VkRenderPass										m_renderPass;
 	VkRect2D											m_renderArea;
 
-	std::unordered_map<std::string, AttachmentInfo*>	m_attachmentMap;
+	std::unordered_map<std::string, const AttachmentInfo*>	m_attachmentMap;
 	std::vector<VkClearValue>							m_clearColors;
 };
 

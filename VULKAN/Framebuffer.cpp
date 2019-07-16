@@ -39,7 +39,7 @@ const VkImage AttachmentInfo::GetVkImage() const
 /////////////////////////////////////////////////////////
 //Framebuffer V2
 /////////////////////////////////////////////////////////
-Framebuffer::Framebuffer(const VkRenderPass& renderPass, const std::unordered_set<AttachmentInfo*>& attachments)
+Framebuffer::Framebuffer(const VkRenderPass& renderPass, const std::vector<const AttachmentInfo*>& attachments)
 	: m_renderPass(renderPass)
 	, m_framebufferHandle(VK_NULL_HANDLE)
 {

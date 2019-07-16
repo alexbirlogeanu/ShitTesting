@@ -14,6 +14,8 @@
 #include "ShadowRenderer.h"
 #include "DirectionalLightRenderer.h"
 #include "PostProcessRenderer.h"
+#include "SunRenderer.h"
+#include "SkyRenderer.h"
 
 //include managers
 #include "Texture.h"
@@ -138,6 +140,7 @@ void GraphicEngine::CreateFramebufferAttachments()
 {
 	VkExtent3D defaultDimensions { WIDTH, HEIGHT, 1 };
 	VkExtent3D shadowDimensions{ SHADOWW, SHADOWH, 1 };
+	VkExtent3D halfDimensions{ WIDTH / 2, HEIGHT / 2, 1 };
 
 	VkClearValue fZeroColor;
 	cleanStructure(fZeroColor);
@@ -178,6 +181,12 @@ void GraphicEngine::CreateFramebufferAttachments()
 
 	//lighting
 	createAttachment("DirectionalLightingFinal", GetAttachmentCreateImageInfo(VK_FORMAT_R16G16B16A16_SFLOAT, defaultDimensions, 1, VK_IMAGE_USAGE_SAMPLED_BIT), fZeroColor);
+
+	//Sun rendering
+	createAttachment("SunFinal", GetAttachmentCreateImageInfo(VK_FORMAT_R16G16B16A16_SFLOAT, halfDimensions, 1, VK_IMAGE_USAGE_SAMPLED_BIT), fZeroColor);
+	createAttachment("SunSprite", GetAttachmentCreateImageInfo(VK_FORMAT_R16G16B16A16_SFLOAT, halfDimensions, 1, VK_IMAGE_USAGE_SAMPLED_BIT), fZeroColor);
+	createAttachment("SunBlur1", GetAttachmentCreateImageInfo(VK_FORMAT_R16G16B16A16_SFLOAT, halfDimensions, 1, VK_IMAGE_USAGE_SAMPLED_BIT), fZeroColor);
+	createAttachment("SunBlur2", GetAttachmentCreateImageInfo(VK_FORMAT_R16G16B16A16_SFLOAT, halfDimensions, 1, VK_IMAGE_USAGE_SAMPLED_BIT), fZeroColor);
 
 	//OUTPUT attachment
 	//createAttachment("FinalColorImage", GetAttachmentCreateImageInfo(VK_FORMAT_R16G16B16A16_SFLOAT, defaultDimensions, 1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT), fZeroColor);
@@ -233,6 +242,8 @@ void GraphicEngine::InitRenderGraph()
 	RenderTaskGroup* preLighting = new RenderTaskGroup("PreLighting");
 	RenderTaskGroup* lighting = new RenderTaskGroup("Lighting");
 	RenderTaskGroup* postProcess = new RenderTaskGroup("PostProcess");
+	RenderTaskGroup* sunPass = new RenderTaskGroup("SunRendering");
+	RenderTaskGroup* skyPass = new RenderTaskGroup("SkyRendering");
 
 	std::vector<AttachmentInfo*> gBufferAttachments = { GraphicEngine::GetAttachment("Albedo"),
 		GraphicEngine::GetAttachment("Specular"),
@@ -246,31 +257,38 @@ void GraphicEngine::InitRenderGraph()
 	AORenderer* aoRenderer = static_cast<AORenderer*>(m_renderers["AORenderer"]);
 	LightRenderer* lightRenderer = static_cast<LightRenderer*>(m_renderers["LightRenderer"]);
 	PostProcessRenderer* postRenderer = static_cast<PostProcessRenderer*>(m_renderers["PostProcessRenderer"]);
+	SunRenderer* sunRenderer = static_cast<SunRenderer*>(m_renderers["SunRenderer"]);
+	SkyRenderer* skyRenderer = static_cast<SkyRenderer*>(m_renderers["SkyRenderer"]);
 
 	//GBuffer group
 	gbuffer->AddTask(new RenderTask({},
 		gBufferAttachments,
+		GraphicEngine::GetAttachment("Depth"),
 		std::bind(&TerrainRenderer::Render, terrainRenderer),
 		std::bind(&TerrainRenderer::Setup, terrainRenderer, std::placeholders::_1, std::placeholders::_2)));
 
 	gbuffer->AddTask(new RenderTask(gBufferAttachments,
 		gBufferAttachments,
+		GraphicEngine::GetAttachment("Depth"),
 		std::bind(&VegetationRenderer::Render, vegRenderer),
 		std::bind(&VegetationRenderer::Setup, vegRenderer, std::placeholders::_1, std::placeholders::_2)));
 
 	gbuffer->AddTask(new RenderTask(gBufferAttachments,
 		gBufferAttachments,
+		GraphicEngine::GetAttachment("Depth"),
 		std::bind(&BatchRenderer::RenderAll, BatchRenderer::GetInstance()),
 		std::bind(&BatchRenderer::Setup, BatchRenderer::GetInstance(), std::placeholders::_1, std::placeholders::_2)));
 
 	//Shadow map group
 	shadowMap->AddTask(new RenderTask({}, //ins
 		{ GraphicEngine::GetAttachment("ShadowMap") }, //outs
+		GraphicEngine::GetAttachment("ShadowMap"),
 		std::bind(&TerrainRenderer::RenderShadows, terrainRenderer), //exec
 		std::bind(&TerrainRenderer::SetupShadows, terrainRenderer, std::placeholders::_1, std::placeholders::_2)));
 
 	shadowMap->AddTask(new RenderTask({ GraphicEngine::GetAttachment("ShadowMap") }, //ins
 		{ GraphicEngine::GetAttachment("ShadowMap") }, //outs
+		{ GraphicEngine::GetAttachment("ShadowMap") },
 		std::bind(&BatchRenderer::RenderShadows, BatchRenderer::GetInstance()), //exec
 		std::bind(&BatchRenderer::SetupShadows, BatchRenderer::GetInstance(), std::placeholders::_1, std::placeholders::_2))); //setup
 
@@ -279,34 +297,81 @@ void GraphicEngine::InitRenderGraph()
 	//AO MAIN
 	preLighting->AddTask(new RenderTask({ GraphicEngine::GetAttachment("Normals"),  GraphicEngine::GetAttachment("Positions"), GraphicEngine::GetAttachment("Depth") }, //ins
 	{ GraphicEngine::GetAttachment("AOFinal"), GraphicEngine::GetAttachment("AODebug") }, //outs
+		nullptr,
 		std::bind(&AORenderer::RenderMain, aoRenderer),
 		std::bind(&AORenderer::SetupMainPass, aoRenderer, std::placeholders::_1, std::placeholders::_2)));
 	//Shadow Resolve task
 	preLighting->AddTask(new RenderTask({ GraphicEngine::GetAttachment("Normals"),  GraphicEngine::GetAttachment("Positions"), GraphicEngine::GetAttachment("ShadowMap"), GraphicEngine::GetAttachment("Depth") }, //ins
 		{ GraphicEngine::GetAttachment("ShadowResolveFinal"), GraphicEngine::GetAttachment("ShadowResolveDebug") }, //outs
+		nullptr,
 		std::bind(&ShadowResolveRenderer::Render, shadowResRenderer),
 		std::bind(&ShadowResolveRenderer::Setup, shadowResRenderer, std::placeholders::_1, std::placeholders::_2)));
 
 	//AO blur
 	preLighting->AddTask(new RenderTask({ GraphicEngine::GetAttachment("AOFinal") }, //ins
-	{ GraphicEngine::GetAttachment("AOBlurAux") }, //outs
+		{ GraphicEngine::GetAttachment("AOBlurAux") }, //outs
+		nullptr,
 		std::bind(&AORenderer::RenderHBlur, aoRenderer),
 		std::bind(&AORenderer::SetupHBlurPass, aoRenderer, std::placeholders::_1, std::placeholders::_2)));
 
 	preLighting->AddTask(new RenderTask({ GraphicEngine::GetAttachment("AOBlurAux") }, //ins
-	{ GraphicEngine::GetAttachment("AOFinal") }, //outs
+		{ GraphicEngine::GetAttachment("AOFinal") }, //outs
+		nullptr,
 		std::bind(&AORenderer::RenderVBlur, aoRenderer),
 		std::bind(&AORenderer::SetupVBlurPass, aoRenderer, std::placeholders::_1, std::placeholders::_2)));
 
 	//lighting
 	lighting->AddTask(new RenderTask({ GraphicEngine::GetAttachment("Albedo"), GraphicEngine::GetAttachment("Specular"), GraphicEngine::GetAttachment("Normals"),  GraphicEngine::GetAttachment("Positions"), GraphicEngine::GetAttachment("ShadowResolveFinal"),  GraphicEngine::GetAttachment("AOFinal") },
-	{ GraphicEngine::GetAttachment("DirectionalLightingFinal"), GraphicEngine::GetAttachment("DefferedDebug") },
+		{ GraphicEngine::GetAttachment("DirectionalLightingFinal"), GraphicEngine::GetAttachment("DefferedDebug") },
+		nullptr,
 		std::bind(&LightRenderer::Render, lightRenderer),
 		std::bind(&LightRenderer::Setup, lightRenderer, std::placeholders::_1, std::placeholders::_2)));
 
-	//Post process
+	//sun renderpass
+	sunPass->AddTask(new RenderTask(
+		{ GraphicEngine::GetAttachment("Depth") },
+		{ GraphicEngine::GetAttachment("SunSprite") },
+		nullptr,
+		std::bind(&SunRenderer::RenderSunSubpass, sunRenderer),
+		std::bind(&SunRenderer::SetupSunSubpass, sunRenderer, std::placeholders::_1, std::placeholders::_2)));
+
+	sunPass->AddTask(new RenderTask(
+		{ GraphicEngine::GetAttachment("SunSprite") },
+		{ GraphicEngine::GetAttachment("SunBlur1") },
+		nullptr,
+		std::bind(&SunRenderer::RenderBlurVSubpass, sunRenderer),
+		std::bind(&SunRenderer::SetupBlurVSubpass, sunRenderer, std::placeholders::_1, std::placeholders::_2)));
+
+	sunPass->AddTask(new RenderTask(
+		{ GraphicEngine::GetAttachment("SunBlur1") },
+		{ GraphicEngine::GetAttachment("SunBlur2") },
+		nullptr,
+		std::bind(&SunRenderer::RenderBlurHSubpass, sunRenderer),
+		std::bind(&SunRenderer::SetupBlurHSubpass, sunRenderer, std::placeholders::_1, std::placeholders::_2)));
+
+	sunPass->AddTask(new RenderTask(
+		{ GraphicEngine::GetAttachment("SunBlur2") },
+		{ GraphicEngine::GetAttachment("SunFinal") },
+		nullptr,
+		std::bind(&SunRenderer::RenderRadialBlurSubpass, sunRenderer),
+		std::bind(&SunRenderer::SetupBlurRadialSubpass, sunRenderer, std::placeholders::_1, std::placeholders::_2)));
+
+	skyPass->AddTask(new RenderTask({ GraphicEngine::GetAttachment("DirectionalLightingFinal") },
+		{ GraphicEngine::GetAttachment("DirectionalLightingFinal") },
+		GraphicEngine::GetAttachment("Depth"),
+		std::bind(&SkyRenderer::RenderSkyboxPass, skyRenderer),
+		std::bind(&SkyRenderer::SetupSkyBoxSubpass, skyRenderer, std::placeholders::_1, std::placeholders::_2)));
+
+	skyPass->AddTask(new RenderTask({ GraphicEngine::GetAttachment("DirectionalLightingFinal"), GraphicEngine::GetAttachment("SunFinal") },
+		{ GraphicEngine::GetAttachment("DirectionalLightingFinal") },
+		nullptr,
+		std::bind(&SkyRenderer::BlendSunPass, skyRenderer),
+		std::bind(&SkyRenderer::SetupBlendSunSubpass, skyRenderer, std::placeholders::_1, std::placeholders::_2)));
+
+	//Post process	
 	postProcess->AddTask(new RenderTask({ GraphicEngine::GetAttachment("DirectionalLightingFinal") }, //inputs
 		{ GraphicEngine::GetAttachment("FinalColorImage") },
+		nullptr,
 		std::bind(&PostProcessRenderer::Render, postRenderer),
 		std::bind(&PostProcessRenderer::Setup, postRenderer, std::placeholders::_1, std::placeholders::_2)));
 
@@ -314,6 +379,8 @@ void GraphicEngine::InitRenderGraph()
 	m_renderGraph->AddTaskGroup(shadowMap);
 	m_renderGraph->AddTaskGroup(preLighting);
 	m_renderGraph->AddTaskGroup(lighting);
+	m_renderGraph->AddTaskGroup(sunPass);
+	m_renderGraph->AddTaskGroup(skyPass);
 	m_renderGraph->AddTaskGroup(postProcess);
 
 	m_renderGraph->Init();
@@ -334,6 +401,8 @@ void GraphicEngine::InitPreRenderGraph()
 	normalPrio->AddTask(new Task(std::bind(&AORenderer::PreRender, static_cast<AORenderer*>(m_renderers["AORenderer"]))));
 	normalPrio->AddTask(new Task(std::bind(&LightRenderer::PreRender, static_cast<LightRenderer*>(m_renderers["LightRenderer"]))));
 	normalPrio->AddTask(new Task(std::bind(&PostProcessRenderer::UpdateShaderParams, static_cast<PostProcessRenderer*>(m_renderers["PostProcessRenderer"]))));
+	normalPrio->AddTask(new Task(std::bind(&SunRenderer::PreRender, static_cast<SunRenderer*>(m_renderers["SunRenderer"]))));
+	normalPrio->AddTask(new Task(std::bind(&SkyRenderer::PreRender, static_cast<SkyRenderer*>(m_renderers["SkyRenderer"]))));
 
 	normalPrio->AddDependencies({ highPrio });
 
@@ -364,6 +433,8 @@ void GraphicEngine::InitRenderers()
 	m_renderers.emplace("AORenderer", new AORenderer());
 	m_renderers.emplace("LightRenderer", new LightRenderer());
 	m_renderers.emplace("PostProcessRenderer", new PostProcessRenderer());
+	m_renderers.emplace("SunRenderer", new SunRenderer());
+	m_renderers.emplace("SkyRenderer", new SkyRenderer());
 
 	MemoryManager::GetInstance()->MapMemoryContext(EMemoryContextType::UniformBuffers);
 
